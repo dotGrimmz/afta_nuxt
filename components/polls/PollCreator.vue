@@ -31,7 +31,12 @@ import { ref } from "vue";
 
 const question = ref("");
 const rawOptions = ref("");
+
 const loading = ref(false);
+
+const emit = defineEmits<{
+  (e: "poll-created"): void;
+}>();
 
 async function submit() {
   if (!question.value.trim() || !rawOptions.value.trim()) {
@@ -52,8 +57,10 @@ async function submit() {
         options,
       },
     });
+
     question.value = "";
     rawOptions.value = "";
+    emit("poll-created");
   } catch (e: any) {
   } finally {
     loading.value = false;
@@ -64,7 +71,7 @@ async function submit() {
 <style scoped>
 .poll-creator {
   max-width: 600px;
-  background-color: rgba(31, 41, 55, 0.7); /* dark gray w/ opacity */
+  background-color: rgba(31, 41, 55, 0.7);
   padding: 24px;
   border-radius: 12px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);

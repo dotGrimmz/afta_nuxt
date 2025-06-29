@@ -1,7 +1,8 @@
 export interface Poll {
-  id: string;
+  id: number;
   question: string;
-  options: string[];
+  isActive: boolean;
+  options: PollOption[];
   created_at: string;
   updated_at?: string;
 }
@@ -17,4 +18,10 @@ export interface Vote {
   selected_option: string;
   created_at: string;
   updated_at?: string;
+}
+
+export interface PollOption {
+  id: number;
+  text: string;
+  votes: number;
 }
