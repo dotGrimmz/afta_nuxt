@@ -1,16 +1,39 @@
+// Poll data shape in DB
 export interface Poll {
   id: number;
   question: string;
   isActive: boolean;
-  options: PollOption[];
   created_at: string;
   updated_at?: string;
+  options: PollOption[];
 }
 
-export type PollSubmission = {
+export interface PollOption {
+  id: string;
+  text: string;
+  votes?: { count: number };
+}
+
+// Used when returning active poll with votes
+export interface PollOptionWithVotes {
+  id: string;
+  text: string;
+  sort?: number;
+  votes?: { count: number }; // Supabase count response
+}
+
+export interface PollResponse {
+  poll: { id: string; question: string };
+  options: PollOptionWithVotes[];
+}
+
+// Used to submit a new poll
+export interface PollSubmission {
   question: string;
   options: string[];
-};
+}
+
+// Used when inserting a vote
 export interface Vote {
   id: string;
   poll_id: string;
@@ -18,10 +41,4 @@ export interface Vote {
   selected_option: string;
   created_at: string;
   updated_at?: string;
-}
-
-export interface PollOption {
-  id: number;
-  text: string;
-  votes: number;
 }

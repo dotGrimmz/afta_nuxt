@@ -20,8 +20,11 @@ const handleRefresh = async () => {
   <!-- Poll-creation widget -->
   <div>
     <PollsPollCreator @poll-created="handleRefresh" />
-    <div>
-      <PollTile v-for="poll in pollsData" :key="poll.id" :poll="poll" />
-    </div>
+    <PollTile
+      v-for="poll in pollsData"
+      :key="poll.id"
+      :poll="poll"
+      @poll-updated="handleRefresh"
+    />
   </div>
 </template>

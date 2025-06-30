@@ -1,77 +1,49 @@
 <template>
-  <div class="poll-tile" :class="{ active: poll.isActive }">
+  <div class="poll-tile">
     <h2 class="poll-question">{{ poll.question }}</h2>
-
     <ul class="poll-options">
-      <li v-for="option in poll.options" :key="option.id" class="poll-option">
-        {{ option.text }} ({{ option.votes }} votes)
+      <li v-for="option in poll.options" :key="option.text">
+        {{ option.text }}
       </li>
     </ul>
 
-    <button @click="toggleActive" class="toggle-button">
-      {{ poll.isActive ? "Deactivate Poll" : "Activate Poll" }}
+    <button v-if="!poll.isActive" @click="activatePoll" class="activate-button">
+      Activate
     </button>
+
+    <p v-else class="status-label">✅ Active Poll</p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive } from "vue";
+import { defineProps, defineEmits } from "vue";
 import type { Poll } from "~/types/poll";
 
 const props = defineProps<{ poll: Poll }>();
+const { poll } = props;
+const { id, options } = poll as Poll;
+const emit = defineEmits<{ (e: "poll-updated"): void }>();
 
-// Clone poll so we can mutate local state
-const poll = reactive({ ...props.poll });
+const activatePoll = async () => {
+  try {
+    await $fetch(`/api/polls/${poll.id}/activate`, { method: "POST" });
 
-function toggleActive() {
-  poll.isActive = !poll.isActive;
-}
+    emit("poll-updated");
+  } catch (err) {
+    console.error("Failed to activate poll:", err);
+  }
+};
 </script>
 
 <style scoped>
-.poll-tile {
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  padding: 16px;
-  color: black;
-  background-color: #eee;
-  width: 320px;
-  min-height: 200px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.poll-tile.active {
-  background-color: #ffe0e0;
-  border-color: #f44336;
-}
-
-.poll-question {
+.status-label {
   font-weight: bold;
-  font-size: 1.2rem;
+  color: green;
 }
-
-.poll-options {
-  list-style-type: none;
-  padding: 0;
-  margin: 0;
-  width: 100%;
-}
-
-.poll-option {
-  padding: 4px 0;
-}
-
-.toggle-button {
-  align-self: flex-end;
-  margin-top: auto;
-  padding: 6px 12px;
-  background-color: #f44336;
+.activate-button {
+  background-color: #0070f3;
   color: white;
-  border: none;
+  padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
 }
