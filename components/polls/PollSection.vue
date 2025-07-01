@@ -5,6 +5,32 @@ const open = ref(false);
 function toggle() {
   open.value = !open.value;
 }
+
+const mockPollRes = {
+  poll: {
+    id: "123e4567-e89b-12d3-a456-426614174000",
+    question: "What's your favourite coding font?",
+  },
+  options: [
+    { id: "opt1", text: "Fira Code", votes: { count: 12 } },
+    { id: "opt2", text: "JetBrains Mono", votes: { count: 8 } },
+    { id: "opt3", text: "Cascadia Code", votes: { count: 5 } },
+    { id: "opt4", text: "Iosevka", votes: { count: 2 } },
+  ] satisfies PollOption[],
+};
+
+const castVote = async (payload: { pollId: string; optionId: string }) => {
+  // Placeholder for actual vote casting logic
+  // In a real app, this would call an API to register the vote
+  console.log(
+    `Casting vote for poll ${payload.pollId}, option ${payload.optionId}...`
+  );
+  // Simulate API delay
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  console.log("Vote cast successfully!");
+};
+import ActivePoll from "~/components/polls/ActivePoll.vue"; // Placeholder for actual poll component
+import type { PollOption } from "~/types/poll";
 </script>
 
 <template>
@@ -18,9 +44,9 @@ function toggle() {
       :onClick="toggle"
     >
       <h2 class="text-2xl font-bold mb-1">Polls</h2>
-      <p class="text-sm leading-relaxed">
+      <!-- <p class="text-sm leading-relaxed">
         Tap to view polls about AFTA’s features and preferences.
-      </p>
+      </p> -->
     </SectionCard>
 
     <!-- animated dropdown -->
@@ -31,7 +57,12 @@ function toggle() {
       >
         <!-- 🔽  Add / replace with real poll component -->
         <slot>
-          <p class="text-sm">📊 Polls list placeholder…</p>
+          <ActivePoll
+            v-if="mockPollRes"
+            :poll="mockPollRes.poll"
+            :options="mockPollRes.options"
+            @vote="castVote"
+          />
         </slot>
       </div>
     </transition>

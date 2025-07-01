@@ -55,6 +55,7 @@ function handleClick(e: MouseEvent | KeyboardEvent) {
   user-select: none;
   transition: box-shadow 0.2s, transform 0.2s;
   outline: none;
+  color: white;
 }
 
 /* keyboard focus ring */

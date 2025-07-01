@@ -1,37 +1,40 @@
 <script setup lang="ts">
-import type { PollOption } from "@/types/poll";
-interface PollData {
-  poll: {
-    id: string;
-    question: string;
-  };
-  options: PollOption[];
-}
+import { ref } from "vue";
+import type { PollOptionWithVotes } from "@/types/poll";
 
-const { data: pollRes, refresh } = await useFetch<PollData>(
-  "/api/polls/active"
-);
-const deviceId = useDeviceId();
+/* ---------- Props ---------- */
+const props = defineProps<{
+  poll: { id: string; question: string };
+  options: PollOptionWithVotes[];
+  /** Optional flag if parent wants to show a global loading state */
+  loading?: boolean;
+}>();
+
+/* ---------- Emits ---------- */
+const emit = defineEmits<{
+  /** Parent handles the actual API call and state refresh */
+  (e: "vote", payload: { pollId: string; optionId: string }): void;
+}>();
+
+/* ---------- Local UI state ---------- */
 const voting = ref(false);
 const errorMsg = ref("");
 
-async function vote(optionId: string) {
+/* ---------- Click handler ---------- */
+
+const { hasVoted, markVoted } = useVoteTracker(props.poll.id);
+
+async function handleVote(optionId: string) {
+  if (voting.value || hasVoted.value) return;
+
   voting.value = true;
   errorMsg.value = "";
+
   try {
-    if (!pollRes.value) {
-      errorMsg.value = "Poll data not loaded.";
-      voting.value = false;
-      return;
-    }
-    //@ts-ignore
-    await $fetch(`/api/polls/${pollRes.value.poll.id}/vote`, {
-      method: "POST",
-      body: { option_id: optionId, voter_id: deviceId },
-    });
-    await refresh(); // get updated counts
+    emit("vote", { pollId: props.poll.id, optionId });
+    markVoted();
   } catch (err: any) {
-    errorMsg.value = err?.data?.statusMessage || "Vote failed";
+    errorMsg.value = err?.message || "Vote failed";
   } finally {
     voting.value = false;
   }
@@ -39,27 +42,34 @@ async function vote(optionId: string) {
 </script>
 
 <template>
-  <div v-if="pollRes">
-    <h2 class="text-xl font-bold mb-4">{{ pollRes.poll.question }}</h2>
+  <div>
+    <h2 class="text-xl font-bold mb-4">{{ props.poll.question }}</h2>
 
     <ul>
       <li
-        v-for="opt in pollRes.options"
+        v-for="opt in props.options"
         :key="opt.id"
         class="mb-2 flex justify-between"
       >
         <span>{{ opt.text }}</span>
         <button
-          :disabled="voting"
-          @click="vote(opt.id)"
+          :disabled="voting || props.loading"
+          @click="handleVote(opt.id)"
           class="border px-2 py-1 rounded"
         >
-          Vote — {{ opt.votes?.count || 0 }}
+          Vote — {{ opt.votes?.count ?? 0 }}
         </button>
       </li>
     </ul>
 
     <p v-if="errorMsg" class="text-red-600 mt-2">{{ errorMsg }}</p>
   </div>
-  <p v-else>No active poll.</p>
 </template>
+
+what I should do next is figure out a way to caputre unique votes without a user
+needing to sign in. This could be done using browser storage (like localStorage)
+to track if a user has already voted on a specific poll. This way, even if they
+refresh or revisit the page, we can prevent duplicate votes from the same user.
+However, this approach has limitations since users can clear their storage or
+use incognito mode. I am ok with this approach for now as a temporary solution
+until we implement a proper user authentication system.
