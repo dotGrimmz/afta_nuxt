@@ -35,8 +35,8 @@ const props = defineProps({
   onClick: { type: Function, default: null },
   darken: { type: Boolean, default: false },
   darkenOpacity: { type: Number, default: 0.4 },
-  objectPosition: { type: String, default: "center" }, // 👈 NEW
-  objectFit: { type: String, default: "cover" }, // 👈 NEW
+  objectPosition: { type: String, default: "center" },
+  objectFit: { type: String, default: "cover" },
 });
 
 function handleClick(e: MouseEvent | KeyboardEvent) {

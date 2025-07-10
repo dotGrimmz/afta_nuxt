@@ -1,42 +1,60 @@
 <script setup lang="ts">
-/* open/closed state */
-const open = ref(false);
+import { inject, ref } from "vue";
+import ActivePoll from "~/components/polls/ActivePoll.vue";
+import { useDeviceId } from "~/composables/useDeviceId";
+import type { Poll, PollOptionWithVotes } from "@/types/poll";
 
+/* ▸ open / closed state for dropdown */
+const open = ref(false);
 function toggle() {
   open.value = !open.value;
 }
 
-const mockPollRes = {
-  poll: {
-    id: "123e4567-e89b-12d3-a456-426614174000",
-    question: "What's your favourite coding font?",
-  },
-  options: [
-    { id: "opt1", text: "Fira Code", votes: { count: 12 } },
-    { id: "opt2", text: "JetBrains Mono", votes: { count: 8 } },
-    { id: "opt3", text: "Cascadia Code", votes: { count: 5 } },
-    { id: "opt4", text: "Iosevka", votes: { count: 2 } },
-  ] satisfies PollOption[],
-};
+/* ▸ pull reactive poll data provided in app.vue */
+const poll = inject<Poll | null>("activePoll");
 
-const castVote = async (payload: { pollId: string; optionId: string }) => {
-  // Placeholder for actual vote casting logic
-  // In a real app, this would call an API to register the vote
-  console.log(
-    `Casting vote for poll ${payload.pollId}, option ${payload.optionId}...`
-  );
-  // Simulate API delay
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  console.log("Vote cast successfully!");
-};
-import ActivePoll from "~/components/polls/ActivePoll.vue"; // Placeholder for actual poll component
-import type { PollOption } from "~/types/poll";
+const options = inject<PollOptionWithVotes[]>("pollOptions");
+const pollLoading = inject<boolean>("pollLoading") ?? false;
+
+if (!poll || !options) {
+  // Ensures this component is used under <app.vue> that provides the data
+  throw new Error("PollsPollSection must be rendered inside app.vue provider");
+}
+
+/* ▸ handle vote (child ActivePoll emits { pollId, optionId }) */
+async function castVote({
+  pollId,
+  optionId,
+}: {
+  pollId: number;
+  optionId: string;
+}) {
+  try {
+    await $fetch(`/api/polls/${pollId}/vote`, {
+      method: "POST",
+      body: {
+        option_id: optionId,
+        voter_id: useDeviceId(), // local‑storage UUID
+      },
+    });
+    // No manual refresh needed — realtime listener in useActivePoll updates counts
+  } catch (err) {
+    console.error("Vote failed:", err);
+    // ActivePoll.vue already shows "Vote failed" if the endpoint returns an error
+  }
+}
+console.log(
+  "PollSection mounted with poll:",
+  poll.poll_options,
+  "options:",
+  options
+);
 </script>
 
 <template>
-  <!-- wrapper keeps card + dropdown grouped -->
+  <!-- Wrapper keeps card + dropdown grouped -->
   <div class="w-full">
-    <!-- main card -->
+    <!-- Main card -->
     <SectionCard
       imageUrl="/images/black_sweater.jpg"
       objectFit="cover"
@@ -44,26 +62,28 @@ import type { PollOption } from "~/types/poll";
       :onClick="toggle"
     >
       <h2 class="text-2xl font-bold mb-1">Polls</h2>
+      <!-- optional tagline -->
       <!-- <p class="text-sm leading-relaxed">
         Tap to view polls about AFTA’s features and preferences.
       </p> -->
     </SectionCard>
 
-    <!-- animated dropdown -->
+    <!-- Animated dropdown -->
     <transition name="slide-fade">
       <div
         v-if="open"
         class="dropdown-content rounded-b-lg bg-white text-gray-800 p-4 border-t border-gray-200 shadow-inner"
       >
-        <!-- 🔽  Add / replace with real poll component -->
-        <slot>
-          <ActivePoll
-            v-if="mockPollRes"
-            :poll="mockPollRes.poll"
-            :options="mockPollRes.options"
-            @vote="castVote"
-          />
-        </slot>
+        <!-- ActivePoll consumes poll + options directly 
+        I NEED TO figure out why this isnt working. its the shape im sure 
+        
+        -->
+        <ActivePoll
+          v-if="poll"
+          :poll="poll"
+          :loading="pollLoading"
+          @vote="castVote"
+        />
       </div>
     </transition>
   </div>
@@ -88,7 +108,7 @@ import type { PollOption } from "~/types/poll";
   transition: max-height 0.3s ease, opacity 0.3s ease;
 }
 
-/* remove top-right-left radius so card + dropdown look like one block */
+/* remove top-right-left radius so card + dropdown look unified */
 .dropdown-content {
   border-bottom-left-radius: 0.5rem; /* match card radius */
   border-bottom-right-radius: 0.5rem;

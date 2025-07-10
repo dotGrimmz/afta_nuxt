@@ -1,33 +1,42 @@
 <template>
   <div class="poll-tile">
+    <!-- Question -->
     <h2 class="poll-question">{{ poll.question }}</h2>
+
+    <!-- Options -->
     <ul class="poll-options">
-      <li v-for="option in poll.options" :key="option.text">
-        {{ option.text }}
+      <li
+        v-for="option in poll.poll_options"
+        :key="option.id"
+        class="poll-option"
+      >
+        • {{ option.text }}
       </li>
     </ul>
 
-    <button v-if="!poll.isActive" @click="activatePoll" class="activate-button">
-      Activate
-    </button>
-
-    <p v-else class="status-label">✅ Active Poll</p>
+    <!-- Activate button or status -->
+    <div class="status-controls">
+      <button
+        v-if="!poll.isActive"
+        @click="activatePoll"
+        class="activate-button"
+      >
+        Activate
+      </button>
+      <p v-else class="status-label">✅ Active Poll</p>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits } from "vue";
 import type { Poll } from "~/types/poll";
 
 const props = defineProps<{ poll: Poll }>();
-const { poll } = props;
-const { id, options } = poll as Poll;
 const emit = defineEmits<{ (e: "poll-updated"): void }>();
 
 const activatePoll = async () => {
   try {
-    await $fetch(`/api/polls/${poll.id}/activate`, { method: "POST" });
-
+    await $fetch(`/api/polls/${props.poll.id}/activate`, { method: "POST" });
     emit("poll-updated");
   } catch (err) {
     console.error("Failed to activate poll:", err);
@@ -36,15 +45,65 @@ const activatePoll = async () => {
 </script>
 
 <style scoped>
-.status-label {
-  font-weight: bold;
-  color: green;
+.poll-tile {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  max-width: 480px;
+  margin: 1rem auto;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
+
+.poll-question {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #111;
+  margin-bottom: 0.5rem;
+}
+
+.poll-options {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.poll-option {
+  padding: 6px 0;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.status-controls {
+  margin-top: 1rem;
+}
+
+.active-tile {
+  background-color: #f8d7da;
+}
+
 .activate-button {
   background-color: #0070f3;
   color: white;
-  padding: 6px 12px;
-  border-radius: 4px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
   cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.activate-button:hover {
+  background-color: #005dc1;
+}
+
+.status-label {
+  font-weight: bold;
+  color: #28a745;
+  font-size: 0.95rem;
 }
 </style>

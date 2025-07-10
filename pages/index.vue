@@ -17,11 +17,6 @@
     </ParallaxHero>
     <div class="landing">
       <PollsPollSection />
-      <SectionCard> <About /> </SectionCard>
-
-      <SectionCard> <About /> </SectionCard>
-
-      <SectionCard> <About /> </SectionCard>
     </div>
   </div>
 </template>

@@ -6,6 +6,7 @@ import type { Poll } from "~/types/poll";
 
 const { data: pollsData, refresh } = await useFetch<Poll[]>("/api/polls");
 
+console.log({ pollsData });
 const handleRefresh = async () => {
   console.log("Refreshing polls...");
 

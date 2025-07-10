@@ -1,6 +1,6 @@
 const VOTE_STORAGE_KEY = "votedPolls";
 
-export const useVoteTracker = (pollId: string) => {
+export const useVoteTracker = (pollId: number) => {
   const hasVoted = computed(() => {
     if (typeof localStorage === "undefined") return false;
 

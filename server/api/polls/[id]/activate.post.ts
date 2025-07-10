@@ -25,3 +25,6 @@ export default defineEventHandler(async (event) => {
 
   return { success: true };
 });
+
+// two stage interview process
+// in person miami shoes
