@@ -10,8 +10,8 @@ const props = defineProps<{
 
 onMounted(() => {
   // This will log when the component is mounted
-  console.log("ActivePoll component mounted");
-  console.log("ActivePoll mounted with poll:", props.poll);
+  // console.log("ActivePoll component mounted");
+  // console.log("ActivePoll mounted with poll:", props.poll);
 });
 
 /* ---------- Emits ---------- */

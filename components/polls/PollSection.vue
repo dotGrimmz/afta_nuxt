@@ -43,12 +43,6 @@ async function castVote({
     // ActivePoll.vue already shows "Vote failed" if the endpoint returns an error
   }
 }
-console.log(
-  "PollSection mounted with poll:",
-  poll.poll_options,
-  "options:",
-  options
-);
 </script>
 
 <template>

@@ -5,7 +5,7 @@ import type { PollResponse, PollOptionWithVotes } from "@/types/poll";
 export function useActivePoll() {
   const supabase = useSupabaseClient();
 
-  console.log("useActivePoll initialized");
+  // console.log("useActivePoll initialized");
   /* reactive state */
   const poll = ref<PollResponse["poll"] | null>(null);
   const options = ref<PollOptionWithVotes[]>([]);
@@ -18,7 +18,7 @@ export function useActivePoll() {
     loading.value = true;
     try {
       const { data } = await $fetch<any>("/api/polls/active");
-      console.log("Fetched active poll:", poll);
+      console.log("Fetched active poll:", toRaw(poll.value));
 
       if (data) {
         poll.value = data.poll;
