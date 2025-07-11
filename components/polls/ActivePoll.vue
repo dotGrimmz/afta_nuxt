@@ -1,19 +1,23 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import type { PollOptionWithVotes } from "@/types/poll";
+import type { Poll, PollOptionWithVotes } from "@/types/poll";
 
 /* ---------- Props ---------- */
 const props = defineProps<{
-  poll: { id: string; question: string };
-  options: PollOptionWithVotes[];
-  /** Optional flag if parent wants to show a global loading state */
+  poll: Poll;
   loading?: boolean;
 }>();
+
+onMounted(() => {
+  // This will log when the component is mounted
+  // console.log("ActivePoll component mounted");
+  // console.log("ActivePoll mounted with poll:", props.poll);
+});
 
 /* ---------- Emits ---------- */
 const emit = defineEmits<{
   /** Parent handles the actual API call and state refresh */
-  (e: "vote", payload: { pollId: string; optionId: string }): void;
+  (e: "vote", payload: { pollId: number; optionId: string }): void;
 }>();
 
 /* ---------- Local UI state ---------- */
@@ -47,7 +51,7 @@ async function handleVote(optionId: string) {
 
     <ul>
       <li
-        v-for="opt in props.options"
+        v-for="opt in props.poll.poll_options"
         :key="opt.id"
         class="mb-2 flex justify-between"
       >
@@ -57,7 +61,7 @@ async function handleVote(optionId: string) {
           @click="handleVote(opt.id)"
           class="border px-2 py-1 rounded"
         >
-          Vote — {{ opt.votes?.count ?? 0 }}
+          Vote — {{ opt.poll_votes?.count ?? "0" }}
         </button>
       </li>
     </ul>
@@ -65,11 +69,3 @@ async function handleVote(optionId: string) {
     <p v-if="errorMsg" class="text-red-600 mt-2">{{ errorMsg }}</p>
   </div>
 </template>
-
-what I should do next is figure out a way to caputre unique votes without a user
-needing to sign in. This could be done using browser storage (like localStorage)
-to track if a user has already voted on a specific poll. This way, even if they
-refresh or revisit the page, we can prevent duplicate votes from the same user.
-However, this approach has limitations since users can clear their storage or
-use incognito mode. I am ok with this approach for now as a temporary solution
-until we implement a proper user authentication system.

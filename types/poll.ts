@@ -5,13 +5,13 @@ export interface Poll {
   isActive: boolean;
   created_at: string;
   updated_at?: string;
-  options: PollOption[];
+  poll_options: PollOption[];
 }
 
 export interface PollOption {
   id: string;
   text: string;
-  votes?: { count: number };
+  poll_votes?: { count: number };
 }
 
 // Used when returning active poll with votes

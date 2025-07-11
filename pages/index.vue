@@ -1,3 +1,7 @@
+<script setup>
+const { data: activePoll } = await useFetch("/api/polls/active");
+console.log("Active Poll:", toRaw(activePoll.value));
+</script>
 <template>
   <div>
     <ParallaxHero
@@ -17,11 +21,6 @@
     </ParallaxHero>
     <div class="landing">
       <PollsPollSection />
-      <SectionCard> <About /> </SectionCard>
-
-      <SectionCard> <About /> </SectionCard>
-
-      <SectionCard> <About /> </SectionCard>
     </div>
   </div>
 </template>

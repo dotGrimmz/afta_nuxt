@@ -6,7 +6,19 @@ export default defineEventHandler(async (event) => {
 
   const { data, error } = await supabase
     .from("polls")
-    .select("*")
+    .select(
+      `
+    id,
+    question,
+    is_active,
+    created_at,
+    poll_options (
+      id,
+      text,
+      poll_votes(count)
+    )
+  `
+    )
     .order("created_at", { ascending: false });
 
   if (error) {
