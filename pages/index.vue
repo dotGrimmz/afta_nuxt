@@ -1,6 +1,17 @@
-<script setup>
-const { data: activePoll } = await useFetch("/api/polls/active");
-console.log("Active Poll:", toRaw(activePoll.value));
+<script setup lang="ts">
+import { provide, ref } from "vue";
+import type { Poll } from "~/types/poll";
+
+interface PollApiResponse {
+  poll: Poll[];
+}
+
+const { data: activePolls } = await useFetch<PollApiResponse[]>(
+  "/api/polls/active"
+);
+
+const activePoll = activePolls.value?.poll?.[0] as Poll;
+console.log(activePolls.value?.poll?.[0]);
 </script>
 <template>
   <div>
@@ -20,7 +31,7 @@ console.log("Active Poll:", toRaw(activePoll.value));
       </div>
     </ParallaxHero>
     <div class="landing">
-      <PollsPollSection />
+      <PollsPollSection v-if="activePoll" :poll="activePoll" />
     </div>
   </div>
 </template>

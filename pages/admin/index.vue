@@ -5,8 +5,8 @@ import PollTile from "~/components/polls/PollTile.vue";
 import type { Poll } from "~/types/poll";
 
 const { data: pollsData, refresh } = await useFetch<Poll[]>("/api/polls");
-
-// console.log({ pollsData });
+const activePolls = toRaw(pollsData.value)?.filter((poll) => poll.is_active);
+console.log({ activePolls });
 const handleRefresh = async () => {
   // console.log("Refreshing polls...");
 
@@ -21,7 +21,11 @@ const handleRefresh = async () => {
   <!-- Poll-creation widget -->
   <div>
     <PollsPollCreator @poll-created="handleRefresh" />
-    <!-- this will be for the admin -->
+    <!-- this will be for the admin 
+    so what I want to do is  fetch all polls
+    group by active and non active
+    all active tiles are shown on the screen
+    -->
 
     <PollTile
       v-for="poll in pollsData"

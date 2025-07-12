@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import type { Poll, PollOptionWithVotes } from "@/types/poll";
 
 /* ---------- Props ---------- */
+
+import type { Poll } from "@/types/poll"; // Adjust the path as needed
+
 const props = defineProps<{
   poll: Poll;
   loading?: boolean;

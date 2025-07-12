@@ -16,10 +16,28 @@ export default defineEventHandler(async (event) => {
   }
 
   // Use the Update type for polls table here for proper typing
+  // instead of setting to true I want to toggle the is_active field
+  // If you want to toggle, you can fetch the current state first
+  const { data: currentPoll, error: fetchError } = await supabase
+    .from("polls")
+    .select("is_active")
+    .eq("id", pollId)
+    .single();
+
+  if (fetchError) {
+    throw createError({ statusCode: 500, statusMessage: fetchError.message });
+  }
+
+  console.log("Current is_active status:", currentPoll?.is_active);
+
+  // then toggle the is_active field
+  const newStatus = !(currentPoll?.is_active ?? false);
+
+  // Update the poll to toggle is_active
   const { data, error } = await supabase
     .from("polls")
     .update({
-      is_active: true,
+      is_active: newStatus,
     } as Database["public"]["Tables"]["polls"]["Update"])
     .eq("id", pollId)
     .select();

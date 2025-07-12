@@ -2,7 +2,7 @@
 export interface Poll {
   id: number;
   question: string;
-  isActive: boolean;
+  is_active: boolean;
   created_at: string;
   updated_at?: string;
   poll_options: PollOption[];

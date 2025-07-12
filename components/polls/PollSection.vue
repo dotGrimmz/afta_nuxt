@@ -2,7 +2,7 @@
 import { inject, ref } from "vue";
 import ActivePoll from "~/components/polls/ActivePoll.vue";
 import { useDeviceId } from "~/composables/useDeviceId";
-import type { Poll, PollOptionWithVotes } from "@/types/poll";
+import type { Poll } from "@/types/poll";
 
 /* ▸ open / closed state for dropdown */
 const open = ref(false);
@@ -10,16 +10,7 @@ function toggle() {
   open.value = !open.value;
 }
 
-/* ▸ pull reactive poll data provided in app.vue */
-const poll = inject<Poll | null>("activePoll");
-
-const options = inject<PollOptionWithVotes[]>("pollOptions");
-const pollLoading = inject<boolean>("pollLoading") ?? false;
-
-if (!poll || !options) {
-  // Ensures this component is used under <app.vue> that provides the data
-  throw new Error("PollsPollSection must be rendered inside app.vue provider");
-}
+const props = defineProps<{ poll: Poll }>();
 
 /* ▸ handle vote (child ActivePoll emits { pollId, optionId }) */
 async function castVote({
@@ -68,16 +59,7 @@ async function castVote({
         v-if="open"
         class="dropdown-content rounded-b-lg bg-white text-gray-800 p-4 border-t border-gray-200 shadow-inner"
       >
-        <!-- ActivePoll consumes poll + options directly 
-        I NEED TO figure out why this isnt working. its the shape im sure 
-        
-        -->
-        <ActivePoll
-          v-if="poll"
-          :poll="poll"
-          :loading="pollLoading"
-          @vote="castVote"
-        />
+        <ActivePoll :poll="props.poll" :loading="false" @vote="castVote" />
       </div>
     </transition>
   </div>
