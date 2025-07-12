@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { inject, ref } from "vue";
+import { ref } from "vue";
 import ActivePoll from "~/components/polls/ActivePoll.vue";
 import { useDeviceId } from "~/composables/useDeviceId";
 import type { Poll } from "@/types/poll";
+import { useActivePoll } from "@/composables/useActivePoll";
 
 /* ▸ open / closed state for dropdown */
 const open = ref(false);
@@ -10,7 +11,8 @@ function toggle() {
   open.value = !open.value;
 }
 
-const props = defineProps<{ poll: Poll }>();
+/* no arg or pollId if single active poll */
+const { poll, loading } = useActivePoll();
 
 /* ▸ handle vote (child ActivePoll emits { pollId, optionId }) */
 async function castVote({
@@ -20,12 +22,14 @@ async function castVote({
   pollId: number;
   optionId: string;
 }) {
+  console.log({ pollId, optionId });
   try {
     await $fetch(`/api/polls/${pollId}/vote`, {
       method: "POST",
       body: {
         option_id: optionId,
-        voter_id: useDeviceId(), // local‑storage UUID
+        voter_id: Math.floor(Math.random() * Date.now()), // local‑storage UUID
+        // voter_id: useDeviceId(), // local‑storage UUID
       },
     });
     // No manual refresh needed — realtime listener in useActivePoll updates counts
@@ -59,7 +63,12 @@ async function castVote({
         v-if="open"
         class="dropdown-content rounded-b-lg bg-white text-gray-800 p-4 border-t border-gray-200 shadow-inner"
       >
-        <ActivePoll :poll="props.poll" :loading="false" @vote="castVote" />
+        <ActivePoll
+          v-if="poll"
+          :poll="poll"
+          :loading="loading"
+          @vote="castVote"
+        />
       </div>
     </transition>
   </div>

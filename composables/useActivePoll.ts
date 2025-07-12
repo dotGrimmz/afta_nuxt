@@ -1,40 +1,60 @@
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import { useSupabaseClient } from "#imports";
-import type { PollResponse, PollOptionWithVotes } from "@/types/poll";
+import type { Poll, PollOptionWithVotes } from "@/types/poll";
 
-export function useActivePoll() {
+export function useActivePoll(pollId?: string) {
   const supabase = useSupabaseClient();
 
-  // console.log("useActivePoll initialized");
-  /* reactive state */
-  const poll = ref<PollResponse["poll"] | null>(null);
+  const poll = ref<Poll | null>(null);
   const options = ref<PollOptionWithVotes[]>([]);
   const loading = ref(true);
 
   let channel: ReturnType<typeof supabase.channel> | null = null;
 
-  /* fetch active poll once */
   async function fetchPoll() {
     loading.value = true;
-    try {
-      const { data } = await $fetch<any>("/api/polls/active");
-      console.log("Fetched active poll:", toRaw(poll.value));
 
-      if (data) {
-        poll.value = data.poll;
-        options.value = data.options;
-        setupRealtime();
+    try {
+      const res = await $fetch<{ poll: Poll[] }>("/api/polls/active");
+
+      if (!res?.poll?.length) {
+        poll.value = null;
+        options.value = [];
+        return;
       }
+
+      const foundPoll =
+        res.poll.find((p) => p.id.toString() === pollId) ?? res.poll[0];
+
+      if (foundPoll) {
+        poll.value = foundPoll;
+
+        // ✅ Normalize votes to flat numbers
+        options.value = foundPoll.poll_options.map((opt) => ({
+          ...opt,
+          votes: opt.votes?.count ?? 0,
+        }));
+
+        setupRealtime();
+      } else {
+        poll.value = null;
+        options.value = [];
+      }
+    } catch (err) {
+      console.error("Failed to fetch poll:", err);
+      poll.value = null;
+      options.value = [];
     } finally {
       loading.value = false;
     }
   }
 
-  /* realtime vote counts */
   function setupRealtime() {
     if (!poll.value) return;
 
-    if (channel) supabase.removeChannel(channel); // cleanup if re‑fetched
+    if (channel) {
+      supabase.removeChannel(channel);
+    }
 
     channel = supabase
       .channel(`poll_votes_${poll.value.id}`)
@@ -49,25 +69,27 @@ export function useActivePoll() {
         (payload) => {
           const id = payload.new.option_id as string;
           const opt = options.value.find((o) => o.id === id);
+
           if (opt) {
-            if (opt.votes) opt.votes.count++;
-            else opt.votes = { count: 1 };
+            opt.votes += 1; // ✅ simplified because votes is now a number
           }
         }
       )
       .subscribe();
   }
 
-  /* housekeeping */
+  onMounted(fetchPoll);
 
-  onMounted(() => {
-    console.log("useActivePoll mounted");
-    fetchPoll();
-  });
-  // onMounted(fetchPoll);
   onBeforeUnmount(() => {
-    if (channel) supabase.removeChannel(channel);
+    if (channel) {
+      supabase.removeChannel(channel);
+    }
   });
 
-  return { poll, options, loading, fetchPoll };
+  return {
+    poll,
+    options,
+    loading,
+    fetchPoll,
+  };
 }
