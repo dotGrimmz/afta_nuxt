@@ -8,10 +8,16 @@ export function useActivePoll(pollId?: string) {
   const poll = ref<Poll | null>(null);
   const options = ref<PollOptionWithVotes[]>([]);
   const loading = ref(true);
+  const error = ref<null | string>(null);
+  const isSubscribed = ref(false);
 
   let channel: ReturnType<typeof supabase.channel> | null = null;
 
-  async function fetchPoll() {
+  const fetchAllPolls = async () => {
+    // this will fetch all polls.
+  };
+
+  const fetchPoll = async () => {
     loading.value = true;
 
     try {
@@ -44,13 +50,22 @@ export function useActivePoll(pollId?: string) {
       console.error("Failed to fetch poll:", err);
       poll.value = null;
       options.value = [];
+      //@ts-ignore
+      error.value = err?.message || "Something went wrong";
     } finally {
       loading.value = false;
     }
-  }
+  };
 
-  function setupRealtime() {
-    if (!poll.value) return;
+  const refreshPoll = async () => {
+    await fetchPoll();
+  };
+
+  const setupRealtime = () => {
+    if (!poll.value) {
+      error.value = "No Poll to set up real Time";
+      return;
+    }
 
     if (channel) {
       supabase.removeChannel(channel);
@@ -75,8 +90,10 @@ export function useActivePoll(pollId?: string) {
           }
         }
       )
-      .subscribe();
-  }
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") isSubscribed.value = true;
+      });
+  };
 
   onMounted(fetchPoll);
 
@@ -91,5 +108,8 @@ export function useActivePoll(pollId?: string) {
     options,
     loading,
     fetchPoll,
+    error,
+    refreshPoll,
+    isSubscribed,
   };
 }

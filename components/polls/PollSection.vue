@@ -2,7 +2,6 @@
 import { ref } from "vue";
 import ActivePoll from "~/components/polls/ActivePoll.vue";
 import { useDeviceId } from "~/composables/useDeviceId";
-import type { Poll } from "@/types/poll";
 import { useActivePoll } from "@/composables/useActivePoll";
 
 /* ▸ open / closed state for dropdown */
@@ -22,20 +21,16 @@ async function castVote({
   pollId: number;
   optionId: string;
 }) {
-  console.log({ pollId, optionId });
   try {
     await $fetch(`/api/polls/${pollId}/vote`, {
       method: "POST",
       body: {
         option_id: optionId,
-        // voter_id: Math.floor(Math.random() * Date.now()), // local‑storage UUID
         voter_id: useDeviceId(), // local‑storage UUID
       },
     });
-    // No manual refresh needed — realtime listener in useActivePoll updates counts
   } catch (err) {
     console.error("Vote failed:", err);
-    // ActivePoll.vue already shows "Vote failed" if the endpoint returns an error
   }
 }
 </script>
@@ -64,11 +59,12 @@ async function castVote({
         class="dropdown-content rounded-b-lg bg-white text-gray-800 p-4 border-t border-gray-200 shadow-inner"
       >
         <ActivePoll
-          v-if="poll"
+          v-if="poll && !loading"
           :poll="poll"
           :loading="loading"
           @vote="castVote"
         />
+        <span v-else>...loading</span>
       </div>
     </transition>
   </div>
