@@ -28,8 +28,8 @@ async function castVote({
       method: "POST",
       body: {
         option_id: optionId,
-        voter_id: Math.floor(Math.random() * Date.now()), // local‑storage UUID
-        // voter_id: useDeviceId(), // local‑storage UUID
+        // voter_id: Math.floor(Math.random() * Date.now()), // local‑storage UUID
+        voter_id: useDeviceId(), // local‑storage UUID
       },
     });
     // No manual refresh needed — realtime listener in useActivePoll updates counts
@@ -52,9 +52,9 @@ async function castVote({
     >
       <h2 class="text-2xl font-bold mb-1">Polls</h2>
       <!-- optional tagline -->
-      <!-- <p class="text-sm leading-relaxed">
+      <p class="text-sm leading-relaxed">
         Tap to view polls about AFTA’s features and preferences.
-      </p> -->
+      </p>
     </SectionCard>
 
     <!-- Animated dropdown -->

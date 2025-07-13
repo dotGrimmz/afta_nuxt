@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { ref } from "vue";
-
-/* ---------- Props ---------- */
-
 import type { Poll, PollOptionWithVotes } from "@/types/poll"; // Adjust the path as needed
+import { useToast } from "vue-toastification";
+const toast = useToast();
 
 const props = defineProps<{
   poll: Poll;
   loading?: boolean;
 }>();
 
-/* ---------- Emits ---------- */
 const emit = defineEmits<{
   /** Parent handles the actual API call and state refresh */
   (e: "vote", payload: { pollId: number; optionId: string }): void;
@@ -24,7 +22,6 @@ const options = ref<PollOptionWithVotes[]>([]);
 watch(
   () => props.poll.poll_options,
   (newOpts) => {
-    // Flatten votes if needed (depends on how normalized your prop is)
     options.value = newOpts.map((opt) => ({
       ...opt,
       votes: Array.isArray(opt.votes) ? opt.votes[0]?.count ?? 0 : opt.votes,
@@ -36,14 +33,31 @@ watch(
 const { hasVoted, markVoted } = useVoteTracker(props.poll.id);
 
 async function handleVote(optionId: string) {
-  // if (voting.value || hasVoted.value) return;
+  if (voting.value || hasVoted.value) {
+    console.log(
+      "you have voted with this id:",
+      toRaw(voting.value),
+      toRaw(hasVoted.value)
+    );
+    toast.warning("Voted Already Ninja! - GO Away already", {
+      //@ts-ignore
+      position: "bottom-left",
+      timeout: 2000,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+      showCloseButtonOnHover: false,
+    });
+
+    return;
+  }
 
   voting.value = true;
   errorMsg.value = "";
 
   try {
     emit("vote", { pollId: props.poll.id, optionId });
-    // markVoted();
+    markVoted();
 
     // ✅ Optimistic update
     const target = options.value.find((o) => o.id === optionId);

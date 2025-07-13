@@ -18,7 +18,7 @@ export interface PollOption {
 export interface PollOptionWithVotes {
   id: string;
   text: string;
-  votes?: number; // ✅ array of objects
+  votes: number;
 }
 
 export interface PollResponse {
