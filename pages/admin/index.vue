@@ -4,15 +4,12 @@ definePageMeta({ layout: "admin" });
 import PollTile from "~/components/polls/PollTile.vue";
 import type { Poll } from "~/types/poll";
 
-const { data: pollsData, refresh } = await useFetch<Poll[]>("/api/polls");
-const activePolls = toRaw(pollsData.value)?.filter((poll) => poll.is_active);
-console.log({ activePolls });
-const handleRefresh = async () => {
-  // console.log("Refreshing polls...");
+// const { data: pollsData, refresh } = await useFetch<Poll[]>("/api/polls");
 
-  await refresh();
-  // console.log("Polls refreshed:", pollsData.value);
-};
+const { polls: pollsData, refreshPolls } = usePollAdmin();
+
+// const activePolls = toRaw(pollsData.value)?.filter((poll) => poll.is_active);
+console.log("all polls:", pollsData);
 </script>
 
 <template>
@@ -20,7 +17,7 @@ const handleRefresh = async () => {
 
   <!-- Poll-creation widget -->
   <div>
-    <PollsPollCreator @poll-created="handleRefresh" />
+    <PollsPollCreator @poll-created="refreshPolls" />
     <!-- this will be for the admin 
     so what I want to do is  fetch all polls
     group by active and non active
@@ -31,7 +28,7 @@ const handleRefresh = async () => {
       v-for="poll in pollsData"
       :key="poll.id"
       :poll="poll"
-      @poll-updated="handleRefresh"
+      @poll-updated="refreshPolls"
     />
   </div>
 </template>

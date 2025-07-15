@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import ActivePoll from "~/components/polls/ActivePoll.vue";
 import { useDeviceId } from "~/composables/useDeviceId";
-import { useActivePoll } from "@/composables/useActivePoll";
+import { usePollAdmin } from "~/composables/usePollAdmin";
 
 /* ▸ open / closed state for dropdown */
 const open = ref(false);
@@ -10,29 +10,13 @@ function toggle() {
   open.value = !open.value;
 }
 
-/* no arg or pollId if single active poll */
-const { poll, loading } = useActivePoll();
+/* we are getting our active polls list from the usePollAdmin hook
+  then we want to map over each active poll tile with each tile having its own instance 
+  of the useActive poll hook. 
+*/
 
-/* ▸ handle vote (child ActivePoll emits { pollId, optionId }) */
-async function castVote({
-  pollId,
-  optionId,
-}: {
-  pollId: number;
-  optionId: string;
-}) {
-  try {
-    await $fetch(`/api/polls/${pollId}/vote`, {
-      method: "POST",
-      body: {
-        option_id: optionId,
-        voter_id: useDeviceId(), // local‑storage UUID
-      },
-    });
-  } catch (err) {
-    console.error("Vote failed:", err);
-  }
-}
+const { activePolls } = usePollAdmin();
+console.log(activePolls.value);
 </script>
 
 <template>
@@ -58,12 +42,13 @@ async function castVote({
         v-if="open"
         class="dropdown-content rounded-b-lg bg-white text-gray-800 p-4 border-t border-gray-200 shadow-inner"
       >
-        <ActivePoll
-          v-if="poll && !loading"
-          :poll="poll"
-          :loading="loading"
-          @vote="castVote"
-        />
+        <div
+          v-if="activePolls.length"
+          v-for="poll in activePolls"
+          :key="poll.id"
+        >
+          <ActivePoll :poll="poll" />
+        </div>
         <span v-else>...loading</span>
       </div>
     </transition>
