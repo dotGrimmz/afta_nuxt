@@ -1,5 +1,5 @@
 <template>
-  <div class="poll-tile">
+  <div class="poll-tile shadow-lg">
     <!-- Question -->
     <h2 class="poll-question">{{ poll.question }}</h2>
 
@@ -48,6 +48,13 @@ const activatePoll = async () => {
     console.error("Failed to activate poll:", err);
   }
 };
+
+/**
+ *
+ *     class="container shadow-lg p-2 hover:shadow-xl transform hover:-translate-y-1
+ *  transition duration-300 hover:bg-yellow-200"
+ *
+ */
 </script>
 
 <style scoped>
