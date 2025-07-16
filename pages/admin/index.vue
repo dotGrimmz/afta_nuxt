@@ -2,7 +2,6 @@
 definePageMeta({ layout: "admin" });
 // Update the path below if the file name or folder casing is different, e.g. PollsPollcreator.vue or pollsPollCreator.vue
 import PollTile from "~/components/polls/PollTile.vue";
-import type { Poll } from "~/types/poll";
 
 // const { data: pollsData, refresh } = await useFetch<Poll[]>("/api/polls");
 

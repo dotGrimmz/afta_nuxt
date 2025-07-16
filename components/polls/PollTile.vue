@@ -1,5 +1,7 @@
 <template>
-  <div class="poll-tile shadow-lg">
+  <div
+    :class="`poll-tile shadow-lg ${props.poll.is_active ? 'active-tile' : ''}`"
+  >
     <!-- Question -->
     <h2 class="poll-question">{{ poll.question }}</h2>
 
@@ -23,7 +25,16 @@
       >
         Activate
       </button>
-      <p v-else class="status-label">✅ Active Poll</p>
+      <UButton
+        v-else
+        @click="deActivatePoll"
+        label="Deactivate"
+        size="md"
+        color="primary"
+        variant="solid"
+        class="cursor-pointer"
+        >Deactivate
+      </UButton>
     </div>
   </div>
 </template>
@@ -49,6 +60,20 @@ const activatePoll = async () => {
   }
 };
 
+const deActivatePoll = async () => {
+  if (!props.poll.is_active) {
+    console.log("Poll is not activated DUMMY!");
+    return;
+  }
+  try {
+    await $fetch(`/api/polls/${props.poll.id}/deactivate`, {
+      method: "POST",
+    });
+    emit("poll-updated");
+  } catch (err) {
+    console.error("Failed to activate poll:", err);
+  }
+};
 /**
  *
  *     class="container shadow-lg p-2 hover:shadow-xl transform hover:-translate-y-1
