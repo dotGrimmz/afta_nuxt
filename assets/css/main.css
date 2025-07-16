@@ -1,21 +1,2 @@
-:root {
-  --primary: theme('colors.blue.600');
-  --primary-hover: theme('colors.blue.700');
-  --danger: theme('colors.red.600');
-  --bg: white;
-  --text: #111827;
-}
-
-.dark {
-  --bg: #0f172a;
-  --text: white;
-}
-
-/* Apply the background and text colors globally */
-body {
-  background-color: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  margin: 0;
-  font-family: system-ui, sans-serif;
-}
+@import "tailwindcss";
+@import "@nuxt/ui";

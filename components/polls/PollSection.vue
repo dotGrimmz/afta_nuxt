@@ -18,7 +18,6 @@ function toggle() {
 const { activePolls } = usePollAdmin();
 console.log(activePolls.value);
 </script>
-
 <template>
   <!-- Wrapper keeps card + dropdown grouped -->
   <div class="w-full">
@@ -38,11 +37,9 @@ console.log(activePolls.value);
 
     <!-- Animated dropdown -->
     <transition name="slide-fade">
-      <div
-        v-if="open"
-        class="dropdown-content rounded-b-lg bg-white text-gray-800 p-4 border-t border-gray-200 shadow-inner"
-      >
+      <div v-if="open" class="dropdown-content">
         <div
+          class="active-poll-wrapper"
           v-if="activePolls.length"
           v-for="poll in activePolls"
           :key="poll.id"
@@ -78,5 +75,18 @@ console.log(activePolls.value);
 .dropdown-content {
   border-bottom-left-radius: 0.5rem; /* match card radius */
   border-bottom-right-radius: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: white;
+}
+
+.active-poll-wrapper {
+  display: flex;
+  align-items: center;
+  justify-self: center;
+  width: 100%;
+  padding: 0.5rem;
 }
 </style>

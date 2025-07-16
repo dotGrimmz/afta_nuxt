@@ -73,8 +73,13 @@ console.log(props.poll);
 </script>
 
 <template>
-  <div>
-    <h2 class="text-xl font-bold mb-4">{{ props.poll.question }}</h2>
+  <UCard
+    variant="solid"
+    class="container shadow-lg p-2 hover:shadow-xl transform hover:-translate-y-1 transition duration-300 hover:bg-yellow-200"
+  >
+    <template #header>
+      <h2 class="text-xl font-bold mb-4">{{ props.poll.question }}</h2>
+    </template>
 
     <ul>
       <li
@@ -93,8 +98,10 @@ console.log(props.poll);
       </li>
     </ul>
 
-    <p v-if="errorMsg" class="text-red-600 mt-2">{{ errorMsg }}</p>
-  </div>
+    <template #footer v-if="errorMsg">
+      <p class="text-red-600 mt-2">{{ errorMsg }}</p>
+    </template>
+  </UCard>
 </template>
 
 <style scoped>
