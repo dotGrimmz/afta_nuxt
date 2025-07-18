@@ -69,7 +69,7 @@ async function handleVote(optionId: string) {
   }
 }
 
-console.log(props.poll);
+console.log(toRaw(props.poll));
 </script>
 
 <template>

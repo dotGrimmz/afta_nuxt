@@ -16,7 +16,6 @@ function toggle() {
 */
 
 const { activePolls } = usePollAdmin();
-console.log(activePolls.value);
 </script>
 <template>
   <!-- Wrapper keeps card + dropdown grouped -->
