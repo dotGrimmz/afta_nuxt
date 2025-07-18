@@ -1,5 +1,7 @@
 <template>
-  <div class="poll-tile">
+  <div
+    :class="`poll-tile shadow-lg ${props.poll.is_active ? 'active-tile' : ''}`"
+  >
     <!-- Question -->
     <h2 class="poll-question">{{ poll.question }}</h2>
 
@@ -17,13 +19,22 @@
     <!-- Activate button or status -->
     <div class="status-controls">
       <button
-        v-if="!poll.isActive"
+        v-if="!poll.is_active"
         @click="activatePoll"
         class="activate-button"
       >
         Activate
       </button>
-      <p v-else class="status-label">✅ Active Poll</p>
+      <UButton
+        v-else
+        @click="deActivatePoll"
+        label="Deactivate"
+        size="md"
+        color="primary"
+        variant="solid"
+        class="cursor-pointer"
+        >Deactivate
+      </UButton>
     </div>
   </div>
 </template>
@@ -35,13 +46,40 @@ const props = defineProps<{ poll: Poll }>();
 const emit = defineEmits<{ (e: "poll-updated"): void }>();
 
 const activatePoll = async () => {
+  if (props.poll.is_active) {
+    console.log("Poll is active! no need to set to active! ");
+    return;
+  }
   try {
-    await $fetch(`/api/polls/${props.poll.id}/activate`, { method: "POST" });
+    await $fetch(`/api/polls/${props.poll.id}/activate`, {
+      method: "POST",
+    });
     emit("poll-updated");
   } catch (err) {
     console.error("Failed to activate poll:", err);
   }
 };
+
+const deActivatePoll = async () => {
+  if (!props.poll.is_active) {
+    console.log("Poll is not activated DUMMY!");
+    return;
+  }
+  try {
+    await $fetch(`/api/polls/${props.poll.id}/deactivate`, {
+      method: "POST",
+    });
+    emit("poll-updated");
+  } catch (err) {
+    console.error("Failed to activate poll:", err);
+  }
+};
+/**
+ *
+ *     class="container shadow-lg p-2 hover:shadow-xl transform hover:-translate-y-1
+ *  transition duration-300 hover:bg-yellow-200"
+ *
+ */
 </script>
 
 <style scoped>

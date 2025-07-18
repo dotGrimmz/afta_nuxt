@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { inject, ref } from "vue";
+import { ref } from "vue";
 import ActivePoll from "~/components/polls/ActivePoll.vue";
 import { useDeviceId } from "~/composables/useDeviceId";
-import type { Poll, PollOptionWithVotes } from "@/types/poll";
+import { usePollAdmin } from "~/composables/usePollAdmin";
 
 /* ▸ open / closed state for dropdown */
 const open = ref(false);
@@ -10,41 +10,14 @@ function toggle() {
   open.value = !open.value;
 }
 
-/* ▸ pull reactive poll data provided in app.vue */
-const poll = inject<Poll | null>("activePoll");
+/* we are getting our active polls list from the usePollAdmin hook
+  then we want to map over each active poll tile with each tile having its own instance 
+  of the useActive poll hook. 
+*/
 
-const options = inject<PollOptionWithVotes[]>("pollOptions");
-const pollLoading = inject<boolean>("pollLoading") ?? false;
-
-if (!poll || !options) {
-  // Ensures this component is used under <app.vue> that provides the data
-  throw new Error("PollsPollSection must be rendered inside app.vue provider");
-}
-
-/* ▸ handle vote (child ActivePoll emits { pollId, optionId }) */
-async function castVote({
-  pollId,
-  optionId,
-}: {
-  pollId: number;
-  optionId: string;
-}) {
-  try {
-    await $fetch(`/api/polls/${pollId}/vote`, {
-      method: "POST",
-      body: {
-        option_id: optionId,
-        voter_id: useDeviceId(), // local‑storage UUID
-      },
-    });
-    // No manual refresh needed — realtime listener in useActivePoll updates counts
-  } catch (err) {
-    console.error("Vote failed:", err);
-    // ActivePoll.vue already shows "Vote failed" if the endpoint returns an error
-  }
-}
+const { activePolls } = usePollAdmin();
+console.log(activePolls.value);
 </script>
-
 <template>
   <!-- Wrapper keeps card + dropdown grouped -->
   <div class="w-full">
@@ -57,27 +30,23 @@ async function castVote({
     >
       <h2 class="text-2xl font-bold mb-1">Polls</h2>
       <!-- optional tagline -->
-      <!-- <p class="text-sm leading-relaxed">
+      <p class="text-sm leading-relaxed">
         Tap to view polls about AFTA’s features and preferences.
-      </p> -->
+      </p>
     </SectionCard>
 
     <!-- Animated dropdown -->
     <transition name="slide-fade">
-      <div
-        v-if="open"
-        class="dropdown-content rounded-b-lg bg-white text-gray-800 p-4 border-t border-gray-200 shadow-inner"
-      >
-        <!-- ActivePoll consumes poll + options directly 
-        I NEED TO figure out why this isnt working. its the shape im sure 
-        
-        -->
-        <ActivePoll
-          v-if="poll"
-          :poll="poll"
-          :loading="pollLoading"
-          @vote="castVote"
-        />
+      <div v-if="open" class="dropdown-content">
+        <div
+          class="active-poll-wrapper"
+          v-if="activePolls.length"
+          v-for="poll in activePolls"
+          :key="poll.id"
+        >
+          <ActivePoll :poll="poll" />
+        </div>
+        <span v-else>...loading</span>
       </div>
     </transition>
   </div>
@@ -106,5 +75,18 @@ async function castVote({
 .dropdown-content {
   border-bottom-left-radius: 0.5rem; /* match card radius */
   border-bottom-right-radius: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: white;
+}
+
+.active-poll-wrapper {
+  display: flex;
+  align-items: center;
+  justify-self: center;
+  width: 100%;
+  padding: 0.5rem;
 }
 </style>

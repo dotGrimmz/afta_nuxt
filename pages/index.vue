@@ -1,7 +1,3 @@
-<script setup>
-const { data: activePoll } = await useFetch("/api/polls/active");
-console.log("Active Poll:", toRaw(activePoll.value));
-</script>
 <template>
   <div>
     <ParallaxHero

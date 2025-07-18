@@ -2,7 +2,7 @@
 export interface Poll {
   id: number;
   question: string;
-  isActive: boolean;
+  is_active: boolean;
   created_at: string;
   updated_at?: string;
   poll_options: PollOption[];
@@ -11,15 +11,14 @@ export interface Poll {
 export interface PollOption {
   id: string;
   text: string;
-  poll_votes?: { count: number };
+  votes?: { count: number };
 }
 
 // Used when returning active poll with votes
 export interface PollOptionWithVotes {
   id: string;
   text: string;
-  sort?: number;
-  votes?: { count: number }; // Supabase count response
+  votes: number;
 }
 
 export interface PollResponse {
@@ -41,4 +40,8 @@ export interface Vote {
   selected_option: string;
   created_at: string;
   updated_at?: string;
+}
+
+export interface PollApiResponse {
+  poll: Poll[];
 }

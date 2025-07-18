@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
   if (error) {
     // Duplicate vote? unique‑constraint returns 23505
     const dup = error.code === "23505";
+    // if (dup) return { success: true }; // REMOVE TO ADD DUP SAFTEY
     throw createError({
       statusCode: dup ? 409 : 500,
       statusMessage: dup ? "Already voted" : error.message,

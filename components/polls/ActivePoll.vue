@@ -1,20 +1,14 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import type { Poll, PollOptionWithVotes } from "@/types/poll";
+import type { Poll, PollOptionWithVotes } from "@/types/poll"; // Adjust the path as needed
+import { useToast } from "vue-toastification";
+const toast = useToast();
 
-/* ---------- Props ---------- */
 const props = defineProps<{
   poll: Poll;
   loading?: boolean;
 }>();
 
-onMounted(() => {
-  // This will log when the component is mounted
-  // console.log("ActivePoll component mounted");
-  // console.log("ActivePoll mounted with poll:", props.poll);
-});
-
-/* ---------- Emits ---------- */
 const emit = defineEmits<{
   /** Parent handles the actual API call and state refresh */
   (e: "vote", payload: { pollId: number; optionId: string }): void;
@@ -23,13 +17,40 @@ const emit = defineEmits<{
 /* ---------- Local UI state ---------- */
 const voting = ref(false);
 const errorMsg = ref("");
+const options = ref<PollOptionWithVotes[]>([]);
 
-/* ---------- Click handler ---------- */
+watch(
+  () => props.poll.poll_options,
+  (newOpts) => {
+    options.value = newOpts.map((opt) => ({
+      ...opt,
+      votes: Array.isArray(opt.votes) ? opt.votes[0]?.count ?? 0 : opt.votes,
+    }));
+  },
+  { immediate: true }
+);
 
 const { hasVoted, markVoted } = useVoteTracker(props.poll.id);
 
 async function handleVote(optionId: string) {
-  if (voting.value || hasVoted.value) return;
+  if (voting.value || hasVoted.value) {
+    console.log(
+      "you have voted with this id:",
+      toRaw(voting.value),
+      toRaw(hasVoted.value)
+    );
+    toast.warning("Voted Already Ninja! - GO Away already", {
+      //@ts-ignore
+      position: "bottom-left",
+      timeout: 2000,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+      showCloseButtonOnHover: false,
+    });
+
+    return;
+  }
 
   voting.value = true;
   errorMsg.value = "";
@@ -37,21 +58,32 @@ async function handleVote(optionId: string) {
   try {
     emit("vote", { pollId: props.poll.id, optionId });
     markVoted();
+
+    // ✅ Optimistic update
+    const target = options.value.find((o) => o.id === optionId);
+    if (target) target.votes += 1;
   } catch (err: any) {
     errorMsg.value = err?.message || "Vote failed";
   } finally {
     voting.value = false;
   }
 }
+
+console.log(props.poll);
 </script>
 
 <template>
-  <div>
-    <h2 class="text-xl font-bold mb-4">{{ props.poll.question }}</h2>
+  <UCard
+    variant="solid"
+    class="container shadow-lg p-2 hover:shadow-xl transform hover:-translate-y-1 transition duration-300 hover:bg-yellow-200"
+  >
+    <template #header>
+      <h2 class="text-xl font-bold mb-4">{{ props.poll.question }}</h2>
+    </template>
 
     <ul>
       <li
-        v-for="opt in props.poll.poll_options"
+        v-for="opt in options"
         :key="opt.id"
         class="mb-2 flex justify-between"
       >
@@ -61,11 +93,19 @@ async function handleVote(optionId: string) {
           @click="handleVote(opt.id)"
           class="border px-2 py-1 rounded"
         >
-          Vote — {{ opt.poll_votes?.count ?? "0" }}
+          Vote — {{ opt.votes }}
         </button>
       </li>
     </ul>
 
-    <p v-if="errorMsg" class="text-red-600 mt-2">{{ errorMsg }}</p>
-  </div>
+    <template #footer v-if="errorMsg">
+      <p class="text-red-600 mt-2">{{ errorMsg }}</p>
+    </template>
+  </UCard>
 </template>
+
+<style scoped>
+button {
+  cursor: pointer;
+}
+</style>
