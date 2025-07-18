@@ -22,50 +22,6 @@ export function useActivePoll(poll: Poll) {
 
   let channel: ReturnType<typeof supabase.channel> | null = null;
 
-  // const fetchPoll = async () => {
-  //   loading.value = true;
-
-  //   try {
-  //     const res = await $fetch<{ poll: Poll[] }>("/api/polls/active");
-
-  //     if (!res?.poll?.length) {
-  //       poll.value = null;
-  //       options.value = [];
-  //       return;
-  //     }
-
-  //     const foundPoll =
-  //       res.poll.find((p) => p.id.toString() === pollId) ?? res.poll[0];
-
-  //     if (foundPoll) {
-  //       poll.value = foundPoll;
-
-  //       // ✅ Normalize votes to flat numbers
-  //       options.value = foundPoll.poll_options.map((opt) => ({
-  //         ...opt,
-  //         votes: opt.votes?.count ?? 0,
-  //       }));
-
-  //       setupRealtime();
-  //     } else {
-  //       poll.value = null;
-  //       options.value = [];
-  //     }
-  //   } catch (err) {
-  //     console.error("Failed to fetch poll:", err);
-  //     poll.value = null;
-  //     options.value = [];
-  //     //@ts-ignore
-  //     error.value = err?.message || "Something went wrong";
-  //   } finally {
-  //     loading.value = false;
-  //   }
-  // };
-
-  // const refreshPoll = async () => {
-  //   await fetchPoll();
-  // };
-
   const setupOptions = () => {
     options.value = poll.poll_options.map((opt) => ({
       ...opt,
