@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { Poll, PollOptionWithVotes } from "@/types/poll"; // Adjust the path as needed
-import { useToast } from "vue-toastification";
-const toast = useToast();
+// import { useToast } from "vue-toastification";
+// const toast = useToast();
 
 const props = defineProps<{
   poll: Poll;
@@ -39,15 +39,15 @@ async function handleVote(optionId: string) {
       toRaw(voting.value),
       toRaw(hasVoted.value)
     );
-    toast.warning("Voted Already Ninja! - GO Away already", {
-      //@ts-ignore
-      position: "bottom-left",
-      timeout: 2000,
-      closeOnClick: true,
-      pauseOnHover: true,
-      draggable: true,
-      showCloseButtonOnHover: false,
-    });
+    // toast.warning("Voted Already Ninja! - GO Away already", {
+    //   //@ts-ignore
+    //   position: "bottom-left",
+    //   timeout: 2000,
+    //   closeOnClick: true,
+    //   pauseOnHover: true,
+    //   draggable: true,
+    //   showCloseButtonOnHover: false,
+    // });
 
     return;
   }
@@ -68,8 +68,6 @@ async function handleVote(optionId: string) {
     voting.value = false;
   }
 }
-
-console.log(toRaw(props.poll));
 </script>
 
 <template>
