@@ -30,10 +30,3 @@
   padding: 1rem;
 }
 </style>
-
-<script setup>
-const config = useRuntimeConfig();
-
-console.log("Supabase URL:", config.public.supabaseUrl);
-console.log("Supabase Key:", config.public.supabaseAnonKey);
-</script>

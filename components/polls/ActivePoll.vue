@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import type { Poll, PollOptionWithVotes } from "@/types/poll"; // Adjust the path as needed
-// import { useToast } from "vue-toastification";
-// const toast = useToast();
+import type { Poll } from "@/types/poll"; // Adjust the path as needed
+import { useToast } from "vue-toastification";
+const toast = useToast();
 
 const props = defineProps<{
   poll: Poll;
@@ -17,18 +17,8 @@ const emit = defineEmits<{
 /* ---------- Local UI state ---------- */
 const voting = ref(false);
 const errorMsg = ref("");
-const options = ref<PollOptionWithVotes[]>([]);
 
-watch(
-  () => props.poll.poll_options,
-  (newOpts) => {
-    options.value = newOpts.map((opt) => ({
-      ...opt,
-      votes: Array.isArray(opt.votes) ? opt.votes[0]?.count ?? 0 : opt.votes,
-    }));
-  },
-  { immediate: true }
-);
+console.log(toRaw(props.poll));
 
 const { hasVoted, markVoted } = useVoteTracker(props.poll.id);
 
@@ -39,15 +29,15 @@ async function handleVote(optionId: string) {
       toRaw(voting.value),
       toRaw(hasVoted.value)
     );
-    // toast.warning("Voted Already Ninja! - GO Away already", {
-    //   //@ts-ignore
-    //   position: "bottom-left",
-    //   timeout: 2000,
-    //   closeOnClick: true,
-    //   pauseOnHover: true,
-    //   draggable: true,
-    //   showCloseButtonOnHover: false,
-    // });
+    toast.warning("Voted Already Ninja! - GO Away already", {
+      //@ts-ignore
+      position: "bottom-left",
+      timeout: 2000,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+      showCloseButtonOnHover: false,
+    });
 
     return;
   }
@@ -60,8 +50,8 @@ async function handleVote(optionId: string) {
     markVoted();
 
     // ✅ Optimistic update
-    const target = options.value.find((o) => o.id === optionId);
-    if (target) target.votes += 1;
+    const target = props.poll.poll_options.find((o) => o.id === optionId);
+    if (target) target.vote_count += 1;
   } catch (err: any) {
     errorMsg.value = err?.message || "Vote failed";
   } finally {
@@ -81,7 +71,7 @@ async function handleVote(optionId: string) {
 
     <ul>
       <li
-        v-for="opt in options"
+        v-for="opt in props.poll.poll_options"
         :key="opt.id"
         class="mb-2 flex justify-between"
       >
@@ -91,7 +81,7 @@ async function handleVote(optionId: string) {
           @click="handleVote(opt.id)"
           class="border px-2 py-1 rounded"
         >
-          Vote — {{ opt.votes }}
+          Vote — {{ opt.vote_count }}
         </button>
       </li>
     </ul>

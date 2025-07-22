@@ -11,7 +11,7 @@ export interface Poll {
 export interface PollOption {
   id: string;
   text: string;
-  votes?: { count: number };
+  vote_count: number;
 }
 
 // Used when returning active poll with votes
