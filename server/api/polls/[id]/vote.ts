@@ -16,6 +16,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing fields" });
   }
 
+  console.log(
+    "option id:",
+    body.option_id,
+    "voter id:",
+    body.voter_id,
+    "poll id:",
+    pollId
+  );
   const { error } = await supabase.from("poll_votes").insert({
     poll_id: pollId,
     option_id: body.option_id,

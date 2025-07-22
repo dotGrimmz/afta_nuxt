@@ -7,6 +7,7 @@ const toast = useToast();
 const props = defineProps<{
   poll: Poll;
   loading?: boolean;
+  refresh: () => void;
 }>();
 
 const emit = defineEmits<{
@@ -21,6 +22,7 @@ const errorMsg = ref("");
 console.log(toRaw(props.poll));
 
 const { hasVoted, markVoted } = useVoteTracker(props.poll.id);
+const { castVote, loading, error, status } = useActivePoll(props.poll.id);
 
 async function handleVote(optionId: string) {
   if (voting.value || hasVoted.value) {
@@ -51,7 +53,23 @@ async function handleVote(optionId: string) {
 
     // ✅ Optimistic update
     const target = props.poll.poll_options.find((o) => o.id === optionId);
-    if (target) target.vote_count += 1;
+    if (target) {
+      target.vote_count += 1;
+      toast.success(
+        `You Voted "${target.text}" for ${props.poll.question} Poll - Success!`,
+        {
+          //@ts-ignore
+          position: "bottom-left",
+          timeout: 2000,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          showCloseButtonOnHover: false,
+        }
+      );
+    }
+    await castVote(optionId);
+    props.refresh();
   } catch (err: any) {
     errorMsg.value = err?.message || "Vote failed";
   } finally {
