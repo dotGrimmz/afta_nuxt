@@ -1,6 +1,5 @@
-import { ref, onMounted, onBeforeUnmount } from "vue";
-import { useSupabaseClient } from "#imports";
-import type { Poll, PollOptionWithVotes } from "@/types/poll";
+import { ref } from "vue";
+import type { Poll, PollOption } from "@/types/poll";
 import { useDeviceId } from "~/composables/useDeviceId";
 
 /**
@@ -9,113 +8,51 @@ import { useDeviceId } from "~/composables/useDeviceId";
  * this will now manage each individual active poll
  * will only be used in active poll tile
  *
+ * actions
+ * vote on a poll
+ * handles refresh
+ *
+ *
  *
  */
 
-export function useActivePoll(poll: Poll) {
-  const supabase = useSupabaseClient();
+export function useActivePoll(pollID: Poll["id"]) {
+  const voterId = useDeviceId();
 
-  const options = ref<PollOptionWithVotes[]>([]);
+  const optionId = ref<string | null>(null);
+  const loading = ref<boolean>(false);
+  const error = ref<any>(null);
+  const selectedVoteId = ref<string | null>(null);
 
-  const isSubscribed = ref(false);
-  const error = ref<string | null>(null);
+  const execute = async () => {
+    loading.value = true;
+    error.value = null;
 
-  let channel: ReturnType<typeof supabase.channel> | null = null;
-
-  const setupOptions = () => {
-    options.value = poll.poll_options.map((opt) => ({
-      ...opt,
-      votes: Array.isArray(opt.votes)
-        ? opt.votes[0]?.count ?? 0
-        : opt.votes ?? 0,
-    }));
-  };
-
-  const setupRealtime = () => {
-    if (!poll.id) {
-      error.value = "No Poll to set up real Time";
-      return;
-    }
-
-    if (channel) {
-      supabase.removeChannel(channel);
-    }
-
-    channel = supabase
-      .channel(`poll_votes_${poll.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "poll_votes",
-          filter: `poll_id=eq.${poll.id}`,
-        },
-        (payload) => {
-          const id = payload.new.option_id as string;
-          const opt = options.value.find((o) => o.id === id);
-
-          if (opt) {
-            opt.votes += 1; // ✅ simplified because votes is now a number
-          }
-        }
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") isSubscribed.value = true;
-      });
-  };
-
-  const castVote = async ({
-    pollId,
-    optionId,
-  }: {
-    pollId: number;
-    optionId: string;
-  }) => {
     try {
-      await $fetch(`/api/polls/${pollId}/vote`, {
+      await $fetch(`/api/polls/${pollID}/vote`, {
         method: "POST",
         body: {
-          option_id: optionId,
-          voter_id: useDeviceId(), // local‑storage UUID
+          option_id: optionId.value,
+          voter_id: voterId,
         },
       });
-    } catch (err) {
-      console.error("Vote failed:", err);
+
+      selectedVoteId.value = optionId.value;
+    } catch (e: any) {
+      error.value = e;
+    } finally {
+      loading.value = false;
     }
   };
-
-  const unsubscribe = () => {
-    if (channel) {
-      supabase.removeChannel(channel);
-      channel = null;
-      isSubscribed.value = false;
-    }
+  const castVote = async (newOptionId: PollOption["id"]) => {
+    optionId.value = newOptionId;
+    await execute();
   };
-
-  watch(
-    () => poll.is_active,
-    (newStatus) => {
-      if (newStatus) {
-        setupRealtime();
-      } else {
-        unsubscribe();
-      }
-    },
-    { immediate: true }
-  );
-
-  watch(() => poll.poll_options, setupOptions, { immediate: true, deep: true });
-
-  onBeforeUnmount(() => {
-    unsubscribe();
-  });
 
   return {
-    poll,
-    options,
-    error,
-    isSubscribed,
     castVote,
+    loading,
+    error,
+    selectedVoteId: selectedVoteId.value,
   };
 }

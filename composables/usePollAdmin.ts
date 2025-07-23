@@ -39,7 +39,6 @@ export const usePollAdmin = () => {
       error.value = err?.message ?? "Failed to fetch polls.";
     } finally {
       loading.value = false;
-      console.log("activePolls items", activePolls.value.length);
     }
   };
   onMounted(() => {

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import type { Poll, PollOptionWithVotes } from "@/types/poll"; // Adjust the path as needed
-// import { useToast } from "vue-toastification";
-// const toast = useToast();
+import type { Poll } from "@/types/poll"; // Adjust the path as needed
+import { useToast } from "vue-toastification";
+const toast = useToast();
 
 const props = defineProps<{
   poll: Poll;
   loading?: boolean;
+  refresh: () => void;
 }>();
 
 const emit = defineEmits<{
@@ -15,57 +16,54 @@ const emit = defineEmits<{
 }>();
 
 /* ---------- Local UI state ---------- */
-const voting = ref(false);
-const errorMsg = ref("");
-const options = ref<PollOptionWithVotes[]>([]);
 
-watch(
-  () => props.poll.poll_options,
-  (newOpts) => {
-    options.value = newOpts.map((opt) => ({
-      ...opt,
-      votes: Array.isArray(opt.votes) ? opt.votes[0]?.count ?? 0 : opt.votes,
-    }));
-  },
-  { immediate: true }
-);
+console.log(toRaw(props.poll));
 
-const { hasVoted, markVoted } = useVoteTracker(props.poll.id);
+const { hasVoted, markVoted, selectedOptionId } = useVoteTracker(props.poll.id);
+const { castVote, loading, error } = useActivePoll(props.poll.id);
 
+console.log({ selectedOptionId });
 async function handleVote(optionId: string) {
-  if (voting.value || hasVoted.value) {
-    console.log(
-      "you have voted with this id:",
-      toRaw(voting.value),
-      toRaw(hasVoted.value)
-    );
-    // toast.warning("Voted Already Ninja! - GO Away already", {
-    //   //@ts-ignore
-    //   position: "bottom-left",
-    //   timeout: 2000,
-    //   closeOnClick: true,
-    //   pauseOnHover: true,
-    //   draggable: true,
-    //   showCloseButtonOnHover: false,
-    // });
+  if (hasVoted.value) {
+    console.log("you have voted with this id:", toRaw(hasVoted.value));
+    toast.warning("Voted Already Ninja! - GO Away already", {
+      //@ts-ignore
+      position: "bottom-left",
+      timeout: 2000,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+      showCloseButtonOnHover: false,
+    });
 
     return;
   }
 
-  voting.value = true;
-  errorMsg.value = "";
-
   try {
     emit("vote", { pollId: props.poll.id, optionId });
-    markVoted();
+    markVoted(optionId);
 
     // ✅ Optimistic update
-    const target = options.value.find((o) => o.id === optionId);
-    if (target) target.votes += 1;
+    const target = props.poll.poll_options.find((o) => o.id === optionId);
+    if (target) {
+      // target.vote_count += 1; bump that show a loading icon or something
+      toast.success(
+        `You Voted "${target.text}" for ${props.poll.question} Poll - Success!`,
+        {
+          //@ts-ignore
+          position: "bottom-left",
+          timeout: 2000,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          showCloseButtonOnHover: false,
+        }
+      );
+    }
+    await castVote(optionId);
+    props.refresh();
   } catch (err: any) {
-    errorMsg.value = err?.message || "Vote failed";
-  } finally {
-    voting.value = false;
+    console.error({ err });
   }
 }
 </script>
@@ -81,23 +79,28 @@ async function handleVote(optionId: string) {
 
     <ul>
       <li
-        v-for="opt in options"
+        v-for="opt in props.poll.poll_options"
         :key="opt.id"
         class="mb-2 flex justify-between"
       >
         <span>{{ opt.text }}</span>
         <button
-          :disabled="voting || props.loading"
+          :disabled="loading || props.loading"
           @click="handleVote(opt.id)"
-          class="border px-2 py-1 rounded"
+          :class="[
+            'mb-2 flex justify-between border px-2 py-1 rounded',
+            selectedOptionId === opt.id
+              ? 'border-[1.5px] border-teal-500'
+              : 'border-gray-300', // fallback/default border
+          ]"
         >
-          Vote — {{ opt.votes }}
+          Vote — {{ opt.vote_count }}
         </button>
       </li>
     </ul>
 
-    <template #footer v-if="errorMsg">
-      <p class="text-red-600 mt-2">{{ errorMsg }}</p>
+    <template #footer v-if="error">
+      <p class="text-red-600 mt-2">{{ error }}</p>
     </template>
   </UCard>
 </template>

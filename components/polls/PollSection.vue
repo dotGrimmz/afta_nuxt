@@ -15,7 +15,7 @@ function toggle() {
   of the useActive poll hook. 
 */
 
-const { activePolls } = usePollAdmin();
+const { activePolls, refreshPolls } = usePollAdmin();
 </script>
 <template>
   <!-- Wrapper keeps card + dropdown grouped -->
@@ -43,7 +43,7 @@ const { activePolls } = usePollAdmin();
           v-for="poll in activePolls"
           :key="poll.id"
         >
-          <ActivePoll :poll="poll" />
+          <ActivePoll :refresh="refreshPolls" :poll="poll" />
         </div>
         <span v-else>...loading</span>
       </div>

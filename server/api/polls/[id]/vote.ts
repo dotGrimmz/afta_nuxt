@@ -12,15 +12,25 @@ export default defineEventHandler(async (event) => {
   const pollId = getRouterParam(event, "id");
   const body = await readBody<Body>(event);
 
+  console.log(
+    "option id:",
+    body.option_id,
+    "voter id:",
+    body.voter_id,
+    "poll id:",
+    pollId
+  );
   if (!pollId || !body?.option_id || !body?.voter_id) {
     throw createError({ statusCode: 400, statusMessage: "Missing fields" });
   }
 
-  const { error } = await supabase.from("poll_votes").insert({
+  const { error, data } = await supabase.from("poll_votes").insert({
     poll_id: pollId,
     option_id: body.option_id,
     voter_id: body.voter_id,
   } as any);
+
+  console.log("error?:", error);
 
   if (error) {
     // Duplicate vote? unique‑constraint returns 23505
