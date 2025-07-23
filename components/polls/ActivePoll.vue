@@ -1,5 +1,4 @@
-<script setup lang="ts">
-import { ref } from "vue";
+<script lang="ts">
 import type { Poll } from "@/types/poll"; // Adjust the path as needed
 import { useToast } from "vue-toastification";
 const toast = useToast();
