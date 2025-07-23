@@ -22,6 +22,8 @@ export default defineEventHandler(async (event) => {
     voter_id: body.voter_id,
   } as any);
 
+  console.log("error?:", error);
+
   if (error) {
     // Duplicate vote? unique‑constraint returns 23505
     const dup = error.code === "23505";

@@ -20,25 +20,32 @@ export function useActivePoll(pollID: Poll["id"]) {
   const voterId = useDeviceId();
 
   const optionId = ref<string | null>(null);
+  const loading = ref<boolean>(false);
+  const error = ref<any>(null);
+  const selectedVoteId = ref<string | null>(null);
 
-  const {
-    error,
-    pending: loading,
-    execute,
-    status,
-  } = useFetch(() => `/api/polls/${pollID}/vote`, {
-    method: "POST",
-    body: () => ({
-      option_id: optionId.value,
-      voter_id: voterId,
-    }),
-    immediate: false,
-  });
+  const execute = async () => {
+    loading.value = true;
+    error.value = null;
 
+    try {
+      await $fetch(`/api/polls/${pollID}/vote`, {
+        method: "POST",
+        body: {
+          option_id: optionId.value,
+          voter_id: voterId,
+        },
+      });
+
+      selectedVoteId.value = optionId.value;
+    } catch (e: any) {
+      error.value = e;
+    } finally {
+      loading.value = false;
+    }
+  };
   const castVote = async (newOptionId: PollOption["id"]) => {
     optionId.value = newOptionId;
-
-    console.log("option ID:", optionId, "PollId", pollID);
     await execute();
   };
 
@@ -46,6 +53,6 @@ export function useActivePoll(pollID: Poll["id"]) {
     castVote,
     loading,
     error,
-    status,
+    selectedVoteId: selectedVoteId.value,
   };
 }

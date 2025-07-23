@@ -16,21 +16,16 @@ const emit = defineEmits<{
 }>();
 
 /* ---------- Local UI state ---------- */
-const voting = ref(false);
-const errorMsg = ref("");
 
 console.log(toRaw(props.poll));
 
-const { hasVoted, markVoted } = useVoteTracker(props.poll.id);
-const { castVote, loading, error, status } = useActivePoll(props.poll.id);
+const { hasVoted, markVoted, selectedOptionId } = useVoteTracker(props.poll.id);
+const { castVote, loading, error } = useActivePoll(props.poll.id);
 
+console.log({ selectedOptionId });
 async function handleVote(optionId: string) {
-  if (voting.value || hasVoted.value) {
-    console.log(
-      "you have voted with this id:",
-      toRaw(voting.value),
-      toRaw(hasVoted.value)
-    );
+  if (hasVoted.value) {
+    console.log("you have voted with this id:", toRaw(hasVoted.value));
     toast.warning("Voted Already Ninja! - GO Away already", {
       //@ts-ignore
       position: "bottom-left",
@@ -44,17 +39,14 @@ async function handleVote(optionId: string) {
     return;
   }
 
-  voting.value = true;
-  errorMsg.value = "";
-
   try {
     emit("vote", { pollId: props.poll.id, optionId });
-    markVoted();
+    markVoted(optionId);
 
     // ✅ Optimistic update
     const target = props.poll.poll_options.find((o) => o.id === optionId);
     if (target) {
-      target.vote_count += 1;
+      // target.vote_count += 1; bump that show a loading icon or something
       toast.success(
         `You Voted "${target.text}" for ${props.poll.question} Poll - Success!`,
         {
@@ -71,9 +63,7 @@ async function handleVote(optionId: string) {
     await castVote(optionId);
     props.refresh();
   } catch (err: any) {
-    errorMsg.value = err?.message || "Vote failed";
-  } finally {
-    voting.value = false;
+    console.error({ err });
   }
 }
 </script>
@@ -95,17 +85,22 @@ async function handleVote(optionId: string) {
       >
         <span>{{ opt.text }}</span>
         <button
-          :disabled="voting || props.loading"
+          :disabled="loading || props.loading"
           @click="handleVote(opt.id)"
-          class="border px-2 py-1 rounded"
+          :class="[
+            'mb-2 flex justify-between border px-2 py-1 rounded',
+            selectedOptionId === opt.id
+              ? 'border-[1.5px] border-teal-500'
+              : 'border-gray-300', // fallback/default border
+          ]"
         >
           Vote — {{ opt.vote_count }}
         </button>
       </li>
     </ul>
 
-    <template #footer v-if="errorMsg">
-      <p class="text-red-600 mt-2">{{ errorMsg }}</p>
+    <template #footer v-if="error">
+      <p class="text-red-600 mt-2">{{ error }}</p>
     </template>
   </UCard>
 </template>
