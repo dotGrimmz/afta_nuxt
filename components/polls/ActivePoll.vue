@@ -1,7 +1,8 @@
 <script lang="ts">
 import type { Poll } from "@/types/poll"; // Adjust the path as needed
-import { useToast } from "vue-toastification";
-const toast = useToast();
+import pkg from "vue-toastification";
+//@ts-ignore
+const { useToast } = pkg;
 
 const props = defineProps<{
   poll: Poll;
@@ -25,7 +26,7 @@ console.log({ selectedOptionId });
 async function handleVote(optionId: string) {
   if (hasVoted.value) {
     console.log("you have voted with this id:", toRaw(hasVoted.value));
-    toast.warning("Voted Already Ninja! - GO Away already", {
+    useToast().toast.warning("Voted Already Ninja! - GO Away already", {
       //@ts-ignore
       position: "bottom-left",
       timeout: 2000,
@@ -46,7 +47,7 @@ async function handleVote(optionId: string) {
     const target = props.poll.poll_options.find((o) => o.id === optionId);
     if (target) {
       // target.vote_count += 1; bump that show a loading icon or something
-      toast.success(
+      useToast().toast.success(
         `You Voted "${target.text}" for ${props.poll.question} Poll - Success!`,
         {
           //@ts-ignore
