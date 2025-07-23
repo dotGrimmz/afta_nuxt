@@ -12,7 +12,9 @@
         <p class="text-lg md:text-2xl text-white/80 mb-6">
           Another Failed Tagged App, but bold.
         </p>
-        <BaseButton size="lg">Get Started</BaseButton>
+        <BaseButton size="lg"
+          >⚠️Keep in mind this is not PRODUCTION READY⚠️</BaseButton
+        >
       </div>
     </ParallaxHero>
     <div class="landing">
