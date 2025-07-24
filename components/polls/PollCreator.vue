@@ -28,6 +28,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
+const { $toast } = useNuxtApp();
 
 const question = ref("");
 const rawOptions = ref("");
@@ -56,12 +57,15 @@ async function submit() {
         question: question.value,
         options,
       },
+    }).then(() => {
+      question.value = "";
+      rawOptions.value = "";
+      emit("poll-created");
+      $toast.success("Poll Created!");
     });
-
-    question.value = "";
-    rawOptions.value = "";
-    emit("poll-created");
   } catch (e: any) {
+    $toast.success("Poll creation error!");
+    console.error({ e });
   } finally {
     loading.value = false;
   }

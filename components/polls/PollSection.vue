@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import ActivePoll from "~/components/polls/ActivePoll.vue";
-import { useDeviceId } from "~/composables/useDeviceId";
 import { usePollAdmin } from "~/composables/usePollAdmin";
 
 /* ▸ open / closed state for dropdown */

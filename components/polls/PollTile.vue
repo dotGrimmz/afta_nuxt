@@ -18,13 +18,13 @@
 
     <!-- Activate button or status -->
     <div class="status-controls">
-      <button
+      <UButton
         v-if="!poll.is_active"
         @click="activatePoll"
         class="activate-button"
       >
         Activate
-      </button>
+      </UButton>
       <UButton
         v-else
         @click="deActivatePoll"
@@ -33,12 +33,16 @@
         color="primary"
         variant="solid"
         class="cursor-pointer"
+        :loading="props.loading"
         >Deactivate
       </UButton>
       <UButton
         label="Reset Poll Votes"
+        color="secondary"
+        size="md"
         @click="props.resetVotes(poll.id)"
         class="cursor-pointer"
+        :loading="props.loading"
       >
       </UButton>
     </div>
@@ -47,11 +51,14 @@
 
 <script setup lang="ts">
 import type { Poll } from "~/types/poll";
+const { $toast } = useNuxtApp();
 
 const props = defineProps<{
   poll: Poll;
   resetVotes: (id: Poll["id"]) => void;
+  loading: boolean;
 }>();
+
 const emit = defineEmits<{ (e: "poll-updated"): void }>();
 
 const activatePoll = async () => {
@@ -64,8 +71,10 @@ const activatePoll = async () => {
       method: "POST",
     });
     emit("poll-updated");
+    $toast.success("Poll Activated!");
   } catch (err) {
     console.error("Failed to activate poll:", err);
+    $toast.error("Failed to activate poll");
   }
 };
 
@@ -79,16 +88,12 @@ const deActivatePoll = async () => {
       method: "POST",
     });
     emit("poll-updated");
+    $toast.success("Poll Deactivateed!");
   } catch (err) {
     console.error("Failed to activate poll:", err);
+    $toast.error("Failed to deactivate poll");
   }
 };
-/**
- *
- *     class="container shadow-lg p-2 hover:shadow-xl transform hover:-translate-y-1
- *  transition duration-300 hover:bg-yellow-200"
- *
- */
 </script>
 
 <style scoped>

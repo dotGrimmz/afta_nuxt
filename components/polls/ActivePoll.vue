@@ -13,14 +13,9 @@ const emit = defineEmits<{
   (e: "vote", payload: { pollId: number; optionId: string }): void;
 }>();
 
-/* ---------- Local UI state ---------- */
-
-console.log(toRaw(props.poll));
-
 const { hasVoted, markVoted, selectedOptionId } = useVoteTracker(props.poll.id);
 const { castVote, loading, error } = useActivePoll(props.poll.id);
 
-console.log({ selectedOptionId });
 async function handleVote(optionId: string) {
   if (hasVoted.value) {
     console.log("you have voted with this id:", toRaw(hasVoted.value));

@@ -1,14 +1,8 @@
 <script setup lang="ts">
 definePageMeta({ layout: "admin" });
-// Update the path below if the file name or folder casing is different, e.g. PollsPollcreator.vue or pollsPollCreator.vue
 import PollTile from "~/components/polls/PollTile.vue";
 
-// const { data: pollsData, refresh } = await useFetch<Poll[]>("/api/polls");
-
-const { polls: pollsData, refreshPolls, resetVotes } = usePollAdmin();
-
-// const activePolls = toRaw(pollsData.value)?.filter((poll) => poll.is_active);
-console.log("all polls:", pollsData);
+const { polls: pollsData, refreshPolls, resetVotes, loading } = usePollAdmin();
 </script>
 
 <template>
@@ -29,6 +23,7 @@ console.log("all polls:", pollsData);
       :poll="poll"
       @poll-updated="refreshPolls"
       :resetVotes="resetVotes"
+      :loading="loading"
     />
   </div>
 </template>

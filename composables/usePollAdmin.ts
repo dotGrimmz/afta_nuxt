@@ -1,6 +1,7 @@
 // composables/usePollAdmin.ts
 import { ref } from "vue";
 import type { Poll, PollOption } from "@/types/poll";
+const { $toast } = useNuxtApp();
 
 type ActivePoll = Poll & { is_active: true };
 type InactivePoll = Poll & { is_active: false };
@@ -16,18 +17,6 @@ export const usePollAdmin = () => {
   const inactivePolls = ref<InactivePoll[]>([]);
   const VOTE_STORAGE_KEY = "votedPolls";
 
-  /**
-   * Reset poll(s)
-   *
-   * takes a poll id or none at all.
-   *
-   * filters out the poll id from what is in local storage from the useVoteTracker hook
-   *
-   * we then make a db call
-   *
-   * will create a function that looks into local storage and finds what i need
-   */
-
   const resetVotes = async (id: Poll["id"]) => {
     loading.value = true;
     error.value = null;
@@ -36,18 +25,17 @@ export const usePollAdmin = () => {
       await $fetch(`/api/polls/${id}/reset-votes`, {
         method: "POST",
       });
-      console.log({ id });
       const votedPolls: VotedPoll[] = JSON.parse(
         localStorage.getItem(VOTE_STORAGE_KEY) || "[]"
       );
-      console.log({ votedPolls });
 
       const filteredPolls = votedPolls.filter((poll) => poll.poll_id !== id);
-      console.log({ filteredPolls });
 
       localStorage.setItem(VOTE_STORAGE_KEY, JSON.stringify(filteredPolls));
+      $toast.success("Votes reset!");
     } catch (e: any) {
       error.value = e;
+      $toast.success("Votes did not!");
     } finally {
       loading.value = false;
     }
@@ -85,8 +73,6 @@ export const usePollAdmin = () => {
   onMounted(() => {
     fetchPolls();
   });
-
-  // ✅ Toggle a poll’s active status using your existing /api/polls/[id]/activate
 
   const refreshPolls = async () => {
     await fetchPolls();
