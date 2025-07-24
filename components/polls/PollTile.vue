@@ -35,6 +35,12 @@
         class="cursor-pointer"
         >Deactivate
       </UButton>
+      <UButton
+        label="Reset Poll Votes"
+        @click="props.resetVotes(poll.id)"
+        class="cursor-pointer"
+      >
+      </UButton>
     </div>
   </div>
 </template>
@@ -42,7 +48,10 @@
 <script setup lang="ts">
 import type { Poll } from "~/types/poll";
 
-const props = defineProps<{ poll: Poll }>();
+const props = defineProps<{
+  poll: Poll;
+  resetVotes: (id: Poll["id"]) => void;
+}>();
 const emit = defineEmits<{ (e: "poll-updated"): void }>();
 
 const activatePoll = async () => {

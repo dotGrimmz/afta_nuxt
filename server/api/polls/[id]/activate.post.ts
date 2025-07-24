@@ -4,7 +4,6 @@ import { defineEventHandler, getRouterParam, createError, readBody } from "h3";
 import type { Database } from "~/types/supabase"; // adjust path as needed
 
 export default defineEventHandler(async (event) => {
-  console.log("event: ", event);
   const supabase = await serverSupabaseClient<Database>(event); // Typed client
   const pollId = getRouterParam(event, "id");
 

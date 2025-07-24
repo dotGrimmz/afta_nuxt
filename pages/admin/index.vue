@@ -5,7 +5,7 @@ import PollTile from "~/components/polls/PollTile.vue";
 
 // const { data: pollsData, refresh } = await useFetch<Poll[]>("/api/polls");
 
-const { polls: pollsData, refreshPolls } = usePollAdmin();
+const { polls: pollsData, refreshPolls, resetVotes } = usePollAdmin();
 
 // const activePolls = toRaw(pollsData.value)?.filter((poll) => poll.is_active);
 console.log("all polls:", pollsData);
@@ -28,6 +28,7 @@ console.log("all polls:", pollsData);
       :key="poll.id"
       :poll="poll"
       @poll-updated="refreshPolls"
+      :resetVotes="resetVotes"
     />
   </div>
 </template>
