@@ -3,6 +3,8 @@ definePageMeta({ layout: "admin" });
 import PollTile from "~/components/polls/PollTile.vue";
 
 const { polls: pollsData, refreshPolls, resetVotes, loading } = usePollAdmin();
+
+console.log(pollsData.value);
 </script>
 
 <template>

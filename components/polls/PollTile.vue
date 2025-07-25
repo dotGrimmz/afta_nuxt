@@ -12,7 +12,7 @@
         :key="option.id"
         class="poll-option"
       >
-        • {{ option.text }}
+        • {{ option.text }} - {{ option.vote_count }}
       </li>
     </ul>
 
@@ -21,7 +21,8 @@
       <UButton
         v-if="!poll.is_active"
         @click="activatePoll"
-        class="activate-button"
+        :loading="pollLoading"
+        class="activate-button cursor-pointer"
       >
         Activate
       </UButton>
@@ -33,16 +34,16 @@
         color="primary"
         variant="solid"
         class="cursor-pointer"
-        :loading="props.loading"
+        :loading="pollLoading"
         >Deactivate
       </UButton>
       <UButton
         label="Reset Poll Votes"
         color="secondary"
         size="md"
-        @click="props.resetVotes(poll.id)"
+        @click="handleReset(poll.id)"
         class="cursor-pointer"
-        :loading="props.loading"
+        :loading="votesResetting"
       >
       </UButton>
     </div>
@@ -52,6 +53,8 @@
 <script setup lang="ts">
 import type { Poll } from "~/types/poll";
 const { $toast } = useNuxtApp();
+const pollLoading = ref(false);
+const votesResetting = ref(false);
 
 const props = defineProps<{
   poll: Poll;
@@ -61,11 +64,23 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: "poll-updated"): void }>();
 
+const handleReset = async (id: Poll["id"]) => {
+  votesResetting.value = true;
+  try {
+    props.resetVotes(id);
+    emit("poll-updated");
+  } catch (e) {
+    console.error(e);
+  } finally {
+    votesResetting.value = false;
+  }
+};
 const activatePoll = async () => {
   if (props.poll.is_active) {
     console.log("Poll is active! no need to set to active! ");
     return;
   }
+  pollLoading.value = true;
   try {
     await $fetch(`/api/polls/${props.poll.id}/activate`, {
       method: "POST",
@@ -75,6 +90,8 @@ const activatePoll = async () => {
   } catch (err) {
     console.error("Failed to activate poll:", err);
     $toast.error("Failed to activate poll");
+  } finally {
+    pollLoading.value = false;
   }
 };
 
@@ -83,6 +100,8 @@ const deActivatePoll = async () => {
     console.log("Poll is not activated DUMMY!");
     return;
   }
+  pollLoading.value = true;
+
   try {
     await $fetch(`/api/polls/${props.poll.id}/deactivate`, {
       method: "POST",
@@ -92,6 +111,8 @@ const deActivatePoll = async () => {
   } catch (err) {
     console.error("Failed to activate poll:", err);
     $toast.error("Failed to deactivate poll");
+  } finally {
+    pollLoading.value = false;
   }
 };
 </script>
@@ -132,6 +153,8 @@ const deActivatePoll = async () => {
 
 .status-controls {
   margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
 }
 
 .active-tile {

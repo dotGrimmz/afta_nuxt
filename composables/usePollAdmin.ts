@@ -1,7 +1,6 @@
 // composables/usePollAdmin.ts
 import { ref } from "vue";
 import type { Poll, PollOption } from "@/types/poll";
-const { $toast } = useNuxtApp();
 
 type ActivePoll = Poll & { is_active: true };
 type InactivePoll = Poll & { is_active: false };
@@ -32,10 +31,8 @@ export const usePollAdmin = () => {
       const filteredPolls = votedPolls.filter((poll) => poll.poll_id !== id);
 
       localStorage.setItem(VOTE_STORAGE_KEY, JSON.stringify(filteredPolls));
-      $toast.success("Votes reset!");
     } catch (e: any) {
       error.value = e;
-      $toast.success("Votes did not!");
     } finally {
       loading.value = false;
     }
