@@ -1,19 +1,14 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import ActivePoll from "~/components/polls/ActivePoll.vue";
-import { useDeviceId } from "~/composables/useDeviceId";
 import { usePollAdmin } from "~/composables/usePollAdmin";
+import type { Poll } from "~/types/poll";
 
 /* ▸ open / closed state for dropdown */
 const open = ref(false);
 function toggle() {
   open.value = !open.value;
 }
-
-/* we are getting our active polls list from the usePollAdmin hook
-  then we want to map over each active poll tile with each tile having its own instance 
-  of the useActive poll hook. 
-*/
 
 const { activePolls, refreshPolls } = usePollAdmin();
 </script>

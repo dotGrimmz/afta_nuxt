@@ -17,7 +17,8 @@ import { useDeviceId } from "~/composables/useDeviceId";
  */
 
 export function useActivePoll(pollID: Poll["id"]) {
-  const voterId = useDeviceId();
+  // const voterId = useDeviceId();
+  const { $deviceId: voterId } = useNuxtApp();
 
   const optionId = ref<string | null>(null);
   const loading = ref<boolean>(false);
