@@ -14,36 +14,32 @@ const { activePolls, refreshPolls } = usePollAdmin();
 </script>
 <template>
   <!-- Wrapper keeps card + dropdown grouped -->
-  <div class="w-full">
+  <UCollapsible v-model:open="open" class="w-full">
     <!-- Main card -->
+
     <SectionCard
       imageUrl="/images/black_sweater.jpg"
       objectFit="cover"
       objectPosition="bottom center"
-      :onClick="toggle"
     >
       <h2 class="text-2xl font-bold mb-1">Polls</h2>
-      <!-- optional tagline -->
       <p class="text-sm leading-relaxed">
         Tap to view polls about AFTA’s features and preferences.
       </p>
     </SectionCard>
 
-    <!-- Animated dropdown -->
-    <transition name="slide">
-      <div v-if="open">
-        <div
-          class="active-poll-wrapper"
-          v-if="activePolls.length"
-          v-for="poll in activePolls"
-          :key="poll.id"
-        >
-          <ActivePoll :refresh="refreshPolls" :poll="poll" />
-        </div>
-        <span v-else>...loading</span>
+    <template #content>
+      <div
+        class="active-poll-wrapper"
+        v-if="activePolls.length"
+        v-for="poll in activePolls"
+        :key="poll.id"
+      >
+        <ActivePoll :refresh="refreshPolls" :poll="poll" />
       </div>
-    </transition>
-  </div>
+      <span v-else>...loading</span>
+    </template>
+  </UCollapsible>
 </template>
 
 <style scoped>
