@@ -75,6 +75,17 @@ export const usePollAdmin = () => {
     await fetchPolls();
   };
 
+  const deletePoll = async (id: Poll["id"]) => {
+    try {
+      await $fetch(`/api/polls/${id}/delete-poll`, {
+        method: "POST",
+      });
+    } catch (e: any) {
+      console.error({ e });
+      return e;
+    }
+  };
+
   return {
     polls,
     loading,
@@ -83,5 +94,6 @@ export const usePollAdmin = () => {
     refreshPolls,
     activePolls,
     resetVotes,
+    deletePoll,
   };
 };

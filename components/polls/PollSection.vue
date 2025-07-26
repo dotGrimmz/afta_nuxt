@@ -30,8 +30,8 @@ const { activePolls, refreshPolls } = usePollAdmin();
     </SectionCard>
 
     <!-- Animated dropdown -->
-    <transition name="slide-fade">
-      <div v-if="open" class="dropdown-content">
+    <transition name="slide">
+      <div v-if="open">
         <div
           class="active-poll-wrapper"
           v-if="activePolls.length"

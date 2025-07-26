@@ -2,7 +2,13 @@
 definePageMeta({ layout: "admin" });
 import PollTile from "~/components/polls/PollTile.vue";
 
-const { polls: pollsData, refreshPolls, resetVotes, loading } = usePollAdmin();
+const {
+  polls: pollsData,
+  refreshPolls,
+  resetVotes,
+  loading,
+  deletePoll,
+} = usePollAdmin();
 
 console.log(pollsData.value);
 </script>
@@ -26,6 +32,7 @@ console.log(pollsData.value);
       @poll-updated="refreshPolls"
       :resetVotes="resetVotes"
       :loading="loading"
+      :deletePoll="deletePoll"
     />
   </div>
 </template>

@@ -46,6 +46,14 @@
         :loading="votesResetting"
       >
       </UButton>
+      <UButton
+        size="md"
+        class="cursor-pointer"
+        color="error"
+        label="Delete Poll"
+        @click="handelPollDeletion(poll.id)"
+        :loading="pendingPollDeletion"
+      />
     </div>
   </div>
 </template>
@@ -55,14 +63,29 @@ import type { Poll } from "~/types/poll";
 const { $toast } = useNuxtApp();
 const pollLoading = ref(false);
 const votesResetting = ref(false);
+const pendingPollDeletion = ref(false);
 
 const props = defineProps<{
   poll: Poll;
   resetVotes: (id: Poll["id"]) => void;
   loading: boolean;
+  deletePoll: (id: Poll["id"]) => void;
 }>();
 
 const emit = defineEmits<{ (e: "poll-updated"): void }>();
+
+const handelPollDeletion = async (id: Poll["id"]) => {
+  pendingPollDeletion.value = true;
+  try {
+    props.deletePoll(id);
+    emit("poll-updated");
+    $toast.info("Poll Deleted!");
+  } catch (e) {
+    console.error(e);
+  } finally {
+    pendingPollDeletion.value = false;
+  }
+};
 
 const handleReset = async (id: Poll["id"]) => {
   votesResetting.value = true;

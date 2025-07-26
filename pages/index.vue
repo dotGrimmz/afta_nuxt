@@ -17,7 +17,7 @@
         >
       </div>
     </ParallaxHero>
-    <div class="landing">
+    <div class="flex flex-col gap-4 bg-black p-4 min-h-screen">
       <PollsPollSection />
     </div>
   </div>
@@ -28,7 +28,7 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  background-color: black;
   padding: 1rem;
+  height: 100%;
 }
 </style>
