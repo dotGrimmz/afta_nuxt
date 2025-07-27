@@ -1,16 +1,11 @@
 <template>
-  <section
-    class="relative w-full overflow-hidden bg-cover text-white"
-    :class="[height]"
-    :style="{
-      backgroundImage: `url(${imageUrl})`,
-      backgroundAttachment: isMobile ? 'scroll' : 'fixed',
-      backgroundPosition: 'center 80%',
-    }"
-  >
+  <section class="relative w-full overflow-hidden text-white" :class="[height]">
+    <!-- Hyperspeed animation background -->
+    <HyperspeedBackground class="absolute inset-0 z-0" />
+
     <!-- Overlay (optional darkening) -->
     <div
-      class="absolute inset-0"
+      class="absolute inset-0 z-10"
       :class="{
         'bg-black/50': darken,
         'bg-gradient-to-b from-black/50 to-transparent': !darken,
@@ -19,7 +14,7 @@
 
     <!-- Content wrapper -->
     <div
-      class="relative z-10 flex items-center justify-center h-full px-6 text-center"
+      class="relative z-20 flex items-center justify-center h-full px-6 text-center"
     >
       <slot />
     </div>
@@ -27,20 +22,16 @@
 </template>
 
 <script setup lang="ts">
+import HyperspeedBackground from "~/components/vue-bits/Hyperspeed.vue"; // Adjust path if needed
+
 defineProps({
-  imageUrl: {
-    type: String,
-    required: true,
-  },
   height: {
     type: String,
-    default: "h-[75vh]", // Customizable height
+    default: "h-[75vh]", // You can customize this
   },
   darken: {
     type: Boolean,
     default: false,
   },
 });
-
-const { isMobile } = useIsMobile();
 </script>
