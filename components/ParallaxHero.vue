@@ -1,23 +1,18 @@
 <template>
   <section class="relative w-full overflow-hidden text-white" :class="[height]">
     <!-- Hyperspeed animation background -->
-    <HyperspeedBackground class="absolute inset-0 z-0" />
-
+    <HyperspeedBackground />
+    <p>Why isnt this working?</p>
     <!-- Overlay (optional darkening) -->
-    <div
+    <!-- <div
       class="absolute inset-0 z-10"
       :class="{
         'bg-black/50': darken,
         'bg-gradient-to-b from-black/50 to-transparent': !darken,
       }"
-    ></div>
+    ></div> -->
 
     <!-- Content wrapper -->
-    <div
-      class="relative z-20 flex items-center justify-center h-full px-6 text-center"
-    >
-      <slot />
-    </div>
   </section>
 </template>
 

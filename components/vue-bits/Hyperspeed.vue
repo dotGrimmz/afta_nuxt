@@ -105,14 +105,14 @@ const defaultOptions: HyperspeedOptions = {
   carShiftX: [-0.8, 0.8],
   carFloorSeparation: [0, 5],
   colors: {
-    roadColor: 0x080808,
-    islandColor: 0x0a0a0a,
-    background: 0x000000,
-    shoulderLines: 0xffffff,
-    brokenLines: 0xffffff,
-    leftCars: [0xd856bf, 0x6750a2, 0xc247ac],
-    rightCars: [0x03b3c3, 0x0e5ea5, 0x324555],
-    sticks: 0x03b3c3,
+    roadColor: 0x0a0a0a, // Asphalt black
+    islandColor: 0x1a1a1a, // Slightly lighter, mid-divider
+    background: 0x000010, // Deep navy-black for contrast
+    shoulderLines: 0xffffff, // White lane markers
+    brokenLines: 0xcccccc, // Dimmer dashed lines
+    leftCars: [0xff1a1a, 0xff3333, 0xff4d4d], // Bright neon reds (taillights)
+    rightCars: [0xe0f7ff, 0x99ccff, 0xccffff], // Cool neon blue-whites (headlights)
+    sticks: 0xe0f7ff, // Matches rightCars, like LED poles
   },
 };
 

@@ -17,6 +17,9 @@
         >
       </div>
     </ParallaxHero>
+    <!-- <section height="h-[30vh] md:h-[50vh]">
+      <Hyperspeed />
+    </section> -->
     <div class="flex flex-col gap-4 bg-black p-4 min-h-screen">
       <PollsPollSection />
     </div>
@@ -32,3 +35,7 @@
   height: 100%;
 }
 </style>
+
+<script setup>
+import Hyperspeed from "~/components/vue-bits/Hyperspeed.vue";
+</script>

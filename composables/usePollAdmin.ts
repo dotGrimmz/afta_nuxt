@@ -62,6 +62,7 @@ export const usePollAdmin = () => {
       inactivePolls.value = arr.inactivePolls;
       activePolls.value = arr.activePolls;
     } catch (err: any) {
+      console.error({ error });
       error.value = err?.message ?? "Failed to fetch polls.";
     } finally {
       loading.value = false;

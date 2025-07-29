@@ -1,7 +1,20 @@
 <template>
   <div>
     <!-- Hyperspeed Background Effect -->
-    <Hyperspeed class="absolute inset-0 z-0" />
+    <section class="relative w-full overflow-hidden text-white">
+      <HyperspeedBackground />
+    </section>
+
+    <!-- <div
+        class="relative z-10 flex flex-col items-center justify-center h-full text-center text-white"
+      >
+        <h1 class="text-4xl md:text-6xl font-bold text-red-500 drop-shadow-lg">
+          Welcome to Neo Highway
+        </h1>
+        <p class="mt-4 text-lg md:text-xl text-white drop-shadow-md">
+          Speed meets style in this neon journey.
+        </p>
+      </div> -->
 
     <!-- Parallax Hero on top of Hyperspeed -->
     <!-- <ParallaxHero
@@ -34,6 +47,6 @@
 
 <script setup lang="ts">
 import ParallaxHero from "~/components/ParallaxHero.vue";
-import Hyperspeed from "~/components/vue-bits/Hyperspeed.vue";
 import PollsPollSection from "~/components/polls/PollSection.vue";
+import HyperspeedBackground from "~/components/vue-bits/Hyperspeed.vue"; // Adjust path if needed
 </script>
