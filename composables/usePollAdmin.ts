@@ -62,6 +62,7 @@ export const usePollAdmin = () => {
       inactivePolls.value = arr.inactivePolls;
       activePolls.value = arr.activePolls;
     } catch (err: any) {
+      console.error({ error });
       error.value = err?.message ?? "Failed to fetch polls.";
     } finally {
       loading.value = false;
@@ -75,6 +76,17 @@ export const usePollAdmin = () => {
     await fetchPolls();
   };
 
+  const deletePoll = async (id: Poll["id"]) => {
+    try {
+      await $fetch(`/api/polls/${id}/delete-poll`, {
+        method: "POST",
+      });
+    } catch (e: any) {
+      console.error({ e });
+      return e;
+    }
+  };
+
   return {
     polls,
     loading,
@@ -83,5 +95,6 @@ export const usePollAdmin = () => {
     refreshPolls,
     activePolls,
     resetVotes,
+    deletePoll,
   };
 };

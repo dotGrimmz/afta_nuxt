@@ -13,12 +13,16 @@
     "@nuxt/ui": "^3.2.0",
     "@nuxtjs/supabase": "^1.5.2",
     "cheerio": "^1.1.0",
+    "motion-v": "^1.6.1",
     "nuxt": "^3.17.5",
+    "postprocessing": "^6.37.6",
+    "three": "^0.178.0",
     "vue": "^3.5.17",
     "vue-router": "^4.5.1",
     "vue-toastification": "^2.0.0-rc.5"
   },
   "devDependencies": {
-    "@nuxtjs/tailwindcss": "^7.0.0-beta.0"
+    "@nuxtjs/tailwindcss": "^7.0.0-beta.0",
+    "@types/three": "^0.178.1"
   }
 }

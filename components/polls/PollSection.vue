@@ -3,6 +3,7 @@ import { ref } from "vue";
 import ActivePoll from "~/components/polls/ActivePoll.vue";
 import { usePollAdmin } from "~/composables/usePollAdmin";
 import type { Poll } from "~/types/poll";
+import AnimatedList from "~/components/vue-bits/AnimatedList.vue";
 
 /* ▸ open / closed state for dropdown */
 const open = ref(false);
@@ -14,36 +15,31 @@ const { activePolls, refreshPolls } = usePollAdmin();
 </script>
 <template>
   <!-- Wrapper keeps card + dropdown grouped -->
-  <div class="w-full">
+  <UCollapsible v-model:open="open">
     <!-- Main card -->
+
     <SectionCard
       imageUrl="/images/black_sweater.jpg"
       objectFit="cover"
       objectPosition="bottom center"
-      :onClick="toggle"
     >
       <h2 class="text-2xl font-bold mb-1">Polls</h2>
-      <!-- optional tagline -->
       <p class="text-sm leading-relaxed">
         Tap to view polls about AFTA’s features and preferences.
       </p>
     </SectionCard>
-
-    <!-- Animated dropdown -->
-    <transition name="slide-fade">
-      <div v-if="open" class="dropdown-content">
-        <div
-          class="active-poll-wrapper"
-          v-if="activePolls.length"
-          v-for="poll in activePolls"
-          :key="poll.id"
-        >
-          <ActivePoll :refresh="refreshPolls" :poll="poll" />
-        </div>
-        <span v-else>...loading</span>
-      </div>
-    </transition>
-  </div>
+    <template #content>
+      <AnimatedList
+        :displayScrollbar="false"
+        className="w-[200px]"
+        :items="activePolls"
+      >
+        <template #default="{ item: poll }">
+          <ActivePoll :poll="poll" :refresh="refreshPolls" />
+        </template>
+      </AnimatedList>
+    </template>
+  </UCollapsible>
 </template>
 
 <style scoped>
