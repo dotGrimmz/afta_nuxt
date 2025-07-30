@@ -1,6 +1,6 @@
 <template>
   <div>
-    <ParallaxHero
+    <!-- <ParallaxHero
       imageUrl="/images/grimmz.jpg"
       height="h-[30vh] md:h-[50vh]"
       :darken="false"
@@ -16,7 +16,13 @@
           >⚠️Keep in mind this is not PRODUCTION READY⚠️</BaseButton
         >
       </div>
-    </ParallaxHero>
+    </ParallaxHero> -->
+
+    <Hyperspeed class="relative h-screen w-full">
+      <div class="absolute inset-0 flex items-center justify-center text-white">
+        <h1 class="text-5xl font-bold">Your Title Here</h1>
+      </div>
+    </Hyperspeed>
     <!-- <section height="h-[30vh] md:h-[50vh]">
       <Hyperspeed />
     </section> -->
