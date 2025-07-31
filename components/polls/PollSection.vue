@@ -7,9 +7,6 @@ import AnimatedList from "~/components/vue-bits/AnimatedList.vue";
 
 /* ▸ open / closed state for dropdown */
 const open = ref(false);
-function toggle() {
-  open.value = !open.value;
-}
 
 const { activePolls, refreshPolls } = usePollAdmin();
 </script>
@@ -22,6 +19,7 @@ const { activePolls, refreshPolls } = usePollAdmin();
       imageUrl="/images/black_sweater.jpg"
       objectFit="cover"
       objectPosition="bottom center"
+      class="h-[190px]"
     >
       <h2 class="text-2xl font-bold mb-1">Polls</h2>
       <p class="text-sm leading-relaxed">
