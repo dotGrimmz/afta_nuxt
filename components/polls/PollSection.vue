@@ -4,11 +4,15 @@ import ActivePoll from "~/components/polls/ActivePoll.vue";
 import { usePollAdmin } from "~/composables/usePollAdmin";
 import type { Poll } from "~/types/poll";
 import AnimatedList from "~/components/vue-bits/AnimatedList.vue";
+import { useResponsiveImage } from "#imports";
+const { isDesktop } = useIsMobile();
 
 /* ▸ open / closed state for dropdown */
 const open = ref(false);
 
 const { activePolls, refreshPolls } = usePollAdmin();
+const imageUrl = useResponsiveImage("/images/black_sweater.jpg");
+import Threads from "../vue-bits/Threads.vue";
 </script>
 <template>
   <!-- Wrapper keeps card + dropdown grouped -->
@@ -16,15 +20,17 @@ const { activePolls, refreshPolls } = usePollAdmin();
     <!-- Main card -->
 
     <SectionCard
-      imageUrl="/images/black_sweater.jpg"
       objectFit="cover"
       objectPosition="bottom center"
       class="h-[190px]"
     >
-      <h2 class="text-2xl font-bold mb-1">Polls</h2>
-      <p class="text-sm leading-relaxed">
-        Tap to view polls about AFTA’s features and preferences.
-      </p>
+      <h2 class="text-2xl text-red-200 font-bold mb-1">Polls</h2>
+      <Threads
+        :color="[12, 1, 1]"
+        :amplitude="1"
+        :distance="0"
+        :enableMouseInteraction="false"
+      />
     </SectionCard>
     <template #content>
       <AnimatedList

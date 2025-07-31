@@ -1,16 +1,22 @@
-<script setup></script>
+<script setup>
+import Threads from "../vue-bits/Threads.vue";
+</script>
 
 <template>
   <UCollapsible v-model:open="open">
     <!-- Main card -->
 
-    <SectionCard
-      imageUrl="/images/bosses_7_29.png"
-      objectFit="cover"
-      objectPosition="center"
-      class="h-[190px]"
-    >
-      <h2 class="text-2xl font-bold mb-1">Bosses of the Week</h2>
+    <SectionCard objectFit="cover" objectPosition="center" class="h-[190px]">
+      <h2 class="text-2xl text-black text-purple-300 font-bold mb-1">
+        Bosses of the Week
+      </h2>
+
+      <Threads
+        :color="[1, 1, 12]"
+        :amplitude="1"
+        :distance="0"
+        :enableMouseInteraction="false"
+      />
     </SectionCard>
     <template #content>
       <h2 class="text-center">🚧Under Construction!🚧</h2>
