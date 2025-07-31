@@ -3,7 +3,7 @@
     <section class="relative w-full h-[30vh]">
       <Hyperspeed />
       <div
-        class="top-0 left-0 z-1 absolute flex flex-col justify-center items-center w-full h-full pointer-events-none"
+        class="top-0 left-0 z-1 absolute flex flex-col justify-center items-center w-full h-full pointer-events-none bg-clip-text text-transparent"
       >
         <p
           class="mt-4 max-w-[18ch] font-bold text-[clamp(2rem,4vw,2.6rem)] text-white text-center leading-[1.2] tracking-[-2px]"
@@ -24,6 +24,8 @@
 
     <div class="flex flex-col gap-4 bg-black p-4 min-h-screen">
       <PollsPollSection />
+      <BossSection />
+      <EventsSection />
     </div>
   </div>
 </template>
@@ -40,4 +42,6 @@
 
 <script setup>
 import Hyperspeed from "~/components/vue-bits/Hyperspeed.vue";
+import BossSection from "~/components/bosses/BossSection.vue";
+import EventsSection from "~/components/events/EventsSection.vue";
 </script>
