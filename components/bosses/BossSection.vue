@@ -1,5 +1,28 @@
 <script setup>
 import Threads from "../vue-bits/Threads.vue";
+import BossCard from "./BossCard.vue";
+import AnimatedList from "../vue-bits/AnimatedList.vue";
+
+const bosses = [
+  {
+    rank: 1,
+    name: "♓🅹𝖚𝖘♠️𝕏𝖙𝖗𝖆 🅷𝖔𝖙🔥",
+    avatarUrl: "/images/bosses/extra_white.jpg",
+    // objectPosition: "50% -60%",
+  },
+  {
+    rank: 2,
+    name: "🍯🐰ℋ𝑜𝓃𝑒𝓎ℬ𝓊𝓃𝓃𝓎",
+    avatarUrl: "/images/bosses/hunny_coffee.jpg",
+  },
+
+  {
+    rank: 4,
+    name: "🖤 ʂαʋαɠҽ💕💪🏾",
+    avatarUrl: "/images/bosses/savage.jpg",
+    objectPosition: "50% 20%",
+  },
+];
 </script>
 
 <template>
@@ -19,7 +42,15 @@ import Threads from "../vue-bits/Threads.vue";
       />
     </SectionCard>
     <template #content>
-      <h2 class="text-center">🚧Under Construction!🚧</h2>
+      <AnimatedList
+        :displayScrollbar="false"
+        className="w-[200px]"
+        :items="bosses"
+      >
+        <template #default="{ item: boss }">
+          <BossCard :key="boss.rank" :boss="boss" />
+        </template>
+      </AnimatedList>
     </template>
   </UCollapsible>
 </template>
