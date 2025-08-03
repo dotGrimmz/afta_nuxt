@@ -39,14 +39,12 @@
               :img-class="boss.imagePosition"
             />
             <span class="text-xs text-white font-medium text-center">
-              <UBadge
-                :class="boss.nameStyles"
-                color="secondary"
-                variant="subtle"
-                size="sm"
-                class="font-bold rounded-full"
-                >{{ boss.name }}</UBadge
-              >
+              <GradientText
+                :text="boss.name"
+                :colors="['#ffaa40', '#9c40ff', '#ffaa40']"
+                :animation-speed="8"
+                :show-border="false"
+              />
             </span>
           </div>
         </div>
@@ -77,24 +75,25 @@ import Hyperspeed from "~/components/vue-bits/Hyperspeed.vue";
 import BossSection from "~/components/bosses/BossSection.vue";
 import EventsSection from "~/components/events/EventsSection.vue";
 import ProfileCard from "~/components/vue-bits/Components/ProfileCard/ProfileCard.vue";
+import GradientText from "~/components/vue-bits/TextAnimations/GradientText/GradientText.vue";
 
 const allTime = [
   {
     avatarUrl: "/images/overall/leigh_twin.jpg",
     class: "mt-6",
     imagePosition: "object-[center_70%]",
-    name: "♏️ᴹᶻ🅃ȏ̈χɪᴄ♠️🄻𝖊i𝖌H",
+    name: "ᴹᶻ🅃ȏ̈χɪᴄ♠️🄻𝖊i𝖌H",
   },
   {
     avatarUrl: "/images/overall/extra_white.jpg",
     class: "mb-6",
     imagePosition: "",
-    name: "♓🅹𝖚𝖘♠️𝕏𝖙𝖗𝖆 🅷𝖔𝖙🔥",
+    name: "🅹𝖚𝖘♠️𝕏𝖙𝖗𝖆 🅷𝖔𝖙🔥",
   },
   {
     avatarUrl: "/images/overall/slim_thick_goodie.jpg",
     class: "mt-6",
-    name: "♌️MORRAH🔞",
+    name: "Slim Thick Goodie",
   },
 ];
 </script>
