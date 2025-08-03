@@ -2,6 +2,7 @@
 import Threads from "../vue-bits/Threads.vue";
 import BossCard from "./BossCard.vue";
 import AnimatedList from "../vue-bits/AnimatedList.vue";
+import CurvedLoop from "../vue-bits/TextAnimations/CurvedLoop/CurvedLoop.vue";
 
 const bosses = [
   {
@@ -29,18 +30,28 @@ const bosses = [
   <UCollapsible v-model:open="open">
     <!-- Main card -->
 
-    <SectionCard objectFit="cover" objectPosition="center" class="h-[190px]">
-      <h2 class="text-2xl text-black text-purple-300 font-bold mb-1">
-        Bosses of the Week
-      </h2>
-
-      <Threads
-        :color="[1, 1, 12]"
-        :amplitude="1"
-        :distance="0"
-        :enableMouseInteraction="false"
+    <!-- <SectionCard
+      objectFit="cover"
+      objectPosition="center"
+      class="h-[190px] text-black"
+    >
+      <CurvedLoop
+        marquee-text="Bosses ✦ Of ✦ The ✦ Week ✦"
+        :speed="2"
+        :curve-amount="400"
+        direction="left"
+        :interactive="false"
+        :className="text - black"
       />
-    </SectionCard>
+    </SectionCard> -->
+
+    <CurvedLoop
+      marquee-text="Bosses ✦ Of ✦ The ✦ Week ✦"
+      :speed="2"
+      :curve-amount="400"
+      direction="left"
+      :interactive="false"
+    />
     <template #content>
       <AnimatedList
         :displayScrollbar="false"
