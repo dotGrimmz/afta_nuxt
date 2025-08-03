@@ -13,7 +13,13 @@ export default defineNuxtConfig({
     "@nuxtjs/tailwindcss",
     "@nuxt/ui",
     "@nuxt/image",
+    "@nuxtjs/storybook",
   ],
+  storybook: {
+    url: "http://localhost:6006",
+    storybookRoute: "/__storybook__",
+    port: 6006,
+  },
   css: ["@/assets/css/tailwind.css"],
   supabase: {
     redirect: false,

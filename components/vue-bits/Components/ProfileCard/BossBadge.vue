@@ -385,11 +385,13 @@ onUnmounted(() => {
 }
 
 .pc-card {
-  height: 80svh;
-  max-height: 540px;
+  height: 40svh;
+  /* max-height: 540px; */
   display: grid;
   aspect-ratio: 0.718;
-  border-radius: var(--card-radius);
+  /* border-radius: var(--card-radius); */
+  border-radius: 50%;
+
   position: relative;
   background-blend-mode: color-dodge, normal, normal, normal;
   animation: glow-bg 12s linear infinite;
@@ -428,7 +430,8 @@ onUnmounted(() => {
 .pc-card * {
   display: grid;
   grid-area: 1/-1;
-  border-radius: var(--card-radius);
+  border-radius: 50%;
+
   transform: translate3d(0, 0, 0.1px);
   pointer-events: none;
 }
@@ -825,11 +828,11 @@ onUnmounted(() => {
   .pc-card {
     height: 60svh;
     /* CUSTOM EDITS */
-    max-height: 190px;
+    max-height: 150px;
   }
 
   .pc-details {
-    top: 8em;
+    top: 9em;
   }
 
   .pc-details h3 {
@@ -876,7 +879,7 @@ onUnmounted(() => {
 @media (max-width: 320px) {
   .pc-card {
     height: 55svh;
-    max-height: 190px;
+    max-height: 320px;
   }
 
   .pc-details h3 {
