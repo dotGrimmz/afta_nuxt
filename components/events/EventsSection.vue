@@ -1,5 +1,6 @@
 <script setup>
 import Threads from "../vue-bits/Threads.vue";
+const open = ref(false);
 </script>
 
 <template>
