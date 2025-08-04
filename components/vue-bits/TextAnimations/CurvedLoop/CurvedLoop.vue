@@ -11,7 +11,7 @@ interface CurvedLoopProps {
   curveAmount?: number;
   direction?: "left" | "right";
   interactive?: boolean;
-  containerClass: string;
+  containerClass?: string;
   textClass?: string;
 }
 
