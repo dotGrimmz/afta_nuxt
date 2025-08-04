@@ -24,6 +24,8 @@ const bosses = [
     objectPosition: "50% 20%",
   },
 ];
+
+const open = ref(false);
 </script>
 
 <template>

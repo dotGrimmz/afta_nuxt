@@ -76,7 +76,9 @@ import BossSection from "~/components/bosses/BossSection.vue";
 import EventsSection from "~/components/events/EventsSection.vue";
 import ProfileCard from "~/components/vue-bits/Components/ProfileCard/ProfileCard.vue";
 import GradientText from "~/components/vue-bits/TextAnimations/GradientText/GradientText.vue";
-
+const handleContactClick = () => {
+  emit("contactClick");
+};
 const allTime = [
   {
     avatarUrl: "/images/overall/leigh_twin.jpg",

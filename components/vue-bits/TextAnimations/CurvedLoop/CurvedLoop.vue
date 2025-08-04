@@ -4,6 +4,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from "vue";
+import { useStableId } from "~/composables/useStableId";
 
 interface CurvedLoopProps {
   marqueeText?: string;
@@ -40,7 +41,7 @@ const pathRef = ref<SVGPathElement | null>(null);
 const spacing = ref(0);
 const offset = ref(0);
 const uid = Math.random().toString(36).substr(2, 9);
-const pathId = `curve-${uid}`;
+const pathId = `curve-${useStableId(props.marqueeText || "default")}`;
 
 const pathD = computed(() => `M-100,40 Q500,${40 + props.curveAmount} 1540,40`);
 
