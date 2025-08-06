@@ -53,7 +53,6 @@
 
     <div class="flex flex-col gap-4 bg-black p-4 min-h-screen">
       <BossSection />
-
       <PollsPollSection />
       <EventsSection />
     </div>
