@@ -13,14 +13,14 @@ const bosses = [
   },
   {
     rank: 2,
-    name: "🍯🐰ℋ𝑜𝓃𝑒𝓎ℬ𝓊𝓃𝓃𝓎",
-    avatarUrl: "/images/bosses/hunny_coffee.jpg",
+    name: "ᴹᶻ🅃ȏ̈χɪᴄ♠️🄻𝖊i𝖌H",
+    avatarUrl: "/images/overall/leigh_twin.jpg",
   },
 
   {
-    rank: 4,
-    name: "🖤 ʂαʋαɠҽ💕💪🏾",
-    avatarUrl: "/images/bosses/savage.jpg",
+    rank: 3,
+    name: "🍯🐰ℋ𝑜𝓃𝑒𝓎ℬ𝓊𝓃𝓃𝓎",
+    avatarUrl: "/images/bosses/hunny_coffee.jpg",
     objectPosition: "50% 20%",
   },
 ];
@@ -30,23 +30,6 @@ const open = ref(false);
 
 <template>
   <UCollapsible v-model:open="open">
-    <!-- Main card -->
-
-    <!-- <SectionCard
-      objectFit="cover"
-      objectPosition="center"
-      class="h-[190px] text-black"
-    >
-      <CurvedLoop
-        marquee-text="Bosses ✦ Of ✦ The ✦ Week ✦"
-        :speed="2"
-        :curve-amount="400"
-        direction="left"
-        :interactive="false"
-        :className="text - black"
-      />
-    </SectionCard> -->
-
     <CurvedLoop
       marquee-text="Bosses ✦ Of ✦ The ✦ Week ✦"
       :speed="2"
