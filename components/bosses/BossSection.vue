@@ -40,7 +40,7 @@ const open = ref(false);
     <template #content>
       <AnimatedList
         :displayScrollbar="false"
-        className="w-[200px]"
+        className="w-full"
         :items="bosses"
       >
         <template #default="{ item: boss }">
