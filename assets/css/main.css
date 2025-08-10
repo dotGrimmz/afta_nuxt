@@ -1,21 +1,47 @@
-@tailwind base;
+
+@import "tailwindcss";
 @tailwind components;
 @tailwind utilities;
 
-/* Base typography: headings use DM Sans, body uses Inter */
-:root, .dark {
-  /* force dark background & high-contrast defaults */
-  --bg: #0b0b0e;
-  --fg: #e5e7eb;
+/* Put your global styles inside a Tailwind layer so @apply works */
+@layer base {
+  :root, .dark {
+    /* force dark background & high-contrast defaults */
+    --bg: #0b0b0e;
+    --fg: #e5e7eb;
+  }
+
+  html.dark {
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ✅ font-sans is now recognized because we’re inside a Tailwind layer */
+  body {
+    @apply font-sans;
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  /* Headings font via CSS var (no @apply needed) */
+  h1, h2, h3, h4 {
+    font-family: var(--font-heading, 'DM Sans'), ui-sans-serif, system-ui, sans-serif;
+  }
 }
 
-html.dark {
-  background: var(--bg);
-  color: var(--fg);
+/* Define the custom utilities you used in examples:
+   Tailwind doesn’t ship .font-heading/.rounded-card/.rounded-soft/.max-w-content/.p-gutter by default */
+@layer utilities {
+  .font-heading {
+    font-family: var(--font-heading, 'DM Sans'), ui-sans-serif, system-ui, sans-serif;
+  }
+  .rounded-soft { border-radius: 8px; }
+  .rounded-card { border-radius: 8px; }
+  .max-w-content { max-width: 1200px; }
+  .p-gutter { padding: 1.5rem; }
 }
-
-* { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-body { @apply font-sans; background: var(--bg); color: var(--fg); }
-
-h1,h2,h3,h4 { font-family: var(--font-heading, 'DM Sans'), ui-sans-serif, system-ui, sans-serif; }
-

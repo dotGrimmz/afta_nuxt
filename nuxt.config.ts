@@ -19,7 +19,7 @@ export default defineNuxtConfig({
   storybook: {
     port: 6006,
   },
-  css: ["@/assets/css/tailwind.css"],
+  css: ["@/assets/css/main.css"],
   supabase: {
     redirect: false,
     url: process.env.SUPABASE_URL,

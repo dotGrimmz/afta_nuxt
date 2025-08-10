@@ -1,13 +1,15 @@
 <template>
-  <div class="min-h-screen flex bg-gray-50">
+  <div class="min-h-screen flex bg-[var(--bg)] text-white">
     <!-- Sidebar (desktop) -->
-    <aside class="max-md:hidden w-32 shrink-0 flex flex-col border-r bg-white">
-      <nav class="px-2 space-y-1">
+    <aside
+      class="max-md:hidden w-32 shrink-0 flex flex-col border-r border-white/10 bg-white/5 backdrop-blur"
+    >
+      <nav class="px-2 py-2 space-y-1">
         <UButton
           v-for="link in links"
           :key="link.to"
           :to="link.to"
-          variant="ghost"
+          :variant="isActive(link.to) ? 'soft' : 'ghost'"
           class="w-full justify-start"
           :icon="link.icon"
           :color="isActive(link.to) ? 'primary' : 'neutral'"
@@ -18,14 +20,21 @@
     </aside>
 
     <!-- Mobile slideover (opened by default) -->
-    <USlideover v-model="open" side="left" :overlay="true" class="md:hidden">
+    <USlideover
+      v-model="open"
+      side="left"
+      overlay-class="!bg-black/60"
+      content-class="!bg-white/5 !border-r !border-white/10 backdrop-blur"
+      :overlay="true"
+      class="md:hidden"
+    >
       <div class="p-4 space-y-4">
         <nav class="space-y-1">
           <UButton
             v-for="link in links"
             :key="link.to"
             :to="link.to"
-            variant="ghost"
+            variant="solid"
             class="w-full justify-start"
             :icon="link.icon"
             :color="isActive(link.to) ? 'primary' : 'neutral'"
@@ -38,9 +47,9 @@
     </USlideover>
 
     <!-- Main -->
-    <div class="flex-1 flex flex-col">
+    <div class="flex-1 min-w-0 flex flex-col">
       <header
-        class="h-16 flex items-center justify-between px-4 border-b bg-white"
+        class="h-16 flex items-center justify-between px-4 border-b border-white/10 bg-white/5 backdrop-blur"
       >
         <div class="flex items-center gap-3">
           <UButton
@@ -81,7 +90,10 @@ const links = [
   { label: "Settings", to: "/admin/settings", icon: "i-heroicons-cog-6-tooth" },
 ];
 
-const isActive = (to: string) => route.path.endsWith(to);
+const isActive = (to: string) => {
+  console.log(route.path, route.path.endsWith(to));
+  return route.path.endsWith(to);
+};
 
 const pageTitle = computed(() => {
   if (route.meta?.title) return String(route.meta.title);
@@ -90,7 +102,7 @@ const pageTitle = computed(() => {
   if (!n) return "Admin";
   return n
     .split("-")
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .map((s: any) => s.charAt(0).toUpperCase() + s.slice(1))
     .join(" - ");
 });
 </script>
