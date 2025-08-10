@@ -14,10 +14,9 @@ export default defineNuxtConfig({
     "@nuxt/ui",
     "@nuxt/image",
     "@nuxtjs/storybook",
+    "@nuxtjs/color-mode",
   ],
   storybook: {
-    url: "http://localhost:6006",
-    storybookRoute: "/__storybook__",
     port: 6006,
   },
   css: ["@/assets/css/tailwind.css"],
@@ -25,5 +24,27 @@ export default defineNuxtConfig({
     redirect: false,
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_KEY,
+  },
+  colorMode: {
+    preference: "dark",
+    fallback: "dark",
+    classSuffix: "", // results in `dark` class (no suffix)
+    storageKey: "color-mode", // can remove the switch entirely if you never render one
+  },
+  app: {
+    head: {
+      link: [
+        {
+          rel: "preconnect",
+          href: "https://fonts.gstatic.com",
+          crossorigin: "",
+        },
+        { rel: "preconnect", href: "https://fonts.googleapis.com" },
+        {
+          rel: "stylesheet",
+          href: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=Inter:wght@400;500;600&display=swap",
+        },
+      ],
+    },
   },
 });
