@@ -1,8 +1,10 @@
 // tailwind.config.ts
 import type { Config } from "tailwindcss";
+import ui from "@nuxt/ui/tailwind";
 
 export default <Partial<Config>>{
   darkMode: "class",
+  presets: [ui],
   content: [
     "./app.vue",
     "./components/**/*.{vue,js,ts}",
@@ -10,6 +12,7 @@ export default <Partial<Config>>{
     "./pages/**/*.vue",
     "./plugins/**/*.{js,ts}",
     "./error.vue",
+    "./node_modules/@nuxt/ui/dist/**/*.{js,mjs,ts}",
   ],
   theme: {
     extend: {

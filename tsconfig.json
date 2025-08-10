@@ -3,7 +3,7 @@
 "extends": "./.nuxt/tsconfig.json",
   "compilerOptions": {
     "module": "node16",
-    "moduleResolution": "node16",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "types": ["node", "unenv"],
     "strict": true

@@ -1,59 +1,75 @@
 <template>
   <div
-    :class="`poll-tile shadow-lg ${props.poll.is_active ? 'active-tile' : ''}`"
+    :class="[
+      'w-full max-w-md mx-auto rounded-card border p-5 shadow-sm',
+      'bg-white/5 border-white/10 text-white',
+      props.poll.is_active && 'ring-2 ring-primary/40 bg-primary/5',
+    ]"
   >
     <!-- Question -->
-    <h2 class="poll-question">{{ poll.question }}</h2>
+    <h2 class="font-heading text-lg font-semibold text-white mb-2">
+      {{ poll.question }}
+    </h2>
 
     <!-- Options -->
-    <ul class="poll-options">
+    <ul class="space-y-1.5">
       <li
         v-for="option in poll.poll_options"
         :key="option.id"
-        class="poll-option"
+        class="text-sm text-white/80"
       >
-        • {{ option.text }} - {{ option.vote_count }}
+        • {{ option.text }} —
+        <span class="text-white/70">{{ option.vote_count }}</span>
       </li>
     </ul>
 
-    <!-- Activate button or status -->
-    <div class="status-controls">
+    <!-- Actions -->
+    <div class="mt-4 flex flex-wrap items-center gap-2">
+      <!-- Activate -->
       <UButton
         v-if="!poll.is_active"
         @click="activatePoll"
         :loading="pollLoading"
-        class="activate-button cursor-pointer"
+        :variant="'solid'"
+        :color="'primary'"
+        class="rounded-soft cursor-pointer"
       >
         Activate
       </UButton>
+
+      <!-- Deactivate -->
       <UButton
         v-else
         @click="deActivatePoll"
-        label="Deactivate"
-        size="md"
-        color="primary"
-        variant="solid"
-        class="cursor-pointer"
         :loading="pollLoading"
-        >Deactivate
-      </UButton>
-      <UButton
-        label="Reset Poll Votes"
-        color="secondary"
-        size="md"
-        @click="handleReset(poll.id)"
-        class="cursor-pointer"
-        :loading="votesResetting"
+        :variant="'solid'"
+        :color="'primary'"
+        class="rounded-soft cursor-pointer"
       >
+        Deactivate
       </UButton>
+
+      <!-- Reset votes -->
       <UButton
-        size="md"
-        class="cursor-pointer"
-        color="error"
-        label="Delete Poll"
+        @click="handleReset(poll.id)"
+        :loading="votesResetting"
+        :variant="'solid'"
+        :color="'secondary'"
+        class="rounded-soft cursor-pointer"
+      >
+        Reset Poll Votes
+      </UButton>
+
+      <!-- Delete -->
+      <UButton
         @click="handelPollDeletion(poll.id)"
         :loading="pendingPollDeletion"
-      />
+        :variant="'solid'"
+        color="error"
+        class="rounded-soft cursor-pointer"
+      >
+        Delete Poll
+      </UButton>
     </div>
   </div>
 </template>
@@ -98,16 +114,12 @@ const handleReset = async (id: Poll["id"]) => {
     votesResetting.value = false;
   }
 };
+
 const activatePoll = async () => {
-  if (props.poll.is_active) {
-    console.log("Poll is active! no need to set to active! ");
-    return;
-  }
+  if (props.poll.is_active) return;
   pollLoading.value = true;
   try {
-    await $fetch(`/api/polls/${props.poll.id}/activate`, {
-      method: "POST",
-    });
+    await $fetch(`/api/polls/${props.poll.id}/activate`, { method: "POST" });
     emit("poll-updated");
     $toast.success("Poll Activated!");
   } catch (err) {
@@ -119,20 +131,14 @@ const activatePoll = async () => {
 };
 
 const deActivatePoll = async () => {
-  if (!props.poll.is_active) {
-    console.log("Poll is not activated DUMMY!");
-    return;
-  }
+  if (!props.poll.is_active) return;
   pollLoading.value = true;
-
   try {
-    await $fetch(`/api/polls/${props.poll.id}/deactivate`, {
-      method: "POST",
-    });
+    await $fetch(`/api/polls/${props.poll.id}/deactivate`, { method: "POST" });
     emit("poll-updated");
-    $toast.success("Poll Deactivateed!");
+    $toast.success("Poll Deactivated!");
   } catch (err) {
-    console.error("Failed to activate poll:", err);
+    console.error("Failed to deactivate poll:", err);
     $toast.error("Failed to deactivate poll");
   } finally {
     pollLoading.value = false;
@@ -140,68 +146,4 @@ const deActivatePoll = async () => {
 };
 </script>
 
-<style scoped>
-.poll-tile {
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 12px;
-  padding: 20px;
-  width: 100%;
-  max-width: 480px;
-  margin: 1rem auto;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.poll-question {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #111;
-  margin-bottom: 0.5rem;
-}
-
-.poll-options {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.poll-option {
-  padding: 6px 0;
-  color: #333;
-  font-size: 0.95rem;
-}
-
-.status-controls {
-  margin-top: 1rem;
-  display: flex;
-  gap: 0.5rem;
-}
-
-.active-tile {
-  background-color: #f8d7da;
-}
-
-.activate-button {
-  background-color: #0070f3;
-  color: white;
-  font-weight: 500;
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.activate-button:hover {
-  background-color: #005dc1;
-}
-
-.status-label {
-  font-weight: bold;
-  color: #28a745;
-  font-size: 0.95rem;
-}
-</style>
+<!-- No <style> needed; all Tailwind -->

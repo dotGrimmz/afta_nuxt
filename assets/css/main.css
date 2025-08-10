@@ -1,14 +1,21 @@
-
+/* Tailwind + Nuxt UI base */
 @import "tailwindcss";
-@tailwind components;
-@tailwind utilities;
+@import "@nuxt/ui";
 
-/* Put your global styles inside a Tailwind layer so @apply works */
+/* Global base (so @apply works) */
 @layer base {
-  :root, .dark {
-    /* force dark background & high-contrast defaults */
+  :root,
+  .dark {
+    /* Theme tokens */
     --bg: #0b0b0e;
     --fg: #e5e7eb;
+
+    /* Fonts */
+    --font-heading: "DM Sans";
+    --font-body: "Inter";
+
+    /* Helpful for forced dark */
+    color-scheme: dark;
   }
 
   html.dark {
@@ -21,27 +28,30 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* ✅ font-sans is now recognized because we’re inside a Tailwind layer */
   body {
     @apply font-sans;
+    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
     background: var(--bg);
     color: var(--fg);
   }
 
-  /* Headings font via CSS var (no @apply needed) */
   h1, h2, h3, h4 {
-    font-family: var(--font-heading, 'DM Sans'), ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-heading), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* Optional: selection uses your primary */
+  ::selection {
+    background: #8B5CF6;
+    color: #0b0b0e;
   }
 }
 
-/* Define the custom utilities you used in examples:
-   Tailwind doesn’t ship .font-heading/.rounded-card/.rounded-soft/.max-w-content/.p-gutter by default */
+/* Custom utilities/tokens */
 @layer utilities {
-  .font-heading {
-    font-family: var(--font-heading, 'DM Sans'), ui-sans-serif, system-ui, sans-serif;
-  }
+  .font-heading { font-family: var(--font-heading), ui-sans-serif, system-ui, sans-serif; }
   .rounded-soft { border-radius: 8px; }
   .rounded-card { border-radius: 8px; }
   .max-w-content { max-width: 1200px; }
   .p-gutter { padding: 1.5rem; }
 }
+
