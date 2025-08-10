@@ -1,20 +1,24 @@
 <template>
-  <div>
-    <h1 class="text-3xl font-bold mb-6">Admin Dashboard</h1>
-    <PollsPollCreator @poll-created="refreshPolls" />
+  <div class="min-h-screen">
+    <!-- 1 col on mobile, 12 cols on md+ -->
+    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+      <!-- Creator: full width on mobile, 3/12 on sm+ -->
+      <section class="sm:col-span-6">
+        <PollsPollCreator @poll-created="refreshPolls" />
+      </section>
 
-    <div
-      class="relative z-10 flex flex-col gap-4 bg-black bg-opacity-80 p-4 min-h-screen"
-    >
-      <PollTile
-        v-for="poll in pollsData"
-        :key="poll.id"
-        :poll="poll"
-        @poll-updated="refreshPolls"
-        :resetVotes="resetVotes"
-        :loading="loading"
-        :deletePoll="deletePoll"
-      />
+      <!-- Tiles: full width on mobile, 9/12 on sm+ -->
+      <section class="sm:col-span-6">
+        <PollTile
+          v-for="poll in pollsData"
+          :key="poll.id"
+          :poll="poll"
+          @poll-updated="refreshPolls"
+          :resetVotes="resetVotes"
+          :loading="loading"
+          :deletePoll="deletePoll"
+        />
+      </section>
     </div>
   </div>
 </template>
@@ -29,5 +33,6 @@ const {
 } = usePollAdmin();
 
 definePageMeta({ layout: "admin" });
+
 import PollTile from "~/components/polls/PollTile.vue";
 </script>

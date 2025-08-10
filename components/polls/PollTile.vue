@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'w-full max-w-md mx-auto rounded-card border p-5 shadow-sm',
+      'w-full h-full rounded-card border p-5 shadow-sm',
       'bg-white/5 border-white/10 text-white',
       props.poll.is_active && 'ring-2 ring-primary/40 bg-primary/5',
     ]"
