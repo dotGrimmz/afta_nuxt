@@ -2,7 +2,10 @@
   <div class="min-h-screen flex bg-[var(--bg)] text-white">
     <!-- Sidebar (desktop) -->
     <aside
-      class="max-md:hidden w-32 shrink-0 flex flex-col border-r border-white/10 bg-white/5 backdrop-blur"
+      :class="[
+        'w-36 shrink-0 flex-col border-r border-white/10 bg-white/5 backdrop-blur',
+        open ? 'block md:flex' : 'hidden md:flex',
+      ]"
     >
       <nav class="px-2 py-2 space-y-1">
         <UButton
@@ -19,8 +22,8 @@
       </nav>
     </aside>
 
-    <!-- Mobile slideover (opened by default) -->
-    <USlideover
+    <!-- Mobile slideover -->
+    <!-- <USlideover
       v-model="open"
       side="left"
       overlay-class="!bg-black/60"
@@ -40,11 +43,11 @@
             :color="isActive(link.to) ? 'primary' : 'neutral'"
             @click="open = false"
           >
-            {{ link.label }}
+            {{ link.label }} -- test
           </UButton>
         </nav>
       </div>
-    </USlideover>
+    </USlideover> -->
 
     <!-- Main -->
     <div class="flex-1 min-w-0 flex flex-col">
@@ -53,11 +56,12 @@
       >
         <div class="flex items-center gap-3">
           <UButton
-            class="md:hidden"
+            class="inline-flex sm:hidden"
             variant="ghost"
             icon="i-heroicons-bars-3"
-            @click="open = true"
+            @click="open = !open"
           />
+
           <h1 class="text-xl font-semibold">{{ pageTitle }}</h1>
         </div>
         <!-- right-side actions slot (optional) -->
@@ -75,10 +79,8 @@
 import { ref, computed } from "vue";
 const route = useRoute();
 
-// Left slider open on mobile by default
-const open = ref(true);
+const open = ref(false); // mobile USlideover
 
-// Nav links for admin
 const links = [
   { label: "Dashboard", to: "/admin", icon: "i-heroicons-home" },
   {
@@ -91,13 +93,11 @@ const links = [
 ];
 
 const isActive = (to: string) => {
-  console.log(route.path, route.path.endsWith(to));
   return route.path.endsWith(to);
 };
 
 const pageTitle = computed(() => {
   if (route.meta?.title) return String(route.meta.title);
-  // fallback: derive from route name like 'admin-events' -> 'Admin Events'
   const n = (route.name ?? "").toString();
   if (!n) return "Admin";
   return n

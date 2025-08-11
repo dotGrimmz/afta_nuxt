@@ -33,6 +33,7 @@
         :variant="'solid'"
         :color="'primary'"
         class="rounded-soft cursor-pointer"
+        size="sm"
       >
         Activate
       </UButton>
@@ -44,6 +45,7 @@
         :loading="pollLoading"
         :variant="'solid'"
         :color="'primary'"
+        size="sm"
         class="rounded-soft cursor-pointer"
       >
         Deactivate
@@ -56,6 +58,7 @@
         :variant="'solid'"
         :color="'secondary'"
         class="rounded-soft cursor-pointer"
+        size="sm"
       >
         Reset Poll Votes
       </UButton>
@@ -67,6 +70,7 @@
         :variant="'solid'"
         color="error"
         class="rounded-soft cursor-pointer"
+        size="sm"
       >
         Delete Poll
       </UButton>
