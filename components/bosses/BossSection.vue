@@ -6,14 +6,14 @@ import CurvedLoop from "../vue-bits/TextAnimations/CurvedLoop/CurvedLoop.vue";
 const bosses = [
   {
     rank: 1,
-    name: "♓🅹𝖚𝖘♠️𝕏𝖙𝖗𝖆 🅷𝖔𝖙🔥",
-    avatarUrl: "/images/bosses/extra_white.jpg",
-    // objectPosition: "50% -60%",
+    name: "ᴹᶻ🅃ȏ̈χɪᴄ♠️🄻𝖊i𝖌H",
+    avatarUrl: "/images/overall/leigh_twin.jpg",
   },
   {
     rank: 2,
-    name: "ᴹᶻ🅃ȏ̈χɪᴄ♠️🄻𝖊i𝖌H",
-    avatarUrl: "/images/overall/leigh_twin.jpg",
+    name: "♓🅹𝖚𝖘♠️𝕏𝖙𝖗𝖆 🅷𝖔𝖙🔥",
+    avatarUrl: "/images/bosses/extra_white.jpg",
+    // objectPosition: "50% -60%",
   },
 
   {
