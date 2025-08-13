@@ -41,16 +41,6 @@ const {
 
 definePageMeta({ layout: "admin" });
 
-// <AnimatedList
-//   :displayScrollbar="false"
-//   className="w-full"
-//   :items="bosses"
-// >
-//   <template #default="{ item: boss }">
-//     <BossCard :key="boss.rank" :boss="boss" />
-//   </template>
-// </AnimatedList>
-
 import PollTile from "~/components/polls/PollTile.vue";
 import AnimatedList from "~/components/vue-bits/AnimatedList.vue";
 </script>
