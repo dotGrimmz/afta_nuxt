@@ -20,7 +20,7 @@
       />
     </div>
 
-    <button :disabled="loading" @click="submit" class="submit-button">
+    <button :disabled="loading" @click="submit" class="submit-UButton">
       {{ loading ? "Saving…" : "Create Poll" }}
     </button>
   </div>

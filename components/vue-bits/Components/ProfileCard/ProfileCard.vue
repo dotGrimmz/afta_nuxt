@@ -821,57 +821,57 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 480px) {
-  .pc-card {
-    height: 60svh;
-    /* CUSTOM EDITS */
-    max-height: 190px;
-  }
-
-  .pc-details {
-    top: 8em;
-  }
-
-  .pc-details h3 {
-    font-size: min(3.5svh, 2em);
-  }
-
-  .pc-details p {
-    font-size: 12px;
-    top: -8px;
-  }
-
-  .pc-user-info {
-    bottom: 12px;
-    left: 12px;
-    right: 12px;
-    padding: 8px 10px;
-    border-radius: 50px;
-  }
-
-  .pc-mini-avatar {
-    width: 24px;
-    height: 24px;
-  }
-
-  .pc-user-details {
-    gap: 8px;
-  }
-
-  .pc-handle {
-    font-size: 12px;
-  }
-
-  .pc-status {
-    font-size: 9px;
-  }
-
-  .pc-contact-btn {
-    padding: 5px 10px;
-    font-size: 10px;
-    border-radius: 50px;
-  }
+/* @media (max-width: 550px) { */
+.pc-card {
+  height: 60svh;
+  /* CUSTOM EDITS */
+  max-height: 190px;
 }
+
+.pc-details {
+  top: 8em;
+}
+
+.pc-details h3 {
+  font-size: min(3.5svh, 2em);
+}
+
+.pc-details p {
+  font-size: 12px;
+  top: -8px;
+}
+
+.pc-user-info {
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  padding: 8px 10px;
+  border-radius: 50px;
+}
+
+.pc-mini-avatar {
+  width: 24px;
+  height: 24px;
+}
+
+.pc-user-details {
+  gap: 8px;
+}
+
+.pc-handle {
+  font-size: 12px;
+}
+
+.pc-status {
+  font-size: 9px;
+}
+
+.pc-contact-btn {
+  padding: 5px 10px;
+  font-size: 10px;
+  border-radius: 50px;
+}
+/* } */
 
 @media (max-width: 320px) {
   .pc-card {

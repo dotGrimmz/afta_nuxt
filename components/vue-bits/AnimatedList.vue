@@ -2,7 +2,7 @@
   <div ref="containerRef" :class="`relative w-full ${className}`.trim()">
     <div
       ref="listRef"
-      :class="`max-h-[400px] overflow-y-auto p-4 ${
+      :class="`max-h-[400px] overflow-y-auto  ${
         displayScrollbar
           ? '[&::-webkit-scrollbar]:w-[8px] [&::-webkit-scrollbar-track]:bg-[#0b0b0b] [&::-webkit-scrollbar-thumb]:bg-[#222] [&::-webkit-scrollbar-thumb]:rounded-[4px]'
           : 'scrollbar-hide'

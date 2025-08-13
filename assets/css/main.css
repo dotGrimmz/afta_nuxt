@@ -1,8 +1,57 @@
+/* Tailwind + Nuxt UI base */
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-html,
-body {
-  height: 100%;
-  margin: 0;
+/* Global base (so @apply works) */
+@layer base {
+  :root,
+  .dark {
+    /* Theme tokens */
+    --bg: #0b0b0e;
+    --fg: #e5e7eb;
+
+    /* Fonts */
+    --font-heading: "DM Sans";
+    --font-body: "Inter";
+
+    /* Helpful for forced dark */
+    color-scheme: dark;
+  }
+
+  html.dark {
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply font-sans;
+    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-heading), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* Optional: selection uses your primary */
+  ::selection {
+    background: #8B5CF6;
+    color: #0b0b0e;
+  }
 }
+
+/* Custom utilities/tokens */
+@layer utilities {
+  .font-heading { font-family: var(--font-heading), ui-sans-serif, system-ui, sans-serif; }
+  .rounded-soft { border-radius: 8px; }
+  .rounded-card { border-radius: 8px; }
+  .max-w-content { max-width: 1200px; }
+  .p-gutter { padding: 1.5rem; }
+}
+

@@ -1,5 +1,4 @@
 <script setup>
-import Threads from "../vue-bits/Threads.vue";
 import BossCard from "./BossCard.vue";
 import AnimatedList from "../vue-bits/AnimatedList.vue";
 import CurvedLoop from "../vue-bits/TextAnimations/CurvedLoop/CurvedLoop.vue";
@@ -40,7 +39,7 @@ const open = ref(false);
     <template #content>
       <AnimatedList
         :displayScrollbar="false"
-        className="w-[200px]"
+        className="w-full"
         :items="bosses"
       >
         <template #default="{ item: boss }">

@@ -1,20 +1,31 @@
 <template>
-  <div>
-    <h1 class="text-3xl font-bold mb-6">Admin Dashboard</h1>
-    <PollsPollCreator @poll-created="refreshPolls" />
+  <div class="min-h-screen">
+    <!-- 1 col on mobile, 12 cols on md+ -->
+    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-stretch">
+      <!-- Creator: full width on mobile, 3/12 on sm+ -->
+      <section class="sm:col-span-6 flex">
+        <PollsPollCreator @poll-created="refreshPolls" />
+      </section>
 
-    <div
-      class="relative z-10 flex flex-col gap-4 bg-black bg-opacity-80 p-4 min-h-screen"
-    >
-      <PollTile
-        v-for="poll in pollsData"
-        :key="poll.id"
-        :poll="poll"
-        @poll-updated="refreshPolls"
-        :resetVotes="resetVotes"
-        :loading="loading"
-        :deletePoll="deletePoll"
-      />
+      <!-- Tiles: full width on mobile, 9/12 on sm+ -->
+      <section class="sm:col-span-6 h-[300px] flex min-h-0 overflow-hidden">
+        <AnimatedList
+          :displayScrollbar="false"
+          class="flex-1 h-full overflow-y-auto overflow-y-scroll [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
+          :items="pollsData"
+        >
+          <template #default="{ item: poll }">
+            <PollTile
+              :key="poll.id"
+              :poll="poll"
+              @poll-updated="refreshPolls"
+              :resetVotes="resetVotes"
+              :loading="loading"
+              :deletePoll="deletePoll"
+            />
+          </template>
+        </AnimatedList>
+      </section>
     </div>
   </div>
 </template>
@@ -29,5 +40,17 @@ const {
 } = usePollAdmin();
 
 definePageMeta({ layout: "admin" });
+
+// <AnimatedList
+//   :displayScrollbar="false"
+//   className="w-full"
+//   :items="bosses"
+// >
+//   <template #default="{ item: boss }">
+//     <BossCard :key="boss.rank" :boss="boss" />
+//   </template>
+// </AnimatedList>
+
 import PollTile from "~/components/polls/PollTile.vue";
+import AnimatedList from "~/components/vue-bits/AnimatedList.vue";
 </script>

@@ -162,7 +162,7 @@ watch([spacing, () => props.speed], () => {
 
 <template>
   <div
-    :class="`h-[190px] flex items-center justify-center w-[360px] overflow-x-hidden border border-white rounded ${containerClass}`"
+    :class="`h-[190px] flex items-center justify-center w-full overflow-x-hidden border border-white rounded ${containerClass}`"
     :style="{
       visibility: ready ? 'visible' : 'hidden',
       cursor: cursorStyle,
