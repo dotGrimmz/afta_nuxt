@@ -74,7 +74,7 @@ async function submit() {
 
 <style scoped>
 .poll-creator {
-  max-width: 600px;
+  max-width: 100%;
   background-color: rgba(31, 41, 55, 0.7);
   padding: 24px;
   border-radius: 12px;
