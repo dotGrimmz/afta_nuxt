@@ -5,7 +5,6 @@ const { $toast } = useNuxtApp();
 
 type EventRow = Tables<"events">;
 
-const { add } = useToast();
 const events = ref<EventRow[]>([]);
 const loading = ref(false);
 const errorMsg = ref<string | null>(null);
@@ -95,7 +94,8 @@ defineExpose({ refresh: fetchEvents });
             <UButton
               size="xs"
               color="error"
-              variant="soft"
+              variant="solid"
+              class="cursor-pointer"
               @click="handleDelete(event.id)"
               >Delete</UButton
             >

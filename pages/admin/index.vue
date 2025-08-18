@@ -57,7 +57,6 @@ const {
 definePageMeta({ layout: "admin" });
 
 function handleEventCreated(event: any) {
-  // Handle event creation (e.g., refresh event list)
   console.log("New event created:", event);
 }
 </script>

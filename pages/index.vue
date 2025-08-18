@@ -84,7 +84,7 @@ const handleContactClick = () => {
 };
 const allTime = [
   {
-    avatarUrl: "/images/overall/leigh_twin.jpg",
+    avatarUrl: "/images/bosses/Leigh.jpg",
     class: "mt-6",
     imagePosition: "object-[center_70%]",
     name: "ᴹᶻ🅃ȏ̈χɪᴄ♠️🄻𝖊i𝖌H",
