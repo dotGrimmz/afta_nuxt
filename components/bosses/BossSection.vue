@@ -7,19 +7,19 @@ const bosses = [
   {
     rank: 1,
     name: "ᴹᶻ🅃ȏ̈χɪᴄ♠️🄻𝖊i𝖌H",
-    avatarUrl: "/images/overall/leigh_twin.jpg",
+    avatarUrl: "/images/bosses/Leigh.jpg",
   },
   {
     rank: 2,
-    name: "♓🅹𝖚𝖘♠️𝕏𝖙𝖗𝖆 🅷𝖔𝖙🔥",
-    avatarUrl: "/images/bosses/extra_white.jpg",
+    name: "🐰ℬ𝓊𝓃𝓃𝓎㊙️",
+    avatarUrl: "/images/bosses/hunny_coffee.jpg",
     // objectPosition: "50% -60%",
   },
 
   {
     rank: 3,
-    name: "🍯🐰ℋ𝑜𝓃𝑒𝓎ℬ𝓊𝓃𝓃𝓎",
-    avatarUrl: "/images/bosses/hunny_coffee.jpg",
+    name: "🤘🏾⚜️♛ȺƑའįҠȺហɖơƖƖ⚜️💰📺💰",
+    avatarUrl: "/images/bosses/a_doll.jpg",
     objectPosition: "50% 20%",
   },
 ];
