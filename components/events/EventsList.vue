@@ -1,63 +1,22 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
 import type { Tables } from "~/types/supabase";
-const { $toast } = useNuxtApp();
 
 type EventRow = Tables<"events">;
 
-const events = ref<EventRow[]>([]);
-const loading = ref(false);
-const errorMsg = ref<string | null>(null);
+const props = defineProps<{
+  events: EventRow[];
+  fetchEvents: () => Promise<void>;
+  loading: Boolean;
+  errorMsg: string | null;
+  fmtDate: (iso?: string | null) => string;
+  handleDelete: (id: string) => Promise<void>;
+}>();
 
-async function fetchEvents() {
-  loading.value = true;
-  errorMsg.value = null;
-  try {
-    const { data, error } = await useFetch<EventRow[]>("/api/events/get", {
-      method: "GET",
-    });
+const { events, loading, errorMsg } = toRefs(props);
+const hasEvents = computed(() => (props.events?.length ?? 0) > 0);
 
-    console.log(toRaw(data));
-    if (error.value) {
-      throw error.value;
-    }
-    events.value = data.value ?? [];
-  } catch (e: any) {
-    errorMsg.value = e?.message || "Failed to load events";
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function handleDelete(id: string) {
-  try {
-    await $fetch(`/api/events/${id}`, { method: "DELETE" });
-    $toast.success({ title: "Event deleted" });
-    await fetchEvents();
-  } catch (e: any) {
-    $toast.error({
-      title: "Delete failed",
-      description: e?.message || "Unknown error",
-      color: "error",
-    });
-  }
-}
-
-function fmtDate(iso?: string | null) {
-  if (!iso) return "";
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(iso));
-  } catch {
-    return iso ?? "";
-  }
-}
-
-onMounted(fetchEvents);
-
-defineExpose({ refresh: fetchEvents });
+console.log("client", events.value);
+console.log("props?", props.events);
 </script>
 
 <template>
@@ -71,7 +30,7 @@ defineExpose({ refresh: fetchEvents });
     </div>
 
     <div v-else>
-      <div v-if="events.length === 0" class="text-sm text-gray-500">
+      <div v-if="!hasEvents" class="text-sm text-gray-500">
         No events yet. Create one to get started.
       </div>
 

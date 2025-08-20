@@ -31,11 +31,26 @@
     <!-- 2nd row: Event Creator -->
     <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-stretch">
       <section class="sm:col-span-6 flex">
-        <EventCreator @created="handleEventCreated" />
+        <EventCreator
+          v-model:title="eventForm.title"
+          v-model:description="eventForm.description"
+          v-model:datetime="eventForm.datetime"
+          :errors="eventErrors"
+          :submitting="submittingEvent"
+          @submit="createEvent"
+          @reset="resetEventForm"
+        />
       </section>
       <section class="sm:col-span-6 flex items-center justify-center">
         <!-- Optional: placeholder for event list or details -->
-        <EventsList />
+        <EventsList
+          :fmtDate="fmtDate"
+          :fetchEvents="fetchEvents"
+          :events="events"
+          :loading="eventLoading"
+          :errorMsg="eventErr"
+          :handleDelete="deleteEvent"
+        />
       </section>
     </div>
   </div>
@@ -54,7 +69,21 @@ const {
   deletePoll,
 } = usePollAdmin();
 
+const {
+  fetchEvents,
+  fmtDate,
+  handleDelete: deleteEvent,
+  events,
+  loading: eventLoading,
+  errorMsg: eventErr,
+  eventForm,
+  eventErrors,
+  submittingEvent,
+  createEvent,
+  resetEventForm,
+} = useEventsAdmin();
 definePageMeta({ layout: "admin" });
+console.log("event data on client:", events.value);
 
 function handleEventCreated(event: any) {
   console.log("New event created:", event);
