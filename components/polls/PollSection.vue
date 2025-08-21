@@ -9,7 +9,6 @@ import { useResponsiveImage } from "#imports";
 const open = ref(false);
 
 const { activePolls, refreshPolls } = usePollAdmin();
-const imageUrl = useResponsiveImage("/images/black_sweater.jpg");
 import ScrollVelocity from "../vue-bits/TextAnimations/ScrollVelocity/ScrollVelocity.vue";
 </script>
 <template>

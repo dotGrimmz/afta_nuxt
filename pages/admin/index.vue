@@ -1,57 +1,75 @@
 <template>
-  <div class="min-h-screen">
-    <!-- 1st row: Poll Creator + Poll Tiles -->
-    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-stretch mb-4">
-      <!-- Creator -->
-      <section class="sm:col-span-6 flex">
-        <PollsPollCreator @poll-created="refreshPolls" />
-      </section>
+  <div class="min-h-screen py-4">
+    <div class="mx-auto max-w-6xl space-y-6">
+      <!-- Row 1 -->
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch auto-rows-[clamp(18rem,40vh,26rem)] min-h-0"
+      >
+        <!-- Creator -->
+        <section class="h-full min-h-0">
+          <div class="h-full min-h-0 flex flex-col">
+            <PollsPollCreator @poll-created="refreshPolls" />
+          </div>
+        </section>
 
-      <!-- Tiles -->
-      <section class="sm:col-span-6 h-[300px] flex min-h-0 overflow-hidden">
-        <AnimatedList
-          :displayScrollbar="false"
-          class="flex-1 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
-          :items="pollsData"
-        >
-          <template #default="{ item: poll }">
-            <PollTile
-              :key="poll.id"
-              :poll="poll"
-              @poll-updated="refreshPolls"
-              :resetVotes="resetVotes"
-              :loading="loading"
-              :deletePoll="deletePoll"
+        <!-- Tiles -->
+        <section class="h-full min-h-0">
+          <div class="h-full min-h-0 flex flex-col">
+            <AnimatedList
+              :displayScrollbar="false"
+              class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
+              :items="pollsData"
+            >
+              <template #default="{ item: poll }">
+                <PollTile
+                  :key="poll.id"
+                  :poll="poll"
+                  @poll-updated="refreshPolls"
+                  :resetVotes="resetVotes"
+                  :loading="loading"
+                  :deletePoll="deletePoll"
+                />
+              </template>
+            </AnimatedList>
+          </div>
+        </section>
+      </div>
+
+      <!-- Row 2 -->
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch auto-rows-[clamp(18rem,40vh,26rem)] min-h-0"
+      >
+        <section class="h-full min-h-0">
+          <div class="h-full min-h-0 flex flex-col">
+            <EventCreator
+              v-model:title="eventForm.title"
+              v-model:description="eventForm.description"
+              v-model:datetime="eventForm.datetime"
+              :errors="eventErrors"
+              :submitting="submittingEvent"
+              @submit="createEvent"
+              @reset="resetEventForm"
             />
-          </template>
-        </AnimatedList>
-      </section>
-    </div>
+          </div>
+        </section>
 
-    <!-- 2nd row: Event Creator -->
-    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-stretch">
-      <section class="sm:col-span-6 flex">
-        <EventCreator
-          v-model:title="eventForm.title"
-          v-model:description="eventForm.description"
-          v-model:datetime="eventForm.datetime"
-          :errors="eventErrors"
-          :submitting="submittingEvent"
-          @submit="createEvent"
-          @reset="resetEventForm"
-        />
-      </section>
-      <section class="sm:col-span-6 flex items-center justify-center">
-        <!-- Optional: placeholder for event list or details -->
-        <EventsList
-          :fmtDate="fmtDate"
-          :fetchEvents="fetchEvents"
-          :events="events"
-          :loading="eventLoading"
-          :errorMsg="eventErr"
-          :handleDelete="deleteEvent"
-        />
-      </section>
+        <section class="h-full min-h-0">
+          <div class="h-full min-h-0 flex flex-col overflow-hidden">
+            <div
+              class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
+            >
+              <EventsList
+                :fmtDate="fmtDate"
+                :fetchEvents="fetchEvents"
+                :events="events"
+                :loading="eventLoading"
+                :errorMsg="eventErr"
+                :handleDelete="deleteEvent"
+              />
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 </template>
@@ -83,9 +101,4 @@ const {
   resetEventForm,
 } = useEventsAdmin();
 definePageMeta({ layout: "admin" });
-console.log("event data on client:", events.value);
-
-function handleEventCreated(event: any) {
-  console.log("New event created:", event);
-}
 </script>

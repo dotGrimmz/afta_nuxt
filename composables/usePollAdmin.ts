@@ -9,11 +9,10 @@ interface VotedPoll {
   option_id: PollOption["id"];
 }
 export const usePollAdmin = () => {
-  const polls = ref<Poll[]>([]);
+  const { $toast } = useNuxtApp();
+
   const loading = ref(false);
   const error = ref<string | null>(null);
-  const activePolls = ref<ActivePoll[]>([]);
-  const inactivePolls = ref<InactivePoll[]>([]);
   const VOTE_STORAGE_KEY = "votedPolls";
 
   const resetVotes = async (id: Poll["id"]) => {
@@ -38,49 +37,29 @@ export const usePollAdmin = () => {
     }
   };
 
-  const fetchPolls = async () => {
-    loading.value = true;
-    try {
-      const res = await $fetch<Poll[]>("/api/polls");
-      const arr = res.reduce(
-        (
-          acc: { activePolls: ActivePoll[]; inactivePolls: InactivePoll[] },
-          current: Poll
-        ) => {
-          if (current.is_active) {
-            acc.activePolls.push(current as ActivePoll);
-          }
-          acc.inactivePolls.push(current as InactivePoll);
-          return acc;
-        },
-        {
-          inactivePolls: [],
-          activePolls: [],
-        }
-      );
-      polls.value = res;
-      inactivePolls.value = arr.inactivePolls;
-      activePolls.value = arr.activePolls;
-    } catch (err: any) {
-      console.error({ error });
-      error.value = err?.message ?? "Failed to fetch polls.";
-    } finally {
-      loading.value = false;
-    }
-  };
-  onMounted(() => {
-    fetchPolls();
+  const {
+    data,
+    error: pollErr,
+    pending,
+    refresh,
+  } = useAsyncData("polls", () => $fetch<Poll[]>("/api/polls"), {
+    server: true,
+    default: () => [],
   });
 
-  const refreshPolls = async () => {
-    await fetchPolls();
-  };
+  const pollErrorMsg = computed(() => pollErr.value?.message ?? null);
+  const polls = computed<Poll[]>(() => data.value ?? []);
+
+  const activePolls = computed<ActivePoll[]>(() =>
+    polls.value.filter((p): p is ActivePoll => p.is_active === true)
+  );
 
   const deletePoll = async (id: Poll["id"]) => {
     try {
       await $fetch(`/api/polls/${id}/delete-poll`, {
         method: "POST",
       });
+      $toast.info("Poll Deleted");
     } catch (e: any) {
       console.error({ e });
       return e;
@@ -89,10 +68,10 @@ export const usePollAdmin = () => {
 
   return {
     polls,
-    loading,
-    error,
-    fetchPolls,
-    refreshPolls,
+    loading: pending,
+    error: pollErrorMsg,
+
+    refreshPolls: refresh,
     activePolls,
     resetVotes,
     deletePoll,

@@ -1,10 +1,10 @@
-import { toast } from "#build/ui";
 import { ref, onMounted } from "vue";
 import type { EventForm } from "~/types";
 import type { Tables } from "~/types/supabase";
-const { $toast } = useNuxtApp();
 
 export const useEventsAdmin = () => {
+  const { $toast } = useNuxtApp();
+
   const eventForm = ref<EventForm>({
     title: "",
     description: "",
@@ -13,13 +13,6 @@ export const useEventsAdmin = () => {
 
   const eventErrors = ref<{ title?: string; datetime?: string }>({});
   const submittingEvent = ref(false);
-
-  //   function validateEventForm() {
-  //   eventErrors.value = {}
-  //   if (!eventForm.value.title?.trim()) eventErrors.value.title = 'Title is required'
-  //   if (!eventForm.value.datetime) eventErrors.value.datetime = 'Date & time is required'
-  //   return Object.keys(eventErrors.value).length === 0
-  // }
 
   const validateEventForm = () => {
     eventErrors.value = {};

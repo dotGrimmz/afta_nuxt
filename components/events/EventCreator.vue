@@ -20,12 +20,16 @@ function onSubmit(e: Event) {
 </script>
 
 <template>
-  <div class="max-w-xl w-full border border-gray-200 rounded-xl shadow-lg">
-    <div class="px-5 py-4 border-b">
+  <!-- Fill parent height just like the poll creator -->
+  <div
+    class="w-full h-full border border-gray-200 rounded-xl shadow-lg flex flex-col min-h-0"
+  >
+    <div class="px-5 py-3 border-b">
       <h2 class="text-lg font-semibold">Create Event</h2>
     </div>
 
-    <form class="p-5 space-y-5" @submit="onSubmit">
+    <!-- Let the form take remaining space; trimmed padding/spacing -->
+    <form class="flex-1 p-4 space-y-4 overflow-auto" @submit="onSubmit">
       <!-- Title -->
       <div>
         <label class="block text-sm font-medium mb-1">Title</label>
@@ -70,27 +74,29 @@ function onSubmit(e: Event) {
         </p>
       </div>
 
-      <div class="flex items-center gap-4">
-        <button
+      <div class="flex items-center gap-3 pt-1">
+        <UButton
           type="submit"
-          class="px-6 py-2 rounded-lg bg-black text-white disabled:opacity-60"
+          variant="outline"
+          color="primary"
+          class="px-5 py-2 rounded-lg bg-black text-white disabled:opacity-60 cursor-pointer"
           :disabled="props.submitting"
         >
           <span v-if="props.submitting">Creating…</span>
           <span v-else>Create</span>
-        </button>
+        </UButton>
 
-        <button
+        <UButton
           type="button"
-          class="px-6 py-2 rounded-lg border disabled:opacity-60"
+          variant="subtle"
+          color="error"
+          class="px-5 py-2 rounded-lg border disabled:opacity-60 cursor-pointer"
           :disabled="props.submitting"
           @click="emit('reset')"
         >
           Reset
-        </button>
+        </UButton>
       </div>
     </form>
   </div>
 </template>
-
-<style scoped></style>
