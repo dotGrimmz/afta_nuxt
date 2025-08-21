@@ -1,29 +1,55 @@
 <template>
-  <div class="poll-creator">
-    <div class="form-group">
-      <label for="question">Poll Question</label>
-      <textarea
-        id="question"
-        v-model="question"
-        rows="2"
-        placeholder="Enter your poll question"
-      ></textarea>
+  <form
+    class="w-full h-full border border-gray-200 rounded-xl shadow-lg text-white flex flex-col"
+    @submit.prevent="submit"
+  >
+    <!-- content -->
+    <div class="flex-1 p-5 space-y-4 overflow-auto">
+      <div>
+        <label
+          for="question"
+          class="block text-sm mb-1.5 font-medium text-white"
+        >
+          Poll Question
+        </label>
+        <textarea
+          id="question"
+          v-model="question"
+          rows="2"
+          placeholder="Enter your poll question"
+          class="w-full px-3 py-2 text-sm border rounded-md bg-white text-white placeholder-gray-400 outline-none focus:ring"
+        ></textarea>
+      </div>
+
+      <div>
+        <label
+          for="options"
+          class="block text-sm mb-1.5 font-medium text-white"
+        >
+          Options (comma-separated)
+        </label>
+        <input
+          id="options"
+          v-model="rawOptions"
+          type="text"
+          placeholder="Option A, Option B"
+          class="w-full px-3 py-2 text-sm border rounded-md bg-white text-white placeholder-gray-400 outline-none focus:ring"
+        />
+      </div>
     </div>
 
-    <div class="form-group">
-      <label for="options">Options (comma-separated)</label>
-      <input
-        id="options"
-        v-model="rawOptions"
-        type="text"
-        placeholder="Option A, Option B"
-      />
+    <!-- pinned footer -->
+    <div class="p-4 rounded-b-xl">
+      <UButton
+        variant="outline"
+        type="submit"
+        :disabled="loading"
+        class="px-5 py-2 rounded-lg bg-black text-white transition-colors hover:bg-black/90 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+      >
+        {{ loading ? "Saving…" : "Create Poll" }}
+      </UButton>
     </div>
-
-    <button :disabled="loading" @click="submit" class="submit-UButton">
-      {{ loading ? "Saving…" : "Create Poll" }}
-    </button>
-  </div>
+  </form>
 </template>
 
 <script setup lang="ts">
@@ -32,7 +58,6 @@ const { $toast } = useNuxtApp();
 
 const question = ref("");
 const rawOptions = ref("");
-
 const loading = ref(false);
 
 const emit = defineEmits<{
@@ -40,9 +65,7 @@ const emit = defineEmits<{
 }>();
 
 async function submit() {
-  if (!question.value.trim() || !rawOptions.value.trim()) {
-    return;
-  }
+  if (!question.value.trim() || !rawOptions.value.trim()) return;
 
   const options = rawOptions.value
     .split(",")
@@ -53,80 +76,18 @@ async function submit() {
   try {
     await $fetch("/api/polls", {
       method: "POST",
-      body: {
-        question: question.value,
-        options,
-      },
-    }).then(() => {
-      question.value = "";
-      rawOptions.value = "";
-      emit("poll-created");
-      $toast.success("Poll Created!");
+      body: { question: question.value, options },
     });
+
+    question.value = "";
+    rawOptions.value = "";
+    emit("poll-created");
+    $toast.success("Poll Created!");
   } catch (e: any) {
-    $toast.success("Poll creation error!");
-    console.error({ e });
+    console.error(e);
+    $toast.error("Poll creation error!");
   } finally {
     loading.value = false;
   }
 }
 </script>
-
-<style scoped>
-.poll-creator {
-  max-width: 100%;
-  background-color: rgba(31, 41, 55, 0.7);
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-  color: white;
-}
-
-.form-group {
-  margin-bottom: 16px;
-}
-
-label {
-  display: block;
-  font-size: 14px;
-  margin-bottom: 6px;
-  font-weight: 500;
-}
-
-textarea,
-input[type="text"] {
-  width: 100%;
-  padding: 10px;
-  font-size: 14px;
-  border: none;
-  border-radius: 6px;
-  background-color: #f3f4f6;
-  color: #111827;
-}
-
-textarea:focus,
-input[type="text"]:focus {
-  outline: 2px solid #2563eb;
-  background-color: white;
-}
-
-.submit-button {
-  background-color: #2563eb;
-  color: white;
-  font-weight: 600;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.submit-button:hover {
-  background-color: #1d4ed8;
-}
-
-.submit-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-</style>
