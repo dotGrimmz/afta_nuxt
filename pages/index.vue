@@ -60,7 +60,7 @@
         fullWidth
         :base-width="400"
         :autoplay="true"
-        :autoplay-delay="5000"
+        :autoplay-delay="8000"
         :pause-on-hover="true"
         :loop="true"
         :round="false"
