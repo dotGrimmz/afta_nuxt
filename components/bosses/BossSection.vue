@@ -4,27 +4,6 @@ import AnimatedList from "../vue-bits/AnimatedList.vue";
 import CurvedLoop from "../vue-bits/TextAnimations/CurvedLoop/CurvedLoop.vue";
 import { bosses } from "~/utils/bosses";
 
-// const bosses = [
-//   {
-//     rank: 1,
-//     name: "ᴹᶻ🅃ȏ̈χɪᴄ♠️🄻𝖊i𝖌H",
-//     avatarUrl: "/images/bosses/Leigh.jpg",
-//   },
-//   {
-//     rank: 2,
-//     name: "🐰ℬ𝓊𝓃𝓃𝓎㊙️",
-//     avatarUrl: "/images/bosses/hunny_coffee.jpg",
-//     // objectPosition: "50% -60%",
-//   },
-
-//   {
-//     rank: 3,
-//     name: "🤘🏾⚜️♛ȺƑའįҠȺហɖơƖƖ⚜️💰📺💰",
-//     avatarUrl: "/images/bosses/a_doll.jpg",
-//     objectPosition: "50% 20%",
-//   },
-// ];
-
 const open = ref(false);
 </script>
 
