@@ -54,7 +54,17 @@
     <div class="flex flex-col gap-4 bg-black p-4 min-h-screen">
       <BossSection />
       <PollsPollSection />
-      <EventsSection />
+      <!-- <EventsSection /> -->
+      <Carousel
+        :items="carouselItems"
+        fullWidth
+        :base-width="400"
+        :autoplay="true"
+        :autoplay-delay="5000"
+        :pause-on-hover="true"
+        :loop="true"
+        :round="false"
+      />
     </div>
   </div>
 </template>
@@ -73,11 +83,27 @@
 import Hyperspeed from "~/components/vue-bits/Hyperspeed.vue";
 import BossSection from "~/components/bosses/BossSection.vue";
 import EventsSection from "~/components/events/EventsSection.vue";
+import Carousel from "~/components/vue-bits/Components/Carousel/Carousel.vue";
 import ProfileCard from "~/components/vue-bits/Components/ProfileCard/ProfileCard.vue";
 import GradientText from "~/components/vue-bits/TextAnimations/GradientText/GradientText.vue";
 definePageMeta({
   layout: "landing",
 });
+
+const carouselItems = [
+  {
+    id: 1,
+    image: "/images/flyers/bible_study.png",
+    title: "Flyer 1",
+    description: "Special Event Flyer",
+  },
+  {
+    id: 2,
+    image: "/images/flyers/live_grimmz.png",
+    title: "Flyer 2",
+    description: "Another Event Flyer",
+  },
+];
 
 const handleContactClick = () => {
   emit("contactClick");

@@ -1,7 +1,3 @@
-<!--
-	Installed from https://vue-bits.dev/ui/
--->
-
 <template>
   <div
     ref="containerRef"
@@ -12,8 +8,8 @@
         : 'rounded-[24px] border border-[#333]',
     ]"
     :style="{
-      width: `${baseWidth}px`,
-      ...(round && { height: `${baseWidth}px` }),
+      width: fullWidth ? '100%' : `${baseWidth}px`,
+      ...(round && { height: fullWidth ? 'auto' : `${baseWidth}px` }),
     }"
   >
     <Motion
@@ -25,7 +21,9 @@
         width: itemWidth + 'px',
         gap: `${GAP}px`,
         perspective: 1000,
-        perspectiveOrigin: `${currentIndex * trackItemOffset + itemWidth / 2}px 50%`,
+        perspectiveOrigin: `${
+          currentIndex * trackItemOffset + itemWidth / 2
+        }px 50%`,
         x: motionX,
       }"
       @dragEnd="handleDragEnd"
@@ -35,7 +33,7 @@
     >
       <Motion
         v-for="(item, index) in carouselItems"
-        :key="index"
+        :key="item.id ?? index"
         tag="div"
         :class="[
           'relative shrink-0 flex flex-col overflow-hidden cursor-grab active:cursor-grabbing',
@@ -51,22 +49,45 @@
         }"
         :transition="effectiveTransition"
       >
-        <div :class="round ? 'p-0 m-0' : 'mb-4 p-5'">
-          <span
-            class="flex h-[28px] w-[28px] items-center justify-center rounded-full bg-[#0b0b0b]"
+        <!-- ✅ If flyer image is provided -->
+        <div v-if="item.image" class="relative w-full h-full">
+          <img
+            :src="item.image"
+            :alt="item.title"
+            class="object-cover w-full h-full rounded-[12px]"
+          />
+
+          <!-- Optional overlay -->
+          <div
+            v-if="item.overlay"
+            class="absolute bottom-0 left-0 w-full bg-black/50 text-white p-2"
           >
-            <i :class="item.icon" class="text-white text-base"></i>
-          </span>
+            <div class="font-bold">{{ item.title }}</div>
+            <p class="text-xs">{{ item.description }}</p>
+          </div>
         </div>
 
-        <div class="p-5">
-          <div class="mb-1 font-black text-lg text-white">{{ item.title }}</div>
+        <!-- ✅ Otherwise fallback to default (icon + text) -->
+        <div v-else>
+          <div :class="round ? 'p-0 m-0' : 'mb-4 p-5'">
+            <span
+              class="flex h-[28px] w-[28px] items-center justify-center rounded-full bg-[#0b0b0b]"
+            >
+              <i :class="item.icon" class="text-white text-base"></i>
+            </span>
+          </div>
 
-          <p class="text-sm text-white">{{ item.description }}</p>
+          <div class="p-5">
+            <div class="mb-1 font-black text-lg text-white">
+              {{ item.title }}
+            </div>
+            <p class="text-sm text-white">{{ item.description }}</p>
+          </div>
         </div>
       </Motion>
     </Motion>
 
+    <!-- Dots -->
     <div
       :class="[
         'flex w-full justify-center',
@@ -85,8 +106,8 @@
                 ? 'bg-white'
                 : 'bg-[#333333]'
               : round
-                ? 'bg-[#555]'
-                : 'bg-[rgba(51,51,51,0.4)]',
+              ? 'bg-[#555]'
+              : 'bg-[rgba(51,51,51,0.4)]',
           ]"
           :animate="{
             scale: currentIndex % items.length === index ? 1.2 : 1,
@@ -101,10 +122,12 @@
 
 <script lang="ts">
 export interface CarouselItem {
+  id: number;
   title: string;
   description: string;
-  id: number;
-  icon: string;
+  icon?: string;
+  image?: string; // 👈 optional image (flyer)
+  overlay?: boolean; // 👈 optional overlay toggle
 }
 
 export interface CarouselProps {
@@ -115,38 +138,27 @@ export interface CarouselProps {
   pauseOnHover?: boolean;
   loop?: boolean;
   round?: boolean;
+  fullWidth?: boolean; // 👈 add this line
 }
 
 export const DEFAULT_ITEMS: CarouselItem[] = [
   {
+    id: 1,
     title: "Text Animations",
     description: "Cool text animations for your projects.",
-    id: 1,
     icon: "pi pi-file",
   },
   {
+    id: 2,
     title: "Animations",
     description: "Smooth animations for your projects.",
-    id: 2,
     icon: "pi pi-circle",
   },
   {
+    id: 3,
     title: "Components",
     description: "Reusable components for your projects.",
-    id: 3,
     icon: "pi pi-objects-column",
-  },
-  {
-    title: "Backgrounds",
-    description: "Beautiful backgrounds and patterns for your projects.",
-    id: 4,
-    icon: "pi pi-table",
-  },
-  {
-    title: "Common UI",
-    description: "Common UI components are coming soon!",
-    id: 5,
-    icon: "pi pi-code",
   },
 ];
 </script>
@@ -169,6 +181,7 @@ const SPRING_OPTIONS = { type: "spring" as const, stiffness: 300, damping: 30 };
 
 const props = withDefaults(defineProps<CarouselProps>(), {
   items: () => DEFAULT_ITEMS,
+  fullWidth: false, // 👈
   baseWidth: 300,
   autoplay: false,
   autoplayDelay: 3000,
@@ -178,12 +191,17 @@ const props = withDefaults(defineProps<CarouselProps>(), {
 });
 
 const containerPadding = 16;
-const itemWidth = computed(() => props.baseWidth - containerPadding * 2);
+const itemWidth = computed(() =>
+  props.fullWidth && containerRef.value
+    ? containerRef.value.clientWidth - containerPadding * 2
+    : props.baseWidth - containerPadding * 2
+);
 const trackItemOffset = computed(() => itemWidth.value + GAP);
 
-const carouselItems = computed(() =>
-  props.loop ? [...props.items, props.items[0]] : props.items,
+const carouselItems = computed<CarouselItem[]>(() =>
+  props.loop ? [...props.items, props.items[0]] : props.items
 );
+
 const currentIndex = ref<number>(0);
 const motionX = useMotionValue(0);
 const isHovered = ref<boolean>(false);
@@ -202,7 +220,7 @@ const dragConstraints = computed(() => {
 });
 
 const effectiveTransition = computed(() =>
-  isResetting.value ? { duration: 0 } : SPRING_OPTIONS,
+  isResetting.value ? { duration: 0 } : SPRING_OPTIONS
 );
 
 const maxItems = Math.max(props.items.length + 1, 10);
@@ -250,7 +268,7 @@ const handleDragEnd = (event: Event, info: DragInfo) => {
     } else {
       currentIndex.value = Math.min(
         currentIndex.value + 1,
-        carouselItems.value.length - 1,
+        carouselItems.value.length - 1
       );
     }
   } else if (offset > DRAG_BUFFER || velocity > VELOCITY_THRESHOLD) {
@@ -313,7 +331,7 @@ watch(
   () => {
     stopAutoplay();
     startAutoplay();
-  },
+  }
 );
 
 onMounted(() => {
