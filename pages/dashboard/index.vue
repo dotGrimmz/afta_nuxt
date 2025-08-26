@@ -100,5 +100,5 @@ const {
   createEvent,
   resetEventForm,
 } = useEventsAdmin();
-definePageMeta({ layout: "admin" });
+definePageMeta({ layout: "dashboard" });
 </script>

@@ -60,12 +60,22 @@
         fullWidth
         :base-width="400"
         :autoplay="true"
-        :autoplay-delay="5000"
+        :autoplay-delay="8000"
         :pause-on-hover="true"
         :loop="true"
         :round="false"
       />
     </div>
+
+    <!-- <section class="bg-gray-800 text-white p-4 rounded">
+      <h2 class="text-lg font-bold mb-2">Auth Data</h2>
+      <pre>{{ user }}</pre>
+    </section>
+
+    <section v-if="profile" class="bg-gray-700 text-white p-4 rounded">
+      <h2 class="text-lg font-bold mb-2">Profile Data</h2>
+      <pre>{{ profile }}</pre>
+    </section> -->
   </div>
 </template>
 
