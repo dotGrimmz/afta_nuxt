@@ -13,8 +13,6 @@ const router = useRouter();
 const getRedirectTo = (): string | undefined => {
   if (typeof window !== "undefined") {
     return `${window.location.origin}/dashboard`;
-  } else {
-    return undefined;
   }
 };
 

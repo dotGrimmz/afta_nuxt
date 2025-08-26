@@ -7,25 +7,31 @@ export interface Profile {
   role: "admin" | "user";
 }
 
-export const useProfile = async () => {
+export const useProfile = () => {
   const supabase = useSupabaseClient();
   const user = useSupabaseUser();
+
   const profile = useState<Profile | null>("profile", () => null);
 
-  if (user.value && !profile.value) {
-    const { data, error } = await (supabase as SupabaseClient)
-      .from("profiles")
-      .select("id, email, username, role")
-      .eq("id", user.value.id)
-      .single();
+  if (user.value && user.value.id) {
+    useAsyncData(`profile-${user.value.id}`, async () => {
+      const { data, error } = await (supabase as SupabaseClient)
+        .from("profiles")
+        .select("id, email, username, role")
+        .eq("id", user.value!.id)
+        .single();
 
-    if (!error && data) {
+      if (error) {
+        console.error("Error loading profile:", error.message);
+        return null;
+      }
       profile.value = data as Profile;
-    }
+      return data as Profile;
+    });
   }
 
-  const isAdmin = computed((): boolean => profile.value?.role === "admin");
-  const isUser = computed((): boolean => profile.value?.role === "user");
+  const isAdmin = computed(() => profile.value?.role === "admin");
+  const isUser = computed(() => profile.value?.role === "user");
 
   return { user, profile, isAdmin, isUser };
 };

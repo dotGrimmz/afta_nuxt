@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed } from "vue";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const open = ref(false);
@@ -92,8 +92,8 @@ const route = useRoute();
 const router = useRouter();
 const supabase = useSupabaseClient();
 
-const { profile } = await useProfile();
-const loading = computed(() => !profile.value);
+// ✅ new: no await here
+const { profile } = useProfile();
 
 const signOut = async (): Promise<void> => {
   const { error } = await (supabase as SupabaseClient).auth.signOut();
@@ -125,12 +125,13 @@ const userLinks = [
   { label: "Profile", to: "/dashboard/profile", icon: "i-heroicons-user" },
 ];
 
-const isActive = (to: string) => {
-  return route.path.endsWith(to);
-};
+const isActive = (to: string) => route.path.endsWith(to);
+
+// ✅ clean loading state derived from profile
+const loading = computed(() => !profile.value);
 
 const pageTitle = computed((): string => {
-  if (loading.value) return "..."; // skeleton state
+  if (loading.value) return "..."; // skeleton
   if (profile.value?.role === "admin") return "Admin";
   if (profile.value?.role === "user" && profile.value.username) {
     return `Welcome ${profile.value.username}`;
