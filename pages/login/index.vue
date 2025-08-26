@@ -12,7 +12,7 @@ const router = useRouter();
 
 const getRedirectTo = (): string | undefined => {
   if (typeof window !== "undefined") {
-    return `${window.location.origin}/admin`;
+    return `${window.location.origin}/dashboard`;
   } else {
     return undefined;
   }
@@ -23,9 +23,9 @@ onMounted((): void => {
     data: { subscription },
   } = (supabase as SupabaseClient).auth.onAuthStateChange(
     (event: AuthChangeEvent, session: Session | null): void => {
-      //   if (event === "SIGNED_IN" && session) {
-      //     router.push("/"); // ✅ change to '/host' later if you want
-      //   }
+      if (event === "SIGNED_IN" && session) {
+        router.push("/dashboard"); // ✅ change to '/host' later if you want
+      }
     }
   );
 

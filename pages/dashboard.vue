@@ -1,5 +1,5 @@
 <script setup>
-definePageMeta({ layout: "admin" });
+definePageMeta({ layout: "dashboard" });
 </script>
 
 <template>

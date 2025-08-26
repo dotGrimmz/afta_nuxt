@@ -66,6 +66,16 @@
         :round="false"
       />
     </div>
+
+    <!-- <section class="bg-gray-800 text-white p-4 rounded">
+      <h2 class="text-lg font-bold mb-2">Auth Data</h2>
+      <pre>{{ user }}</pre>
+    </section>
+
+    <section v-if="profile" class="bg-gray-700 text-white p-4 rounded">
+      <h2 class="text-lg font-bold mb-2">Profile Data</h2>
+      <pre>{{ profile }}</pre>
+    </section> -->
   </div>
 </template>
 
