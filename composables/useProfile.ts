@@ -1,4 +1,9 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+// composables/useProfile.ts
+import type {
+  SupabaseClient,
+  AuthChangeEvent,
+  Session,
+} from "@supabase/supabase-js";
 
 export interface Profile {
   id: string;
@@ -10,24 +15,38 @@ export interface Profile {
 export const useProfile = () => {
   const supabase = useSupabaseClient();
   const user = useSupabaseUser();
-
   const profile = useState<Profile | null>("profile", () => null);
+  //@ts-ignore
+  const clientReady = import.meta.client;
 
-  if (user.value && user.value.id) {
-    useAsyncData(`profile-${user.value.id}`, async () => {
-      const { data, error } = await (supabase as SupabaseClient)
-        .from("profiles")
-        .select("id, email, username, role")
-        .eq("id", user.value!.id)
-        .single();
+  const fetchProfile = async (id: string) => {
+    const { data, error } = await (supabase as SupabaseClient)
+      .from("profiles")
+      .select("id, email, username, role")
+      .eq("id", id)
+      .single();
 
-      if (error) {
-        console.error("Error loading profile:", error.message);
-        return null;
-      }
+    if (!error && data) {
       profile.value = data as Profile;
-      return data as Profile;
-    });
+    } else {
+      console.error("Profile fetch failed:", error?.message);
+    }
+  };
+
+  // 1️⃣ Fetch when user already exists
+  if (clientReady && user.value?.id) {
+    fetchProfile(user.value.id);
+  }
+
+  // 2️⃣ Refetch after login redirect
+  if (clientReady) {
+    supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+        if (session?.user.id) {
+          fetchProfile(session.user.id);
+        }
+      }
+    );
   }
 
   const isAdmin = computed(() => profile.value?.role === "admin");

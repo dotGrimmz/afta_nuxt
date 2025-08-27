@@ -63,7 +63,17 @@
           />
           <h1 class="text-xl font-semibold">
             <span v-if="loading">...</span>
-            <span v-else>{{ pageTitle }}</span>
+            <span v-else>
+              <BlurText
+                :text="pageTitle"
+                :delay="200"
+                class-name="text-xl font-semibold text-center"
+                animate-by="words"
+                direction="top"
+                :threshold="0.1"
+                root-margin="0px"
+                :step-duration="0.35"
+            /></span>
           </h1>
         </div>
 
@@ -86,6 +96,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import BlurText from "~/components/vue-bits/TextAnimations/BlurText/BlurText.vue";
 
 const open = ref(false);
 const route = useRoute();
@@ -131,8 +142,15 @@ const isActive = (to: string) => route.path.endsWith(to);
 const loading = computed(() => !profile.value);
 
 const pageTitle = computed((): string => {
-  if (loading.value) return "..."; // skeleton
-  if (profile.value?.role === "admin") return "Admin";
+  if (loading.value) {
+    console.log(loading.value);
+    return "..."; // skeleton
+  }
+  if (profile.value?.role === "admin") {
+    return `Welcome Admin ${
+      profile.value.username ? profile.value.username : ""
+    }`;
+  }
   if (profile.value?.role === "user" && profile.value.username) {
     return `Welcome ${profile.value.username}`;
   }
