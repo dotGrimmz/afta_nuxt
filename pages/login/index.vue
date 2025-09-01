@@ -6,8 +6,9 @@ import type {
   AuthChangeEvent,
   Session,
 } from "@supabase/supabase-js";
+import type { Database } from "~/types/supabase";
 
-const supabase = useSupabaseClient();
+const supabase = useSupabaseClient<Database>();
 const router = useRouter();
 
 const getRedirectTo = (): string | undefined => {
@@ -20,17 +21,32 @@ onMounted((): void => {
   const {
     data: { subscription },
   } = (supabase as SupabaseClient).auth.onAuthStateChange(
-    (event: AuthChangeEvent, session: Session | null): void => {
+    async (event: AuthChangeEvent, session: Session | null): Promise<void> => {
       if (event === "SIGNED_IN" && session) {
-        router.push("/dashboard"); // ✅ change to '/host' later if you want
+        // fetch profile to check role
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single();
+
+        if (error) {
+          console.error("Error fetching profile after login:", error.message);
+          router.push("/dashboard/login"); // safe fallback
+          return;
+        }
+
+        if (profile?.role === "admin") {
+          router.push("/dashboard");
+        } else {
+          router.push("/dashboard/games");
+        }
       }
     }
   );
 
   onBeforeUnmount((): void => {
-    if (subscription) {
-      subscription.unsubscribe();
-    }
+    if (subscription) subscription.unsubscribe();
   });
 });
 </script>

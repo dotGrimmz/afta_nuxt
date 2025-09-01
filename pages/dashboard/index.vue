@@ -1,6 +1,11 @@
 <template>
   <div class="min-h-screen py-4">
-    <div class="mx-auto max-w-6xl space-y-6">
+    <div v-if="loading" class="space-y-4 animate-pulse">
+      <div class="h-6 w-1/3 bg-gray-700 rounded"></div>
+      <div class="h-4 w-2/3 bg-gray-700 rounded"></div>
+      <div class="h-4 w-1/2 bg-gray-700 rounded"></div>
+    </div>
+    <div v-else class="mx-auto max-w-6xl space-y-6">
       <!-- Row 1 -->
       <div
         class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch auto-rows-[clamp(18rem,40vh,26rem)] min-h-0"
@@ -26,7 +31,7 @@
                   :poll="poll"
                   @poll-updated="refreshPolls"
                   :resetVotes="resetVotes"
-                  :loading="loading"
+                  :loading="pollsLoading"
                   :deletePoll="deletePoll"
                 />
               </template>
@@ -83,7 +88,7 @@ const {
   polls: pollsData,
   refreshPolls,
   resetVotes,
-  loading,
+  loading: pollsLoading,
   deletePoll,
 } = usePollAdmin();
 
@@ -100,5 +105,17 @@ const {
   createEvent,
   resetEventForm,
 } = useEventsAdmin();
+
+const { profile } = useProfile();
+const router = useRouter();
+
+// loading is true until profile has resolved
+const loading = computed(() => profile.value === null);
 definePageMeta({ layout: "dashboard" });
+
+// watchEffect(() => {
+//   if (!loading.value && profile.value && profile.value.role !== "admin") {
+//     router.replace("/dashboard/profile");
+//   }
+// });
 </script>

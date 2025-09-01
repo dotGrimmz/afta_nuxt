@@ -122,6 +122,8 @@ const adminLinks = [
     to: "/dashboard/challenges",
     icon: "i-heroicons-calendar-days",
   },
+  { label: "Games", to: "/dashboard/games", icon: "i-heroicons-play" },
+
   { label: "Users", to: "/dashboard/users", icon: "i-heroicons-user-group" },
   {
     label: "Settings",
@@ -132,7 +134,7 @@ const adminLinks = [
 ];
 
 const userLinks = [
-  { label: "Join Game", to: "/dashboard/play", icon: "i-heroicons-play" },
+  { label: "Play", to: "/dashboard/games", icon: "i-heroicons-play" },
   { label: "Profile", to: "/dashboard/profile", icon: "i-heroicons-user" },
 ];
 

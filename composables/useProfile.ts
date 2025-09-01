@@ -1,4 +1,3 @@
-// composables/useProfile.ts
 import type {
   SupabaseClient,
   AuthChangeEvent,
@@ -16,10 +15,15 @@ export const useProfile = () => {
   const supabase = useSupabaseClient();
   const user = useSupabaseUser();
   const profile = useState<Profile | null>("profile", () => null);
+  const loading = useState<boolean>("profile-loading", () => false);
+
   //@ts-ignore
   const clientReady = import.meta.client;
 
   const fetchProfile = async (id: string) => {
+    if (profile.value) return profile.value; // ✅ don't clobber existing
+
+    loading.value = true;
     const { data, error } = await (supabase as SupabaseClient)
       .from("profiles")
       .select("id, email, username, role")
@@ -30,15 +34,26 @@ export const useProfile = () => {
       profile.value = data as Profile;
     } else {
       console.error("Profile fetch failed:", error?.message);
+      profile.value = null;
     }
+    loading.value = false;
   };
 
-  // 1️⃣ Fetch when user already exists
+  // 1️⃣ Fetch profile if user already exists
   if (clientReady && user.value?.id) {
     fetchProfile(user.value.id);
   }
 
-  // 2️⃣ Refetch after login redirect
+  // 2️⃣ React to user changes (covers login/logout)
+  watch(user, (newUser) => {
+    if (clientReady && newUser?.id) {
+      fetchProfile(newUser.id);
+    } else {
+      profile.value = null;
+    }
+  });
+
+  // 3️⃣ Refetch after login redirect
   if (clientReady) {
     supabase.auth.onAuthStateChange(
       (_event: AuthChangeEvent, session: Session | null) => {
@@ -52,5 +67,5 @@ export const useProfile = () => {
   const isAdmin = computed(() => profile.value?.role === "admin");
   const isUser = computed(() => profile.value?.role === "user");
 
-  return { user, profile, isAdmin, isUser };
+  return { user, profile, isAdmin, isUser, loading };
 };
