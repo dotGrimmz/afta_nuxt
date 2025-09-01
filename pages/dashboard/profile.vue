@@ -4,7 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const supabase = useSupabaseClient();
 const user = useSupabaseUser();
-const profile = ref<{ username: string | null } | null>(null);
+const { profile } = useProfile(); // 🔑 shared global profile
+
 const username = ref("");
 const saving = ref(false);
 const message = ref("");
@@ -18,7 +19,12 @@ onMounted(async (): Promise<void> => {
       .single();
 
     if (!error && data) {
-      profile.value = data;
+      //@ts-ignore
+      profile.value = {
+        ...profile.value,
+        ...data,
+        id: user.value.id, // Ensure id is always a string
+      }; // 🔑 sync global profile
       username.value = data.username ?? "";
     }
   }
@@ -40,6 +46,7 @@ const saveUsername = async (): Promise<void> => {
     console.error("Error saving username:", error.message);
     message.value = "Something went wrong, try again.";
   } else {
+    profile.value = { ...profile.value!, username: username.value.trim() };
     message.value = "Profile updated!";
   }
   saving.value = false;
@@ -66,7 +73,7 @@ const saveUsername = async (): Promise<void> => {
         :disabled="!username.trim()"
         @click="saveUsername"
         color="primary"
-        class="w-full"
+        class="w-full cursor-pointer"
       >
         Save
       </UButton>

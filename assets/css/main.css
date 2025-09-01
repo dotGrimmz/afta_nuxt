@@ -44,6 +44,10 @@
     background: #8B5CF6;
     color: #0b0b0e;
   }
+
+  button {
+    @apply cursor-pointer;
+  }
 }
 
 /* Custom utilities/tokens */

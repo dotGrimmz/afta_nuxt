@@ -1,4 +1,8 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  SupabaseClient,
+  AuthChangeEvent,
+  Session,
+} from "@supabase/supabase-js";
 
 export interface Profile {
   id: string;
@@ -7,25 +11,61 @@ export interface Profile {
   role: "admin" | "user";
 }
 
-export const useProfile = async () => {
+export const useProfile = () => {
   const supabase = useSupabaseClient();
   const user = useSupabaseUser();
   const profile = useState<Profile | null>("profile", () => null);
+  const loading = useState<boolean>("profile-loading", () => false);
 
-  if (user.value && !profile.value) {
+  //@ts-ignore
+  const clientReady = import.meta.client;
+
+  const fetchProfile = async (id: string) => {
+    if (profile.value) return profile.value; // ✅ don't clobber existing
+
+    loading.value = true;
     const { data, error } = await (supabase as SupabaseClient)
       .from("profiles")
       .select("id, email, username, role")
-      .eq("id", user.value.id)
+      .eq("id", id)
       .single();
 
     if (!error && data) {
       profile.value = data as Profile;
+    } else {
+      console.error("Profile fetch failed:", error?.message);
+      profile.value = null;
     }
+    loading.value = false;
+  };
+
+  // 1️⃣ Fetch profile if user already exists
+  if (clientReady && user.value?.id) {
+    fetchProfile(user.value.id);
   }
 
-  const isAdmin = computed((): boolean => profile.value?.role === "admin");
-  const isUser = computed((): boolean => profile.value?.role === "user");
+  // 2️⃣ React to user changes (covers login/logout)
+  watch(user, (newUser) => {
+    if (clientReady && newUser?.id) {
+      fetchProfile(newUser.id);
+    } else {
+      profile.value = null;
+    }
+  });
 
-  return { user, profile, isAdmin, isUser };
+  // 3️⃣ Refetch after login redirect
+  if (clientReady) {
+    supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+        if (session?.user.id) {
+          fetchProfile(session.user.id);
+        }
+      }
+    );
+  }
+
+  const isAdmin = computed(() => profile.value?.role === "admin");
+  const isUser = computed(() => profile.value?.role === "user");
+
+  return { user, profile, isAdmin, isUser, loading };
 };

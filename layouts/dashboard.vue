@@ -63,7 +63,17 @@
           />
           <h1 class="text-xl font-semibold">
             <span v-if="loading">...</span>
-            <span v-else>{{ pageTitle }}</span>
+            <span v-else>
+              <BlurText
+                :text="pageTitle"
+                :delay="200"
+                class-name="text-xl font-semibold text-center"
+                animate-by="words"
+                direction="top"
+                :threshold="0.1"
+                root-margin="0px"
+                :step-duration="0.35"
+            /></span>
           </h1>
         </div>
 
@@ -84,16 +94,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed } from "vue";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import BlurText from "~/components/vue-bits/TextAnimations/BlurText/BlurText.vue";
 
 const open = ref(false);
 const route = useRoute();
 const router = useRouter();
 const supabase = useSupabaseClient();
 
-const { profile } = await useProfile();
-const loading = computed(() => !profile.value);
+// ✅ new: no await here
+const { profile } = useProfile();
 
 const signOut = async (): Promise<void> => {
   const { error } = await (supabase as SupabaseClient).auth.signOut();
@@ -111,6 +122,8 @@ const adminLinks = [
     to: "/dashboard/challenges",
     icon: "i-heroicons-calendar-days",
   },
+  { label: "Games", to: "/dashboard/games", icon: "i-heroicons-play" },
+
   { label: "Users", to: "/dashboard/users", icon: "i-heroicons-user-group" },
   {
     label: "Settings",
@@ -121,17 +134,25 @@ const adminLinks = [
 ];
 
 const userLinks = [
-  { label: "Join Game", to: "/dashboard/play", icon: "i-heroicons-play" },
+  { label: "Play", to: "/dashboard/games", icon: "i-heroicons-play" },
   { label: "Profile", to: "/dashboard/profile", icon: "i-heroicons-user" },
 ];
 
-const isActive = (to: string) => {
-  return route.path.endsWith(to);
-};
+const isActive = (to: string) => route.path.endsWith(to);
+
+// ✅ clean loading state derived from profile
+const loading = computed(() => !profile.value);
 
 const pageTitle = computed((): string => {
-  if (loading.value) return "..."; // skeleton state
-  if (profile.value?.role === "admin") return "Admin";
+  if (loading.value) {
+    console.log(loading.value);
+    return "..."; // skeleton
+  }
+  if (profile.value?.role === "admin") {
+    return `Welcome Admin ${
+      profile.value.username ? profile.value.username : ""
+    }`;
+  }
   if (profile.value?.role === "user" && profile.value.username) {
     return `Welcome ${profile.value.username}`;
   }
