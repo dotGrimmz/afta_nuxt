@@ -13,6 +13,7 @@ const props = defineProps<{
   draws: number[];
   winners: WinnerCandidate[]; // confirmed winners
   candidates?: _BingoCardType[]; // 👈 new optional prop for players who called bingo
+  loading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -33,9 +34,12 @@ const emit = defineEmits<{
 <template>
   <div class="mt-3 p-3 bg-gray-900 rounded border border-gray-700 space-y-3">
     <h3 class="font-semibold text-lg">Game Control</h3>
+    <div v-if="loading" class="text-gray-400 text-sm">
+      Loading game state...
+    </div>
 
     <!-- Action buttons -->
-    <div class="flex gap-2">
+    <div v-else class="flex gap-2">
       <UButton
         v-if="game.status === 'active'"
         @click="emit('draw', game.id)"

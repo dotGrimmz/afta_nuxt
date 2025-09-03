@@ -61,7 +61,9 @@ const {
     payout: number
   ) => void;
   joinGame: (id: string) => void;
-  getState: (id: string) => Promise<{ draws: number[]; winners: any[] }>;
+  getState: (
+    id: string
+  ) => Promise<{ draws: number[]; winners: any[]; contestants: any[] }>;
   issueJoinCode: (
     gameId: string,
     username: string,
@@ -75,7 +77,13 @@ const {
 const stateMap = ref<
   Record<
     string,
-    { draws: number[]; winners: any[]; contestants?: any[]; candidates?: any[] }
+    {
+      draws: number[];
+      winners: any[];
+      contestants?: any[];
+      candidates?: any[];
+      loading: boolean;
+    }
   >
 >({});
 
@@ -113,14 +121,43 @@ const handleIssueCode = async (gameId: string) => {
 
 onMounted(async () => {
   if (bingoGames.value) {
+    const newState: Record<string, any> = {};
+
     for (const game of bingoGames.value) {
-      stateMap.value[game.id] = {
+      newState[game.id] = {
         ...(await getState(game.id)),
         contestants: await getContestants(game.id),
       };
     }
+
+    // 👈 replace the whole object so Vue reactivity kicks in
+    stateMap.value = newState;
   }
 });
+
+watch(
+  bingoGames,
+  async (games) => {
+    if (!games || games.length === 0) return;
+
+    const newState: Record<string, any> = {};
+    for (const game of games) {
+      newState[game.id] = {
+        draws: [],
+        winners: [],
+        candidates: [],
+        contestants: [],
+        loading: true,
+      };
+
+      const fullState = await getState(game.id);
+
+      newState[game.id] = { ...fullState, loading: false };
+    }
+    stateMap.value = newState;
+  },
+  { immediate: true } // 👈 run immediately too
+);
 </script>
 
 <template>
@@ -372,22 +409,35 @@ onMounted(async () => {
             :draws="stateMap[game.id]?.draws || []"
             :winners="stateMap[game.id]?.winners || []"
             :candidates="stateMap[game.id]?.candidates || []"
+            :loading="stateMap[game.id]?.loading ?? true"
             @draw="
               async (gameId) => {
                 await drawNumber(gameId);
-                stateMap[gameId] = await getState(gameId);
+                const newState = await getState(gameId);
+                stateMap.value = {
+                  ...stateMap.value,
+                  [gameId]: { ...newState, loading: false },
+                };
               }
             "
             @stop="
               async (gameId) => {
                 await stopGame(gameId);
-                stateMap[gameId] = await getState(gameId);
+                const newState = await getState(gameId);
+                stateMap.value = {
+                  ...stateMap.value,
+                  [gameId]: { ...newState, loading: false },
+                };
               }
             "
             @confirm="
               async ({ gameId, cardId, contestantId, payout }) => {
                 await confirmWinner(gameId, cardId, contestantId, payout);
-                stateMap[gameId] = await getState(gameId);
+                const newState = await getState(gameId);
+                stateMap.value = {
+                  ...stateMap.value,
+                  [gameId]: { ...newState, loading: false },
+                };
               }
             "
           />
