@@ -1,14 +1,18 @@
 <script setup lang="ts">
+import type { _BingoCardType } from "~/types/bingo";
 import type { Database } from "~/types/supabase";
 
-type BingoGame = Database["public"]["Tables"]["bingo_games"]["Row"];
+type BingoGame = Database["public"]["Tables"]["bingo_games"]["Row"] & {
+  payout?: number;
+};
 type BingoCard = Database["public"]["Tables"]["bingo_cards"]["Row"];
 type WinnerCandidate = BingoCard & { payout?: number };
 
 const props = defineProps<{
   game: BingoGame;
   draws: number[];
-  winners: WinnerCandidate[]; // 👈 use extended type
+  winners: WinnerCandidate[]; // confirmed winners
+  candidates?: _BingoCardType[]; // 👈 new optional prop for players who called bingo
 }>();
 
 const emit = defineEmits<{
@@ -20,7 +24,7 @@ const emit = defineEmits<{
       gameId: string;
       cardId: string;
       contestantId: string;
-      payout: number; // 👈 add this here
+      payout: number;
     }
   ): void;
 }>();
@@ -65,15 +69,47 @@ const emit = defineEmits<{
       </div>
     </div>
 
-    <!-- Winner candidates -->
+    <!-- Bingo Calls (candidates) -->
+    <div v-if="candidates && candidates.length" class="space-y-2">
+      <h3 class="text-lg font-semibold">Bingo Calls</h3>
+      <div
+        v-for="card in candidates"
+        :key="card.id"
+        class="p-2 bg-gray-700 rounded space-y-2 flex justify-between items-center"
+      >
+        <div>
+          Contestant: {{ card.contestant_id }}
+          <span class="ml-2 text-gray-400 text-xs"
+            >(Card: {{ card.id.slice(0, 6) }})</span
+          >
+        </div>
+        <UButton
+          size="xs"
+          color="primary"
+          @click="
+            emit('confirm', {
+              gameId: game.id,
+              cardId: card.id,
+              contestantId: card.contestant_id,
+              payout: game.payout || 0,
+            })
+          "
+        >
+          Confirm
+        </UButton>
+      </div>
+    </div>
+
+    <!-- Confirmed winners -->
     <div v-if="winners.length" class="space-y-2">
-      <h3 class="text-lg font-semibold">Winner Candidates</h3>
+      <h3 class="text-lg font-semibold">Confirmed Winners</h3>
       <div
         v-for="card in winners"
         :key="card.id"
-        class="p-2 bg-gray-700 rounded space-y-2"
+        class="p-2 bg-green-700 rounded space-y-2 text-white"
       >
         <div>Contestant: {{ card.contestant_id }}</div>
+        <div>Prize: {{ card.payout || 0 }}</div>
       </div>
     </div>
   </div>

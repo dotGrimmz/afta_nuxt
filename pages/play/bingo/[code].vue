@@ -2,23 +2,26 @@
 import type { Database } from "~/types/supabase";
 import BingoCard from "~/components/bingo/BingoCard.vue";
 import { useBingo } from "~/composables/useBingo";
+import { checkBingo } from "~/utils/bingo/checkBingo";
+import type { BingoCardGrid, _BingoCardType } from "~/types/bingo";
 
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
-type BingoCardType = Database["public"]["Tables"]["bingo_cards"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
 type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"];
 
 const route = useRoute();
 const supabase = useSupabaseClient<Database>();
-const { joinGame, getState } = useBingo();
+const { joinGame, getState, callBingo } = useBingo();
 
 const contestant = ref<BingoContestant | null>(null);
-const cards = ref<BingoCardType[]>([]);
+const cards = ref<_BingoCardType[]>([]);
 const draws = ref<number[]>([]);
 const winnerId = ref<string | null>(null);
 const winnerName = ref<string | null>(null);
 const loading = ref(true);
 const error = ref("");
+const calling = ref(false);
+const message = ref("");
 
 // Subscribe to realtime draws
 const subscribeToDraws = (gameId: string) => {
@@ -85,18 +88,22 @@ const subscribeToResults = (gameId: string) => {
 };
 
 // Handle "Call Bingo!"
-const callBingo = async () => {
-  if (!contestant.value || cards.value.length === 0) return;
-  const gameId = cards.value[0].game_id;
-
+const handleCallBingo = async (cardId: string) => {
   try {
-    await $fetch(`/api/bingo/games/${gameId}/call-bingo`, {
-      method: "POST",
-      body: { contestantId: contestant.value.id },
-    });
-    console.log("Bingo called by contestant:", contestant.value.username);
-  } catch (err) {
-    console.error("Failed to call bingo:", err);
+    calling.value = true;
+    if (contestant.value) {
+      await callBingo(contestant.value.game_id, cardId, contestant.value.id);
+      message.value = "Bingo called! Waiting for host confirmation...";
+      // mark locally so UI updates immediately
+      const card = cards.value.find((c: any) => c.id === cardId);
+      if (card) {
+        card.is_winner_candidate = true;
+      }
+    }
+  } catch (err: any) {
+    message.value = err.message || "Error calling bingo.";
+  } finally {
+    calling.value = false;
   }
 };
 
@@ -147,43 +154,52 @@ onMounted(async () => {
         >.
       </p>
 
-      <div class="grid gap-6 md:grid-cols-2">
-        <BingoCard
-          v-for="card in cards"
-          :key="card.id"
-          :card="card"
-          :draws="draws"
-        />
-      </div>
+      <!-- Cards grid -->
+      <div
+        v-for="card in cards"
+        :key="card.id"
+        class="bg-gray-800 p-4 rounded relative"
+        :class="{
+          'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws: draws as number[] }),
+        }"
+      >
+        <BingoCard :card="card" :draws="draws" />
 
-      <div class="mt-6 space-y-4">
+        <!-- Call Bingo button per card -->
         <UButton
-          v-if="!winnerId"
+          class="mt-2 w-full"
           color="primary"
-          class="w-full"
-          @click="callBingo"
-        >
-          Call Bingo!
-        </UButton>
-
-        <!-- Winner Banner -->
-        <div
-          v-if="winnerId"
-          class="p-4 rounded text-center"
-          :class="
-            winnerId === contestant?.id
-              ? 'bg-green-700 text-white'
-              : 'bg-red-700 text-white'
+          size="sm"
+          :loading="calling"
+          :disabled="
+            card.is_winner_candidate || !checkBingo({ grid: card.grid, draws })
           "
+          @click="handleCallBingo(card.id)"
         >
-          <template v-if="winnerId === contestant?.id">
-            🎉 Congratulations {{ winnerName }} — You Won!
-          </template>
-          <template v-else>
-            ❌ Game Over — {{ winnerName }} has already won.
-          </template>
-        </div>
+          {{ card.is_winner_candidate ? "Bingo Called" : "Call Bingo" }}
+        </UButton>
       </div>
+
+      <!-- Winner Banner -->
+      <div
+        v-if="winnerId"
+        class="p-4 rounded text-center mt-6"
+        :class="
+          winnerId === contestant?.id
+            ? 'bg-green-700 text-white'
+            : 'bg-red-700 text-white'
+        "
+      >
+        <template v-if="winnerId === contestant?.id">
+          🎉 Congratulations {{ winnerName }} — You Won!
+        </template>
+        <template v-else>
+          ❌ Game Over — {{ winnerName }} has already won.
+        </template>
+      </div>
+
+      <!-- Status message -->
+      <p v-if="message" class="text-xs text-green-400 mt-2">{{ message }}</p>
     </div>
   </main>
 </template>

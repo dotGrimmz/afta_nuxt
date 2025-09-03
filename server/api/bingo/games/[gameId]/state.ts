@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Fetch winner candidates
+  // Fetch winner candidates (cards that called bingo)
   const { data: winnerCards, error: winnerError } = await client
     .from("bingo_cards")
     .select("*")
@@ -76,6 +76,7 @@ export default defineEventHandler(async (event) => {
     game,
     draws: (draws ?? []) as BingoDraw[],
     contestants: (contestants ?? []) as BingoContestant[],
-    winnerCandidates: (winnerCards ?? []) as BingoCard[],
+    winnerCandidates: (winnerCards ?? []) as BingoCard[], // 👈 existing
+    candidates: (winnerCards ?? []) as BingoCard[], // 👈 new, alias for backwards-compatibility
   };
 });
