@@ -21,6 +21,8 @@ const winnerId = ref<string | null>(null);
 const winnerName = ref<string | null>(null);
 const payout = ref<number | null>(null);
 const gameStatus = ref<"lobby" | "active" | "ended" | string>("lobby");
+const gameEnded = ref(false);
+const winnerPayout = ref<number | null>(null); // 👈 payout for winner
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -63,24 +65,34 @@ const subscribeToResults = (gameId: string) => {
       },
       async (payload) => {
         const confirmed = payload.new as BingoResult;
-        winnerId.value = confirmed.contestant_id;
-        payout.value = confirmed.payout;
+        console.log("Winner confirmed:", confirmed);
 
-        // fetch contestant for winner name
-        const { data: winnerContestant } = await supabase
+        winnerId.value = confirmed.contestant_id;
+        winnerPayout.value = confirmed.payout ?? 0; // 👈 capture payout
+
+        // Fetch contestant details to show username
+        const { data: winnerContestant, error } = await supabase
           .from("bingo_contestants")
           .select("username")
           .eq("id", confirmed.contestant_id)
           .single();
 
-        winnerName.value =
-          winnerContestant?.username || confirmed.contestant_id;
+        if (error) {
+          console.error("Failed to fetch winner username:", error.message);
+          winnerName.value = confirmed.contestant_id;
+        } else {
+          winnerName.value =
+            winnerContestant?.username || confirmed.contestant_id;
+        }
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      console.log("Results subscription status:", status);
+    });
 };
 
 // ✅ Subscribe to game status (so losers see "Game Over")
+// Subscribe to game status (ended, etc.)
 const subscribeToGame = (gameId: string) => {
   supabase
     .channel(`bingo_games_${gameId}`)
@@ -93,11 +105,24 @@ const subscribeToGame = (gameId: string) => {
         filter: `id=eq.${gameId}`,
       },
       (payload) => {
-        const updated = payload.new as BingoGame;
-        gameStatus.value = updated.status;
+        const updated =
+          payload.new as Database["public"]["Tables"]["bingo_games"]["Row"];
+        console.log("Game update received:", updated);
+
+        if (updated.status === "ended") {
+          gameEnded.value = true; // 👈 mark locally
+          if (!winnerId.value) {
+            winnerName.value = "Another player";
+          }
+          cards.value.forEach((c) => {
+            c.is_winner_candidate = false;
+          });
+        }
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      console.log("Game subscription status:", status);
+    });
 };
 
 // ✅ Handle "Call Bingo!"
@@ -186,14 +211,13 @@ onMounted(async () => {
         <BingoCard :card="card" :draws="draws" />
 
         <UButton
+          v-if="!gameEnded"
           class="mt-2 w-full"
           color="primary"
           size="sm"
           :loading="calling"
           :disabled="
-            gameStatus === 'ended' ||
-            card.is_winner_candidate ||
-            !checkBingo({ grid: card.grid, draws })
+            card.is_winner_candidate || !checkBingo({ grid: card.grid, draws })
           "
           @click="handleCallBingo(card.id)"
         >
@@ -201,6 +225,7 @@ onMounted(async () => {
         </UButton>
       </div>
 
+      <!-- Winner Banner -->
       <!-- Winner Banner -->
       <div
         v-if="winnerId"
@@ -213,10 +238,15 @@ onMounted(async () => {
       >
         <template v-if="winnerId === contestant?.id">
           🎉 Congratulations {{ winnerName }} — You Won!
-          <p v-if="payout" class="text-sm mt-1">Prize: {{ payout }} diamonds</p>
+          <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
+            Prize: {{ winnerPayout }} 💎
+          </div>
         </template>
         <template v-else>
           ❌ Game Over — {{ winnerName }} has already won.
+          <div v-if="winnerPayout !== null" class="mt-2 text-sm">
+            Prize: {{ winnerPayout }} 💎
+          </div>
         </template>
       </div>
 

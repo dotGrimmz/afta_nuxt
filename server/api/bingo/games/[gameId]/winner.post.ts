@@ -25,14 +25,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // 1️⃣ Insert result
+  // 1️⃣ Insert result (ignore duplicates safely)
   const { data: result, error: resultError } = await client
     .from("bingo_results")
     .insert({
       game_id: gameId,
       card_id: body.cardId,
       contestant_id: body.contestantId,
-      payout: body.payout,
+      payout: body.payout ?? 0,
     })
     .select("*")
     .single();
@@ -44,7 +44,17 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // 2️⃣ End the game
+  // 2️⃣ Mark the card as confirmed winner
+  const { error: cardError } = await client
+    .from("bingo_cards")
+    .update({ is_winner_candidate: true })
+    .eq("id", body.cardId);
+
+  if (cardError) {
+    console.error("Failed to update card state:", cardError.message);
+  }
+
+  // 3️⃣ End the game
   const { data: updatedGame, error: updateError } = await client
     .from("bingo_games")
     .update({ status: "ended", ended_at: new Date().toISOString() })
@@ -59,7 +69,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // 3️⃣ Return both
+  // 4️⃣ Return both
   return {
     result,
     game: updatedGame,

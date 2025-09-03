@@ -156,7 +156,7 @@ watch(
     }
     stateMap.value = newState;
   },
-  { immediate: true } // 👈 run immediately too
+  { immediate: true }
 );
 </script>
 
@@ -378,29 +378,6 @@ watch(
               Code issued: {{ lastIssuedCode }}
             </p>
           </div>
-
-          <!-- Contestant list -->
-          <!-- <div
-            v-if="
-              stateMap[game.id]?.contestants &&
-              (stateMap[game.id]?.contestants?.length ?? 0)
-            "
-            class="mt-4 bg-gray-700 p-3 rounded"
-          >
-            <h3 class="text-sm font-semibold text-gray-200 mb-2">
-              Contestants
-            </h3>
-            <ul class="text-xs text-gray-300 space-y-1">
-              <li
-                v-for="c in stateMap[game.id].contestants"
-                :key="c.id"
-                class="flex justify-between"
-              >
-                <span>{{ c.username }} ({{ c.num_cards }} cards)</span>
-                <span class="text-green-400">{{ c.code }}</span>
-              </li>
-            </ul>
-          </div> -->
 
           <!-- Admin control panel -->
           <BingoGameControl

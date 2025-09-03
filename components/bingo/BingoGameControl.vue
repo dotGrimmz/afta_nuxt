@@ -14,11 +14,12 @@ const props = defineProps<{
   draws: number[];
   winners: WinnerCandidate[];
   candidates?: _BingoCardType[];
-  contestants?: BingoContestant[]; // 👈 new optional prop for contestant list
+  contestants?: BingoContestant[];
   loading?: boolean;
 }>();
 
 const emit = defineEmits<{
+  (e: "start", payload: { gameId: string; payout: number }): void;
   (e: "draw", gameId: string): void;
   (e: "stop", gameId: string): void;
   (
@@ -31,6 +32,21 @@ const emit = defineEmits<{
     }
   ): void;
 }>();
+
+// 👇 Track the reactive status so template always updates
+const currentStatus = ref(props.game.status);
+
+watch(
+  () => props.game.status,
+  (newStatus) => {
+    currentStatus.value = newStatus;
+  },
+  { immediate: true }
+);
+
+if (currentStatus.value === "active") {
+  console.log("current status:", toRaw(currentStatus.value));
+}
 </script>
 
 <template>
@@ -40,25 +56,39 @@ const emit = defineEmits<{
       Loading game state...
     </div>
 
-    <!-- Action buttons -->
-    <div v-else class="flex gap-2">
-      <UButton
-        v-if="game.status === 'active'"
-        @click="emit('draw', game.id)"
-        size="sm"
-        color="primary"
-      >
-        Draw Number
-      </UButton>
+    <!-- Admin Action buttons -->
+    <div v-else class="flex gap-2 items-center">
+      <!-- Lobby: Start + payout -->
+      <template v-if="currentStatus === 'lobby'">
+        <UInput
+          v-model.number="game.payout"
+          type="number"
+          class="w-24 p-1 rounded bg-gray-900 border border-gray-600 text-white text-sm"
+          placeholder="Payout"
+        />
+        <UButton
+          size="sm"
+          color="primary"
+          @click="emit('start', { gameId: game.id, payout: game.payout || 0 })"
+        >
+          Start
+        </UButton>
+      </template>
 
-      <UButton
-        v-if="game.status !== 'ended'"
-        @click="emit('stop', game.id)"
-        size="sm"
-        color="error"
-      >
-        Stop Game
-      </UButton>
+      <!-- Active: Draw + Stop -->
+      <template v-else-if="currentStatus === 'active'">
+        <UButton @click="emit('draw', game.id)" size="sm" color="primary">
+          Draw Number
+        </UButton>
+        <UButton @click="emit('stop', game.id)" size="sm" color="error">
+          Stop Game
+        </UButton>
+      </template>
+
+      <!-- Ended -->
+      <template v-else-if="currentStatus === 'ended'">
+        <span class="text-gray-400 text-sm">Game Ended</span>
+      </template>
     </div>
 
     <!-- Drawn numbers -->
@@ -134,10 +164,11 @@ const emit = defineEmits<{
       <div
         v-for="card in winners"
         :key="card.id"
-        class="p-2 bg-green-700 rounded space-y-2 text-white"
+        class="p-3 bg-green-700 rounded text-white space-y-1"
       >
-        <div>Contestant: {{ card.contestant_id }}</div>
-        <div>Prize: {{ card.payout || 0 }}</div>
+        <div class="font-semibold">Contestant: {{ card.contestant_id }}</div>
+        <div class="text-sm text-gray-200">Card: {{ card.id.slice(0, 6) }}</div>
+        <div class="text-lg font-bold">Prize: {{ card.payout ?? 0 }} 💎</div>
       </div>
     </div>
   </div>
