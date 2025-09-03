@@ -5,16 +5,45 @@ import { useBingo } from "~/composables/useBingo";
 
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoCardType = Database["public"]["Tables"]["bingo_cards"]["Row"];
+type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
 
 const route = useRoute();
-const { joinGame } = useBingo();
+const supabase = useSupabaseClient<Database>();
+const { joinGame, getState } = useBingo();
 
 const contestant = ref<BingoContestant | null>(null);
 const cards = ref<BingoCardType[]>([]);
+const draws = ref<number[]>([]);
 const loading = ref(true);
 const error = ref("");
 
-// Try joining with code from the URL
+// Subscribe to realtime draws for this game
+const subscribeToDraws = (gameId: string) => {
+  supabase
+    .channel(`bingo_draws_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "bingo_draws",
+        filter: `game_id=eq.${gameId}`,
+      },
+      (payload) => {
+        const newDraw = payload.new as { number: number };
+        console.log("Realtime payload received:", payload);
+
+        if (!draws.value.includes(newDraw.number)) {
+          draws.value.push(newDraw.number);
+          console.log("Updated draws:", draws.value);
+        }
+      }
+    )
+    .subscribe((status) => {
+      console.log("Subscription status:", status);
+    });
+};
+
 onMounted(async () => {
   try {
     const code = route.params.code as string;
@@ -23,6 +52,18 @@ onMounted(async () => {
     if (result) {
       contestant.value = result.contestant;
       cards.value = result.cards;
+
+      const gameId = result.cards[0]?.game_id;
+      if (gameId) {
+        // Load current state
+        const state = await getState(gameId);
+        if (state) {
+          draws.value = state.draws;
+        }
+
+        // Start realtime subscription
+        subscribeToDraws(gameId);
+      }
     } else {
       error.value = "Invalid or expired join code.";
     }
@@ -42,8 +83,7 @@ onMounted(async () => {
 
     <div v-else>
       <h1 class="text-2xl font-bold">
-        Welcome, Contestant
-        {{ contestant?.username || contestant?.id.slice(0, 6) }}
+        Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
       </h1>
       <p class="text-sm text-gray-400">
         You have {{ cards.length }} card<span v-if="cards.length !== 1">s</span
@@ -51,7 +91,12 @@ onMounted(async () => {
       </p>
 
       <div class="grid gap-6 md:grid-cols-2">
-        <BingoCard v-for="card in cards" :key="card.id" :card="card" />
+        <BingoCard
+          v-for="card in cards"
+          :key="card.id"
+          :card="card"
+          :draws="draws"
+        />
       </div>
 
       <div class="mt-6">
