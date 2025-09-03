@@ -162,7 +162,7 @@ export const useBingo = () => {
     draws: number[];
     winners: _BingoCardType[];
     candidates: _BingoCardType[];
-    contestants?: ContestantType[];
+    contestants: ContestantType[];
   }> => {
     try {
       const data = await $fetch<{
@@ -174,8 +174,9 @@ export const useBingo = () => {
 
       return {
         draws: data.draws.map((d) => d.number),
-        winners: data.winnerCandidates,
+        winners: data.winnerCandidates || [],
         candidates: data.candidates || [], // 👈 new, but defaults safe
+        contestants: data.contestants || [],
       };
     } catch (err: any) {
       console.error(err);
