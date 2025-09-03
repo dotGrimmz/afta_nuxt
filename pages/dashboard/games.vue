@@ -1,106 +1,405 @@
 <script setup lang="ts">
+import type { Database } from "~/types/supabase";
+import { calculateCost } from "~/utils/bingo/pricing";
+
 const { profile } = useProfile();
+
+// Trivia composable (unchanged)
 const {
-  games,
-  visibleGames,
-  loading,
-  creating,
-  message,
-  createGame,
-  startGame,
-  // endGame,
-  joinGame,
+  games: triviaGames,
+  visibleGames: visibleTriviaGames,
+  loading: triviaLoading,
+  creating: triviaCreating,
+  message: triviaMessage,
+  createGame: createTriviaGame,
+  startGame: startTriviaGame,
+  joinGame: joinTriviaGame,
 } = useTrivia();
 
-watch(visibleGames, () => {
-  console.log("profile:", profile.value);
-  console.log("all games:", toRaw(games.value));
-  console.log("visibleGames:", toRaw(visibleGames.value));
+const newTriviaTitle = ref("");
+
+// Bingo composable (new)
+type BingoGame = {
+  id: string;
+  created_at: string;
+  ended_at: string | null;
+  min_players: number;
+  status: string;
+  payout?: number;
+};
+
+type ContestantType =
+  Database["public"]["Tables"]["bingo_contestants"]["Row"][];
+
+const {
+  games: bingoGames,
+  loading: bingoLoading,
+  creating: bingoCreating,
+  message: bingoMessage,
+  createGame: createBingoGame,
+  startGame: startBingoGame,
+  stopGame,
+  drawNumber,
+  confirmWinner,
+  joinGame: joinBingoGame,
+  getState,
+  issueJoinCode,
+  getContestants,
+} = useBingo() as {
+  games: Ref<BingoGame[]>;
+  loading: Ref<boolean>;
+  creating: Ref<boolean>;
+  message: Ref<string>;
+  createGame: () => void;
+  startGame: (id: string, payout: number) => void;
+  stopGame: (id: string) => void;
+  drawNumber: (id: string) => void;
+  confirmWinner: (
+    gameId: string,
+    cardId: string,
+    contestantId: string,
+    payout: number
+  ) => void;
+  joinGame: (id: string) => void;
+  getState: (id: string) => Promise<{ draws: number[]; winners: any[] }>;
+  issueJoinCode: (
+    gameId: string,
+    username: string,
+    numCards: number,
+    freeSpace: boolean,
+    autoMark: boolean
+  ) => Promise<{ contestant: any; code: string; cards: any[] }>;
+  getContestants: (gameId: string) => Promise<any[]>;
+};
+
+const stateMap = ref<
+  Record<
+    string,
+    { draws: number[]; winners: any[]; contestants?: any[]; candidates?: any[] }
+  >
+>({});
+
+// For issuing join codes
+const newContestant = reactive({
+  username: "",
+  numCards: 1,
+  freeSpace: false,
+  autoMark: false,
 });
 
-const newGameTitle = ref("");
+const lastIssuedCode = ref<string | null>(null);
+
+const handleIssueCode = async (gameId: string) => {
+  try {
+    const { code } = await issueJoinCode(
+      gameId,
+      newContestant.username,
+      newContestant.numCards,
+      newContestant.freeSpace,
+      newContestant.autoMark
+    );
+
+    lastIssuedCode.value = code;
+
+    // reset form
+    newContestant.username = "";
+    newContestant.numCards = 1;
+    newContestant.freeSpace = false;
+    newContestant.autoMark = false;
+  } catch (err) {
+    console.error("Error issuing join code:", err);
+  }
+};
+
+onMounted(async () => {
+  if (bingoGames.value) {
+    for (const game of bingoGames.value) {
+      stateMap.value[game.id] = {
+        ...(await getState(game.id)),
+        contestants: await getContestants(game.id),
+      };
+    }
+  }
+});
 </script>
 
 <template>
-  <main class="p-2 space-y-4">
-    <h1 class="text-2xl font-bold">Trivia Games</h1>
+  <main class="p-2 space-y-8">
+    <!-- Trivia Games Section -->
+    <section>
+      <h1 class="text-2xl font-bold mb-2">Trivia Games</h1>
 
-    <!-- Admin-only: Create Game Form -->
-    <div
-      v-if="profile?.role === 'admin'"
-      class="bg-gray-800 p-4 rounded space-y-3"
-    >
-      <label class="block">
-        <span class="text-sm text-gray-300">Game Title</span>
-        <input
-          v-model="newGameTitle"
-          type="text"
-          class="w-full mt-1 p-2 rounded bg-gray-900 border border-gray-600 text-white"
-          placeholder="Enter a game title"
-        />
-      </label>
-
-      <UButton
-        :loading="creating"
-        :disabled="!newGameTitle.trim()"
-        :click="createGame"
-        color="primary"
-        class="w-full"
-      >
-        Create Game
-      </UButton>
-
-      <p v-if="message" class="text-sm mt-2">{{ message }}</p>
-    </div>
-
-    <!-- Loading -->
-    <div v-if="loading">Loading games...</div>
-
-    <!-- No games -->
-    <div v-else-if="visibleGames.length === 0" class="text-gray-400">
-      <span v-if="profile?.role === 'admin'">
-        No games created yet. Create one to get started!
-      </span>
-      <span v-else> No live games available right now. </span>
-    </div>
-
-    <!-- Games list -->
-    <div v-else>
+      <!-- Admin-only: Create Trivia Game -->
       <div
-        v-for="game in visibleGames"
-        :key="game.id"
-        class="p-2 my-2 bg-gray-800 rounded flex justify-between items-center"
+        v-if="profile?.role === 'admin'"
+        class="bg-gray-800 p-4 rounded space-y-3"
       >
-        <div>
-          <p class="font-semibold">{{ game.title }}</p>
-          <p class="text-sm text-gray-400">Status: {{ game.status }}</p>
-        </div>
+        <label class="block">
+          <span class="text-sm text-gray-300">Game Title</span>
+          <input
+            v-model="newTriviaTitle"
+            type="text"
+            class="w-full mt-1 p-2 rounded bg-gray-900 border border-gray-600 text-white"
+            placeholder="Enter a game title"
+          />
+        </label>
 
-        <div class="flex gap-2">
-          <!-- Admin controls -->
-          <template v-if="profile?.role === 'admin'">
-            <UButton :to="`/play/${game.id}`" size="sm">Open</UButton>
-            <UButton
-              v-if="game.status === 'lobby'"
-              @click="startGame(game.id)"
-              size="sm"
-              color="primary"
-            >
-              Start
-            </UButton>
-            <UButton v-if="game.status !== 'ended'" size="sm" color="error">
-              End
-            </UButton>
-          </template>
+        <UButton
+          :loading="triviaCreating"
+          :disabled="!newTriviaTitle.trim()"
+          @click="createTriviaGame(newTriviaTitle)"
+          color="primary"
+          class="w-full"
+        >
+          Create Game
+        </UButton>
 
-          <!-- Non-admin controls -->
-          <template v-else>
-            <UButton @click="joinGame(game.id)" size="sm" color="primary">
-              Join
-            </UButton>
-          </template>
+        <p v-if="triviaMessage" class="text-sm mt-2">{{ triviaMessage }}</p>
+      </div>
+
+      <!-- Loading -->
+      <div v-if="triviaLoading">Loading games...</div>
+
+      <!-- No games -->
+      <div v-else-if="visibleTriviaGames.length === 0" class="text-gray-400">
+        <span v-if="profile?.role === 'admin'">
+          No trivia games created yet. Create one to get started!
+        </span>
+        <span v-else> No live trivia games available right now. </span>
+      </div>
+
+      <!-- Games list -->
+      <div v-else>
+        <div
+          v-for="game in visibleTriviaGames"
+          :key="game.id"
+          class="p-2 my-2 bg-gray-800 rounded flex justify-between items-center"
+        >
+          <div>
+            <p class="font-semibold">{{ game.title }}</p>
+            <p class="text-sm text-gray-400">Status: {{ game.status }}</p>
+          </div>
+
+          <div class="flex gap-2">
+            <template v-if="profile?.role === 'admin'">
+              <UButton :to="`/play/${game.id}`" size="sm">Open</UButton>
+              <UButton
+                v-if="game.status === 'lobby'"
+                @click="startTriviaGame(game.id)"
+                size="sm"
+                color="primary"
+              >
+                Start
+              </UButton>
+              <UButton v-if="game.status !== 'ended'" size="sm" color="error">
+                End
+              </UButton>
+            </template>
+
+            <template v-else>
+              <UButton
+                @click="joinTriviaGame(game.id)"
+                size="sm"
+                color="primary"
+              >
+                Join
+              </UButton>
+            </template>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
+
+    <!-- Bingo Games Section -->
+    <section>
+      <h1 class="text-2xl font-bold mb-2">Bingo Games</h1>
+
+      <!-- Admin-only: Create Bingo Game -->
+      <div
+        v-if="profile?.role === 'admin'"
+        class="bg-gray-800 p-4 rounded space-y-3"
+      >
+        <UButton
+          :loading="bingoCreating"
+          @click="createBingoGame()"
+          color="primary"
+          class="w-full"
+        >
+          Create Game
+        </UButton>
+
+        <p v-if="bingoMessage" class="text-sm mt-2">{{ bingoMessage }}</p>
+      </div>
+
+      <!-- Loading -->
+      <div v-if="bingoLoading">Loading games...</div>
+
+      <!-- No games -->
+      <div
+        v-else-if="!bingoGames || bingoGames.length === 0"
+        class="text-gray-400"
+      >
+        <span v-if="profile?.role === 'admin'">
+          No bingo games created yet. Create one to get started!
+        </span>
+        <span v-else> No live bingo games available right now. </span>
+      </div>
+
+      <!-- Games list -->
+      <div v-else>
+        <div
+          v-for="(game, index) in bingoGames"
+          :key="game.id"
+          class="p-2 my-2 bg-gray-800 rounded"
+        >
+          <!-- Game header -->
+          <div class="flex justify-between items-center">
+            <div>
+              <p class="font-semibold">
+                Bingo Game – # {{ bingoGames.length - index }}
+              </p>
+              <p class="text-sm text-gray-400">Status: {{ game.status }}</p>
+            </div>
+
+            <!-- Inline: Start & payout input -->
+            <div v-if="profile?.role === 'admin'" class="flex gap-2">
+              <UInput
+                v-if="game.status === 'lobby'"
+                v-model.number="game.payout"
+                type="number"
+                class="w-24 p-1 rounded bg-gray-900 border border-gray-600 text-white text-sm"
+                placeholder="Payout"
+              />
+
+              <UButton
+                v-if="game.status === 'lobby'"
+                @click="startBingoGame(game.id, game.payout || 0)"
+                size="sm"
+                color="primary"
+              >
+                Start
+              </UButton>
+            </div>
+          </div>
+
+          <!-- Issue Join Code panel -->
+          <div
+            v-if="profile?.role === 'admin' && game.status === 'lobby'"
+            class="mt-4 bg-gray-700 p-3 rounded"
+          >
+            <h3 class="text-sm font-semibold text-gray-200 mb-2">
+              Issue Join Code
+            </h3>
+
+            <div class="grid grid-cols-2 gap-2">
+              <UInput
+                v-model="newContestant.username"
+                placeholder="Username"
+                size="sm"
+                class="bg-gray-900 border border-gray-600 text-white"
+              />
+              <UInput
+                v-model.number="newContestant.numCards"
+                type="number"
+                min="1"
+                placeholder="Cards"
+                size="sm"
+                class="bg-gray-900 border border-gray-600 text-white"
+              />
+
+              <label class="flex items-center text-xs text-gray-300 space-x-1">
+                <input v-model="newContestant.freeSpace" type="checkbox" />
+                <span>Free Space</span>
+              </label>
+              <label class="flex items-center text-xs text-gray-300 space-x-1">
+                <input v-model="newContestant.autoMark" type="checkbox" />
+                <span>Auto Mark</span>
+              </label>
+            </div>
+
+            <p class="text-xs text-gray-400 mt-2">
+              Expected Cost:
+              {{
+                calculateCost(
+                  newContestant.numCards || 0,
+                  newContestant.freeSpace || false
+                )
+              }}
+              diamonds
+            </p>
+
+            <UButton
+              class="mt-2 w-full"
+              size="sm"
+              color="primary"
+              @click="handleIssueCode(game.id)"
+            >
+              Generate Code
+            </UButton>
+
+            <p v-if="lastIssuedCode" class="text-xs text-green-400 mt-2">
+              Code issued: {{ lastIssuedCode }}
+            </p>
+          </div>
+
+          <!-- Contestant list -->
+          <div
+            v-if="
+              stateMap[game.id]?.contestants &&
+              (stateMap[game.id]?.contestants?.length ?? 0)
+            "
+            class="mt-4 bg-gray-700 p-3 rounded"
+          >
+            <h3 class="text-sm font-semibold text-gray-200 mb-2">
+              Contestants
+            </h3>
+            <ul class="text-xs text-gray-300 space-y-1">
+              <li
+                v-for="c in stateMap[game.id].contestants"
+                :key="c.id"
+                class="flex justify-between"
+              >
+                <span>{{ c.username }} ({{ c.num_cards }} cards)</span>
+                <span class="text-green-400">{{ c.code }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Admin control panel -->
+          <BingoGameControl
+            v-if="profile?.role === 'admin'"
+            :game="game"
+            :draws="stateMap[game.id]?.draws || []"
+            :winners="stateMap[game.id]?.winners || []"
+            :candidates="stateMap[game.id]?.candidates || []"
+            @draw="
+              async (gameId) => {
+                await drawNumber(gameId);
+                stateMap[gameId] = await getState(gameId);
+              }
+            "
+            @stop="
+              async (gameId) => {
+                await stopGame(gameId);
+                stateMap[gameId] = await getState(gameId);
+              }
+            "
+            @confirm="
+              async ({ gameId, cardId, contestantId, payout }) => {
+                await confirmWinner(gameId, cardId, contestantId, payout);
+                stateMap[gameId] = await getState(gameId);
+              }
+            "
+          />
+
+          <!-- Player control -->
+          <div v-else class="flex gap-2 mt-2">
+            <UButton @click="joinBingoGame(game.id)" size="sm" color="primary">
+              Join
+            </UButton>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 </template>
