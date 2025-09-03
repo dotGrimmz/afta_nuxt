@@ -2,6 +2,15 @@ import { serverSupabaseClient } from "#supabase/server";
 import type { Database } from "~/types/supabase";
 import { insertBingoCard } from "~/utils/bingo/insertCard";
 
+function generateJoinCode(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  for (let i = 0; i < 4; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `BINGO-${code}`;
+}
+
 export default defineEventHandler(async (event) => {
   const client = await serverSupabaseClient<Database>(event);
   const gameId = event.context.params?.gameId;
@@ -9,11 +18,10 @@ export default defineEventHandler(async (event) => {
   if (!gameId) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Missing gameId in route params",
+      statusMessage: "Missing gameId in route",
     });
   }
 
-  // Body: username, numCards, freeSpace flag, autoMark flag
   const body = await readBody<{
     username: string;
     numCards: number;
@@ -24,17 +32,35 @@ export default defineEventHandler(async (event) => {
   if (!body?.username || !body?.numCards) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Missing username or numCards in request body",
+      statusMessage: "Missing username or numCards",
     });
   }
 
-  // Generate unique join code
-  const joinCode = `BINGO-${Math.random()
-    .toString(36)
-    .substring(2, 6)
-    .toUpperCase()}`;
+  // 1️⃣ Check game status
+  const { data: game, error: gameError } = await client
+    .from("bingo_games")
+    .select("status")
+    .eq("id", gameId)
+    .single();
 
-  // Create contestant
+  if (gameError || !game) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Game not found",
+    });
+  }
+
+  if (game.status !== "lobby") {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Cannot join — game already started",
+    });
+  }
+
+  // 2️⃣ Generate join code
+  const joinCode = generateJoinCode();
+
+  // 3️⃣ Insert contestant
   const { data: contestant, error: contestantError } = await client
     .from("bingo_contestants")
     .insert({
@@ -43,17 +69,17 @@ export default defineEventHandler(async (event) => {
       code: joinCode,
       num_cards: body.numCards,
     })
-    .select()
+    .select("*")
     .single();
 
-  if (contestantError) {
+  if (contestantError || !contestant) {
     throw createError({
       statusCode: 500,
-      statusMessage: contestantError.message,
+      statusMessage: contestantError?.message || "Failed to add contestant",
     });
   }
 
-  // Generate cards for this contestant
+  // 4️⃣ Generate cards
   const cards = [];
   for (let i = 0; i < body.numCards; i++) {
     const card = await insertBingoCard(
@@ -68,7 +94,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     contestant,
-    code: joinCode,
+    code: joinCode, // 👈 return it so client sees join code
     cards,
   };
 });

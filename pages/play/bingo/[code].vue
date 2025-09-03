@@ -19,7 +19,7 @@ const draws = ref<number[]>([]);
 const winnerId = ref<string | null>(null);
 const winnerName = ref<string | null>(null);
 const loading = ref(true);
-const error = ref("");
+const error = ref<string | null>(null);
 const calling = ref(false);
 const message = ref("");
 
@@ -133,7 +133,10 @@ onMounted(async () => {
     }
   } catch (err: any) {
     console.error(err);
-    error.value = "Failed to join game.";
+    error.value =
+      err?.data?.statusMessage ||
+      err?.message ||
+      "Could not join this game. It may have already started.";
   } finally {
     loading.value = false;
   }
@@ -143,8 +146,12 @@ onMounted(async () => {
 <template>
   <main class="p-4 space-y-6">
     <div v-if="loading" class="text-gray-400">Loading your cards...</div>
-    <div v-else-if="error" class="text-red-500">{{ error }}</div>
-
+    <div
+      v-else-if="error"
+      class="p-3 rounded bg-red-700 text-white text-center"
+    >
+      {{ error }}
+    </div>
     <div v-else>
       <h1 class="text-2xl font-bold">
         Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
