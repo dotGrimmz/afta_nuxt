@@ -6,6 +6,7 @@ import { useBingo } from "~/composables/useBingo";
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoCardType = Database["public"]["Tables"]["bingo_cards"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
+type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"];
 
 const route = useRoute();
 const supabase = useSupabaseClient<Database>();
@@ -14,10 +15,12 @@ const { joinGame, getState } = useBingo();
 const contestant = ref<BingoContestant | null>(null);
 const cards = ref<BingoCardType[]>([]);
 const draws = ref<number[]>([]);
+const winnerId = ref<string | null>(null);
+const winnerName = ref<string | null>(null);
 const loading = ref(true);
 const error = ref("");
 
-// Subscribe to realtime draws for this game
+// Subscribe to realtime draws
 const subscribeToDraws = (gameId: string) => {
   supabase
     .channel(`bingo_draws_${gameId}`)
@@ -30,18 +33,71 @@ const subscribeToDraws = (gameId: string) => {
         filter: `game_id=eq.${gameId}`,
       },
       (payload) => {
-        const newDraw = payload.new as { number: number };
-        console.log("Realtime payload received:", payload);
-
+        const newDraw = payload.new as BingoDraw;
         if (!draws.value.includes(newDraw.number)) {
           draws.value.push(newDraw.number);
-          console.log("Updated draws:", draws.value);
+          console.log("New draw received:", newDraw.number);
         }
       }
     )
     .subscribe((status) => {
-      console.log("Subscription status:", status);
+      console.log("Draws subscription status:", status);
     });
+};
+
+// Subscribe to confirmed winners
+const subscribeToResults = (gameId: string) => {
+  supabase
+    .channel(`bingo_results_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "bingo_results",
+        filter: `game_id=eq.${gameId}`,
+      },
+      async (payload) => {
+        const confirmed = payload.new as BingoResult;
+        console.log("Winner confirmed:", confirmed);
+
+        winnerId.value = confirmed.contestant_id;
+
+        // Fetch contestant details to show username
+        const { data: winnerContestant, error } = await supabase
+          .from("bingo_contestants")
+          .select("username")
+          .eq("id", confirmed.contestant_id)
+          .single();
+
+        if (error) {
+          console.error("Failed to fetch winner username:", error.message);
+          winnerName.value = confirmed.contestant_id;
+        } else {
+          winnerName.value =
+            winnerContestant?.username || confirmed.contestant_id;
+        }
+      }
+    )
+    .subscribe((status) => {
+      console.log("Results subscription status:", status);
+    });
+};
+
+// Handle "Call Bingo!"
+const callBingo = async () => {
+  if (!contestant.value || cards.value.length === 0) return;
+  const gameId = cards.value[0].game_id;
+
+  try {
+    await $fetch(`/api/bingo/games/${gameId}/call-bingo`, {
+      method: "POST",
+      body: { contestantId: contestant.value.id },
+    });
+    console.log("Bingo called by contestant:", contestant.value.username);
+  } catch (err) {
+    console.error("Failed to call bingo:", err);
+  }
 };
 
 onMounted(async () => {
@@ -55,14 +111,15 @@ onMounted(async () => {
 
       const gameId = result.cards[0]?.game_id;
       if (gameId) {
-        // Load current state
+        // Load initial state
         const state = await getState(gameId);
         if (state) {
           draws.value = state.draws;
         }
 
-        // Start realtime subscription
+        // Start realtime subscriptions
         subscribeToDraws(gameId);
+        subscribeToResults(gameId);
       }
     } else {
       error.value = "Invalid or expired join code.";
@@ -99,8 +156,33 @@ onMounted(async () => {
         />
       </div>
 
-      <div class="mt-6">
-        <UButton color="primary" class="w-full">Call Bingo!</UButton>
+      <div class="mt-6 space-y-4">
+        <UButton
+          v-if="!winnerId"
+          color="primary"
+          class="w-full"
+          @click="callBingo"
+        >
+          Call Bingo!
+        </UButton>
+
+        <!-- Winner Banner -->
+        <div
+          v-if="winnerId"
+          class="p-4 rounded text-center"
+          :class="
+            winnerId === contestant?.id
+              ? 'bg-green-700 text-white'
+              : 'bg-red-700 text-white'
+          "
+        >
+          <template v-if="winnerId === contestant?.id">
+            🎉 Congratulations {{ winnerName }} — You Won!
+          </template>
+          <template v-else>
+            ❌ Game Over — {{ winnerName }} has already won.
+          </template>
+        </div>
       </div>
     </div>
   </main>

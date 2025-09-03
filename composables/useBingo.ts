@@ -59,20 +59,20 @@ export const useBingo = () => {
     }
   };
 
-  const startGame = async (gameId: string): Promise<void> => {
+  const startGame = async (gameId: string, payout: number): Promise<void> => {
     try {
-      const { error } = await supabase
-        .from("bingo_games")
-        .update({ status: "active" })
-        .eq("id", gameId);
+      const { game } = await $fetch(`/api/bingo/games/${gameId}/start`, {
+        method: "POST",
+        body: { payout },
+      });
 
-      if (error) {
-        throw error;
-      }
-
+      // update local state with returned game
+      games.value = (games.value ?? []).map((g) =>
+        g.id === game.id ? game : g
+      );
       await refresh();
     } catch (err: any) {
-      console.error(err);
+      console.error("Failed to start bingo game:", err);
       message.value = err.message;
     }
   };
@@ -122,20 +122,15 @@ export const useBingo = () => {
     cardId: string,
     contestantId: string,
     payout: number
-  ): Promise<BingoResult | undefined> => {
+  ) => {
     try {
-      const data = await $fetch<{
-        result: BingoResult;
-      }>(`/api/bingo/games/${gameId}/winner`, {
+      return await $fetch(`/api/bingo/games/${gameId}/winner`, {
         method: "POST",
         body: { cardId, contestantId, payout },
       });
-
-      message.value = "Winner confirmed!";
-      return data.result;
     } catch (err: any) {
-      console.error(err);
-      message.value = err.message;
+      console.error("Failed to confirm winner:", err);
+      throw err;
     }
   };
 

@@ -3,11 +3,12 @@ import type { Database } from "~/types/supabase";
 
 type BingoGame = Database["public"]["Tables"]["bingo_games"]["Row"];
 type BingoCard = Database["public"]["Tables"]["bingo_cards"]["Row"];
+type WinnerCandidate = BingoCard & { payout?: number };
 
 const props = defineProps<{
   game: BingoGame;
   draws: number[];
-  winners: BingoCard[];
+  winners: WinnerCandidate[]; // 👈 use extended type
 }>();
 
 const emit = defineEmits<{
@@ -15,7 +16,12 @@ const emit = defineEmits<{
   (e: "stop", gameId: string): void;
   (
     e: "confirm",
-    payload: { gameId: string; cardId: string; contestantId: string }
+    payload: {
+      gameId: string;
+      cardId: string;
+      contestantId: string;
+      payout: number; // 👈 add this here
+    }
   ): void;
 }>();
 </script>
@@ -60,33 +66,15 @@ const emit = defineEmits<{
     </div>
 
     <!-- Winner candidates -->
-    <div v-if="winners.length">
-      <h4 class="font-medium mb-1">Winner Candidates</h4>
-      <ul class="space-y-1">
-        <li
-          v-for="card in winners"
-          :key="card.id"
-          class="flex justify-between items-center bg-gray-800 p-2 rounded"
-        >
-          <span>
-            Card {{ card.id.slice(0, 6) }} (Contestant
-            {{ card.contestant_id.slice(0, 6) }})
-          </span>
-          <UButton
-            size="xs"
-            color="success"
-            @click="
-              emit('confirm', {
-                gameId: game.id,
-                cardId: card.id,
-                contestantId: card.contestant_id,
-              })
-            "
-          >
-            Confirm Winner
-          </UButton>
-        </li>
-      </ul>
+    <div v-if="winners.length" class="space-y-2">
+      <h3 class="text-lg font-semibold">Winner Candidates</h3>
+      <div
+        v-for="card in winners"
+        :key="card.id"
+        class="p-2 bg-gray-700 rounded space-y-2"
+      >
+        <div>Contestant: {{ card.contestant_id }}</div>
+      </div>
     </div>
   </div>
 </template>

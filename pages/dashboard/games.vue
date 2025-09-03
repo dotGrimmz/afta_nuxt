@@ -16,6 +16,15 @@ const {
 const newTriviaTitle = ref("");
 
 // Bingo composable (new)
+type BingoGame = {
+  id: string;
+  created_at: string;
+  ended_at: string | null;
+  min_players: number;
+  status: string;
+  payout?: number;
+};
+
 const {
   games: bingoGames,
   loading: bingoLoading,
@@ -28,7 +37,24 @@ const {
   confirmWinner,
   joinGame: joinBingoGame,
   getState,
-} = useBingo();
+} = useBingo() as {
+  games: Ref<BingoGame[]>;
+  loading: Ref<boolean>;
+  creating: Ref<boolean>;
+  message: Ref<string>;
+  createGame: () => void;
+  startGame: (id: string, payout: number) => void;
+  stopGame: (id: string) => void;
+  drawNumber: (id: string) => void;
+  confirmWinner: (
+    gameId: string,
+    cardId: string,
+    contestantId: string,
+    payout: number
+  ) => void;
+  joinGame: (id: string) => void;
+  getState: (id: string) => Promise<{ draws: number[]; winners: any[] }>;
+};
 
 const stateMap = ref<Record<string, { draws: number[]; winners: any[] }>>({});
 
@@ -170,9 +196,17 @@ onMounted(async () => {
 
             <!-- Inline: only Start -->
             <div v-if="profile?.role === 'admin'" class="flex gap-2">
+              <UInput
+                v-if="game.status === 'lobby'"
+                v-model.number="game.payout"
+                type="number"
+                class="w-24 p-1 rounded bg-gray-900 border border-gray-600 text-white text-sm"
+                placeholder="Payout"
+              />
+
               <UButton
                 v-if="game.status === 'lobby'"
-                @click="startBingoGame(game.id)"
+                @click="startBingoGame(game.id, game.payout || 0)"
                 size="sm"
                 color="primary"
               >
@@ -200,8 +234,8 @@ onMounted(async () => {
               }
             "
             @confirm="
-              async ({ gameId, cardId, contestantId }) => {
-                await confirmWinner(gameId, cardId, contestantId, 1000);
+              async ({ gameId, cardId, contestantId, payout }) => {
+                await confirmWinner(gameId, cardId, contestantId, payout);
                 stateMap[gameId] = await getState(gameId);
               }
             "

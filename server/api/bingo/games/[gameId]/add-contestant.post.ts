@@ -1,39 +1,74 @@
-import { createContestant } from "~/utils/bingo/createContestant";
+import { serverSupabaseClient } from "#supabase/server";
 import type { Database } from "~/types/supabase";
-
-type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
-type BingoCard = Database["public"]["Tables"]["bingo_cards"]["Row"];
+import { insertBingoCard } from "~/utils/bingo/insertCard";
 
 export default defineEventHandler(async (event) => {
+  const client = await serverSupabaseClient<Database>(event);
   const gameId = event.context.params?.gameId;
-  const body = await readBody(event);
 
   if (!gameId) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Missing gameId in route",
+      statusMessage: "Missing gameId in route params",
     });
   }
 
-  if (!body?.username) {
+  // Body: username, numCards, freeSpace flag, autoMark flag
+  const body = await readBody<{
+    username: string;
+    numCards: number;
+    freeSpace?: boolean;
+    autoMark?: boolean;
+  }>(event);
+
+  if (!body?.username || !body?.numCards) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Missing username in request body",
+      statusMessage: "Missing username or numCards in request body",
     });
   }
 
-  const result = await createContestant(
-    event,
-    gameId,
-    body.username as string,
-    body.numCards ?? 1,
-    body.freeSpace ?? false,
-    body.autoMark ?? false
-  );
+  // Generate unique join code
+  const joinCode = `BINGO-${Math.random()
+    .toString(36)
+    .substring(2, 6)
+    .toUpperCase()}`;
+
+  // Create contestant
+  const { data: contestant, error: contestantError } = await client
+    .from("bingo_contestants")
+    .insert({
+      game_id: gameId,
+      username: body.username,
+      code: joinCode,
+      num_cards: body.numCards,
+    })
+    .select()
+    .single();
+
+  if (contestantError) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: contestantError.message,
+    });
+  }
+
+  // Generate cards for this contestant
+  const cards = [];
+  for (let i = 0; i < body.numCards; i++) {
+    const card = await insertBingoCard(
+      event,
+      gameId,
+      contestant.id,
+      body.freeSpace ?? false,
+      body.autoMark ?? false
+    );
+    cards.push(card);
+  }
 
   return {
-    contestant: result.contestant as BingoContestant,
-    code: result.code,
-    cards: result.cards as BingoCard[],
+    contestant,
+    code: joinCode,
+    cards,
   };
 });
