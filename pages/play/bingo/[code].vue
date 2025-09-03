@@ -3,11 +3,12 @@ import type { Database } from "~/types/supabase";
 import BingoCard from "~/components/bingo/BingoCard.vue";
 import { useBingo } from "~/composables/useBingo";
 import { checkBingo } from "~/utils/bingo/checkBingo";
-import type { BingoCardGrid, _BingoCardType } from "~/types/bingo";
+import type { _BingoCardType } from "~/types/bingo";
 
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
 type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"];
+type BingoGame = Database["public"]["Tables"]["bingo_games"]["Row"];
 
 const route = useRoute();
 const supabase = useSupabaseClient<Database>();
@@ -18,12 +19,15 @@ const cards = ref<_BingoCardType[]>([]);
 const draws = ref<number[]>([]);
 const winnerId = ref<string | null>(null);
 const winnerName = ref<string | null>(null);
+const payout = ref<number | null>(null);
+const gameStatus = ref<"lobby" | "active" | "ended" | string>("lobby");
+
 const loading = ref(true);
 const error = ref<string | null>(null);
 const calling = ref(false);
 const message = ref("");
 
-// Subscribe to realtime draws
+// ✅ Subscribe to realtime draws
 const subscribeToDraws = (gameId: string) => {
   supabase
     .channel(`bingo_draws_${gameId}`)
@@ -39,16 +43,13 @@ const subscribeToDraws = (gameId: string) => {
         const newDraw = payload.new as BingoDraw;
         if (!draws.value.includes(newDraw.number)) {
           draws.value.push(newDraw.number);
-          console.log("New draw received:", newDraw.number);
         }
       }
     )
-    .subscribe((status) => {
-      console.log("Draws subscription status:", status);
-    });
+    .subscribe();
 };
 
-// Subscribe to confirmed winners
+// ✅ Subscribe to confirmed winners
 const subscribeToResults = (gameId: string) => {
   supabase
     .channel(`bingo_results_${gameId}`)
@@ -62,39 +63,50 @@ const subscribeToResults = (gameId: string) => {
       },
       async (payload) => {
         const confirmed = payload.new as BingoResult;
-        console.log("Winner confirmed:", confirmed);
-
         winnerId.value = confirmed.contestant_id;
+        payout.value = confirmed.payout;
 
-        // Fetch contestant details to show username
-        const { data: winnerContestant, error } = await supabase
+        // fetch contestant for winner name
+        const { data: winnerContestant } = await supabase
           .from("bingo_contestants")
           .select("username")
           .eq("id", confirmed.contestant_id)
           .single();
 
-        if (error) {
-          console.error("Failed to fetch winner username:", error.message);
-          winnerName.value = confirmed.contestant_id;
-        } else {
-          winnerName.value =
-            winnerContestant?.username || confirmed.contestant_id;
-        }
+        winnerName.value =
+          winnerContestant?.username || confirmed.contestant_id;
       }
     )
-    .subscribe((status) => {
-      console.log("Results subscription status:", status);
-    });
+    .subscribe();
 };
 
-// Handle "Call Bingo!"
+// ✅ Subscribe to game status (so losers see "Game Over")
+const subscribeToGame = (gameId: string) => {
+  supabase
+    .channel(`bingo_games_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "bingo_games",
+        filter: `id=eq.${gameId}`,
+      },
+      (payload) => {
+        const updated = payload.new as BingoGame;
+        gameStatus.value = updated.status;
+      }
+    )
+    .subscribe();
+};
+
+// ✅ Handle "Call Bingo!"
 const handleCallBingo = async (cardId: string) => {
   try {
     calling.value = true;
     if (contestant.value) {
       await callBingo(contestant.value.game_id, cardId, contestant.value.id);
       message.value = "Bingo called! Waiting for host confirmation...";
-      // mark locally so UI updates immediately
       const card = cards.value.find((c: any) => c.id === cardId);
       if (card) {
         card.is_winner_candidate = true;
@@ -118,21 +130,20 @@ onMounted(async () => {
 
       const gameId = result.cards[0]?.game_id;
       if (gameId) {
-        // Load initial state
         const state = await getState(gameId);
         if (state) {
           draws.value = state.draws;
         }
 
-        // Start realtime subscriptions
+        // Start realtime subs
         subscribeToDraws(gameId);
         subscribeToResults(gameId);
+        subscribeToGame(gameId);
       }
     } else {
       error.value = "Invalid or expired join code.";
     }
   } catch (err: any) {
-    console.error(err);
     error.value =
       err?.data?.statusMessage ||
       err?.message ||
@@ -146,12 +157,14 @@ onMounted(async () => {
 <template>
   <main class="p-4 space-y-6">
     <div v-if="loading" class="text-gray-400">Loading your cards...</div>
+
     <div
       v-else-if="error"
       class="p-3 rounded bg-red-700 text-white text-center"
     >
       {{ error }}
     </div>
+
     <div v-else>
       <h1 class="text-2xl font-bold">
         Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
@@ -167,19 +180,20 @@ onMounted(async () => {
         :key="card.id"
         class="bg-gray-800 p-4 rounded relative"
         :class="{
-          'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws: draws as number[] }),
+          'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
         }"
       >
         <BingoCard :card="card" :draws="draws" />
 
-        <!-- Call Bingo button per card -->
         <UButton
           class="mt-2 w-full"
           color="primary"
           size="sm"
           :loading="calling"
           :disabled="
-            card.is_winner_candidate || !checkBingo({ grid: card.grid, draws })
+            gameStatus === 'ended' ||
+            card.is_winner_candidate ||
+            !checkBingo({ grid: card.grid, draws })
           "
           @click="handleCallBingo(card.id)"
         >
@@ -199,6 +213,7 @@ onMounted(async () => {
       >
         <template v-if="winnerId === contestant?.id">
           🎉 Congratulations {{ winnerName }} — You Won!
+          <p v-if="payout" class="text-sm mt-1">Prize: {{ payout }} diamonds</p>
         </template>
         <template v-else>
           ❌ Game Over — {{ winnerName }} has already won.

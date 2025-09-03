@@ -380,7 +380,7 @@ watch(
           </div>
 
           <!-- Contestant list -->
-          <div
+          <!-- <div
             v-if="
               stateMap[game.id]?.contestants &&
               (stateMap[game.id]?.contestants?.length ?? 0)
@@ -400,7 +400,7 @@ watch(
                 <span class="text-green-400">{{ c.code }}</span>
               </li>
             </ul>
-          </div>
+          </div> -->
 
           <!-- Admin control panel -->
           <BingoGameControl
@@ -409,6 +409,7 @@ watch(
             :draws="stateMap[game.id]?.draws || []"
             :winners="stateMap[game.id]?.winners || []"
             :candidates="stateMap[game.id]?.candidates || []"
+            :contestants="stateMap[game.id]?.contestants || []"
             :loading="stateMap[game.id]?.loading ?? true"
             @draw="
               async (gameId) => {

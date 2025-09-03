@@ -7,12 +7,14 @@ type BingoGame = Database["public"]["Tables"]["bingo_games"]["Row"] & {
 };
 type BingoCard = Database["public"]["Tables"]["bingo_cards"]["Row"];
 type WinnerCandidate = BingoCard & { payout?: number };
+type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 
 const props = defineProps<{
   game: BingoGame;
   draws: number[];
-  winners: WinnerCandidate[]; // confirmed winners
-  candidates?: _BingoCardType[]; // 👈 new optional prop for players who called bingo
+  winners: WinnerCandidate[];
+  candidates?: _BingoCardType[];
+  contestants?: BingoContestant[]; // 👈 new optional prop for contestant list
   loading?: boolean;
 }>();
 
@@ -73,6 +75,28 @@ const emit = defineEmits<{
       </div>
     </div>
 
+    <!-- Contestant list -->
+    <div v-if="contestants && contestants.length" class="space-y-2">
+      <h3 class="text-lg font-semibold">Contestants</h3>
+      <div
+        v-for="c in contestants"
+        :key="c.id"
+        class="p-2 bg-gray-800 rounded space-y-1"
+      >
+        <div class="flex justify-between items-center">
+          <span class="font-semibold">{{ c.username }}</span>
+          <span class="text-xs text-gray-400">Code: {{ c.code }}</span>
+        </div>
+        <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div>
+        <div
+          v-if="candidates?.some((card) => card.contestant_id === c.id)"
+          class="text-yellow-400 text-sm font-semibold"
+        >
+          🚨 Bingo Called!
+        </div>
+      </div>
+    </div>
+
     <!-- Bingo Calls (candidates) -->
     <div v-if="candidates && candidates.length" class="space-y-2">
       <h3 class="text-lg font-semibold">Bingo Calls</h3>
@@ -83,9 +107,9 @@ const emit = defineEmits<{
       >
         <div>
           Contestant: {{ card.contestant_id }}
-          <span class="ml-2 text-gray-400 text-xs"
-            >(Card: {{ card.id.slice(0, 6) }})</span
-          >
+          <span class="ml-2 text-gray-400 text-xs">
+            (Card: {{ card.id.slice(0, 6) }})
+          </span>
         </div>
         <UButton
           size="xs"
