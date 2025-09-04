@@ -130,6 +130,7 @@ export const useBingo = () => {
         method: "POST",
         body: { cardId, contestantId, payout },
       });
+      await refresh();
     } catch (err: any) {
       console.error("Failed to confirm winner:", err);
       throw err;
@@ -171,12 +172,11 @@ export const useBingo = () => {
         candidates: _BingoCardType[];
         contestants: ContestantType[];
       }>(`/api/bingo/games/${gameId}/state`);
-
       return {
-        draws: data.draws.map((d) => d.number),
-        winners: data.winnerCandidates || [],
-        candidates: data.candidates || [], // 👈 new, but defaults safe
-        contestants: data.contestants || [],
+        draws: data.draws.map((d) => d.number), // always new array
+        winners: [...data.winnerCandidates],
+        contestants: [...(data.contestants ?? [])],
+        candidates: [...(data.candidates ?? [])],
       };
     } catch (err: any) {
       console.error(err);
@@ -214,12 +214,13 @@ export const useBingo = () => {
       .select("id, username, num_cards, code")
       .eq("game_id", gameId);
 
+    await refresh();
+
     if (error) {
       console.error("Failed to fetch contestants:", error.message);
-      return [];
     }
 
-    return data || [];
+    return data;
   };
 
   const callBingo = async (

@@ -35,18 +35,26 @@ const emit = defineEmits<{
 
 // 👇 Track the reactive status so template always updates
 const currentStatus = ref(props.game.status);
+console.log("current", toRaw(currentStatus.value));
+// watch(
+//   () => props.game.status,
+//   (newStatus) => {
+//     currentStatus.value = newStatus;
+//   },
+//   { immediate: true }
+// );
+
+// if (currentStatus.value === "active") {
+//   console.log("current status:", toRaw(currentStatus.value));
+// }
 
 watch(
-  () => props.game.status,
-  (newStatus) => {
-    currentStatus.value = newStatus;
+  () => props.draws,
+  (val) => {
+    console.log("[CONTROL] props.draws updated:", val);
   },
   { immediate: true }
 );
-
-if (currentStatus.value === "active") {
-  console.log("current status:", toRaw(currentStatus.value));
-}
 </script>
 
 <template>
@@ -59,34 +67,29 @@ if (currentStatus.value === "active") {
     <!-- Admin Action buttons -->
     <div v-else class="flex gap-2 items-center">
       <!-- Lobby: Start + payout -->
-      <template v-if="currentStatus === 'lobby'">
-        <UInput
-          v-model.number="game.payout"
-          type="number"
-          class="w-24 p-1 rounded bg-gray-900 border border-gray-600 text-white text-sm"
-          placeholder="Payout"
-        />
-        <UButton
-          size="sm"
-          color="primary"
-          @click="emit('start', { gameId: game.id, payout: game.payout || 0 })"
-        >
-          Start
-        </UButton>
-      </template>
 
       <!-- Active: Draw + Stop -->
-      <template v-else-if="currentStatus === 'active'">
-        <UButton @click="emit('draw', game.id)" size="sm" color="primary">
-          Draw Number
-        </UButton>
-        <UButton @click="emit('stop', game.id)" size="sm" color="error">
-          Stop Game
-        </UButton>
-      </template>
+      <!-- <template> -->
+      <UButton
+        :disabled="currentStatus !== 'active'"
+        @click="emit('draw', game.id)"
+        size="sm"
+        color="primary"
+      >
+        Draw Number
+      </UButton>
+      <UButton
+        :disabled="currentStatus !== 'active'"
+        @click="emit('stop', game.id)"
+        size="sm"
+        color="error"
+      >
+        Stop Game
+      </UButton>
+      <!-- </template> -->
 
       <!-- Ended -->
-      <template v-else-if="currentStatus === 'ended'">
+      <template v-if="currentStatus === 'ended'">
         <span class="text-gray-400 text-sm">Game Ended</span>
       </template>
     </div>
@@ -119,7 +122,7 @@ if (currentStatus.value === "active") {
         </div>
         <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div>
         <div
-          v-if="candidates?.some((card) => card.contestant_id === c.id)"
+          v-if="candidates?.some((card: any) => card.contestant_id === c.id)"
           class="text-yellow-400 text-sm font-semibold"
         >
           🚨 Bingo Called!
@@ -144,6 +147,7 @@ if (currentStatus.value === "active") {
         <UButton
           size="xs"
           color="primary"
+          :disabled="game.status === 'ended' || winners.length > 0"
           @click="
             emit('confirm', {
               gameId: game.id,

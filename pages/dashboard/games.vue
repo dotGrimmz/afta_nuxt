@@ -142,12 +142,12 @@ watch(
 
     const newState: Record<string, any> = {};
     for (const game of games) {
+      console.log("game obj:", game);
       newState[game.id] = {
         draws: [],
         winners: [],
         candidates: [],
         contestants: [],
-        loading: true,
       };
 
       const fullState = await getState(game.id);
@@ -157,6 +157,14 @@ watch(
     stateMap.value = newState;
   },
   { immediate: true }
+);
+
+watch(
+  () => stateMap.value,
+  (val) => {
+    console.log("[GAMES] stateMap changed:", JSON.stringify(val, null, 2));
+  },
+  { deep: true }
 );
 </script>
 
@@ -375,11 +383,14 @@ watch(
             </UButton>
 
             <p v-if="lastIssuedCode" class="text-xs text-green-400 mt-2">
-              Code issued: {{ lastIssuedCode }}
+              Code issued: {{ lastIssuedCode }} for
             </p>
           </div>
 
           <!-- Admin control panel -->
+
+          <!-- in this, do the actions do something to state that is bad? things
+          things arent being updated  -->
           <BingoGameControl
             v-if="profile?.role === 'admin'"
             :game="game"
@@ -387,35 +398,40 @@ watch(
             :winners="stateMap[game.id]?.winners || []"
             :candidates="stateMap[game.id]?.candidates || []"
             :contestants="stateMap[game.id]?.contestants || []"
-            :loading="stateMap[game.id]?.loading ?? true"
+            :loading="stateMap[game.id]?.loading"
             @draw="
               async (gameId) => {
+                console.log('[GAMES] Draw clicked for', gameId);
                 await drawNumber(gameId);
-                const newState = await getState(gameId);
-                stateMap.value = {
-                  ...stateMap.value,
-                  [gameId]: { ...newState, loading: false },
+
+                stateMap[gameId] = {
+                  ...(await getState(gameId)),
+                  loading: false,
                 };
               }
             "
             @stop="
               async (gameId) => {
                 await stopGame(gameId);
-                const newState = await getState(gameId);
-                stateMap.value = {
-                  ...stateMap.value,
-                  [gameId]: { ...newState, loading: false },
+                stateMap[gameId] = {
+                  ...(await getState(gameId)),
+                  loading: false,
                 };
               }
             "
             @confirm="
               async ({ gameId, cardId, contestantId, payout }) => {
                 await confirmWinner(gameId, cardId, contestantId, payout);
-                const newState = await getState(gameId);
-                stateMap.value = {
-                  ...stateMap.value,
-                  [gameId]: { ...newState, loading: false },
+                stateMap[gameId] = {
+                  ...(await getState(gameId)),
+                  loading: false,
                 };
+
+                // const newState = await getState(gameId);
+                // stateMap.value = {
+                //   ...stateMap.value,
+                //   [gameId]: { ...newState, loading: false },
+                // };
               }
             "
           />
@@ -431,3 +447,15 @@ watch(
     </section>
   </main>
 </template>
+
+<!-- 
+    @draw="
+              async (gameId) => {
+                await drawNumber(gameId);
+                const newState = await getState(gameId);
+                stateMap.value = {
+                  ...stateMap.value,
+                  [gameId]: { ...newState, loading: false },
+                };
+              }
+            " -->
