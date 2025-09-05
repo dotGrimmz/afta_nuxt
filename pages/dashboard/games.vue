@@ -119,6 +119,13 @@ const handleIssueCode = async (gameId: string) => {
   }
 };
 
+const refreshGameState = async (gameId: string) => {
+  stateMap.value[gameId] = {
+    ...(await getState(gameId)),
+    loading: false,
+  };
+};
+
 onMounted(async () => {
   if (bingoGames.value) {
     const newState: Record<string, any> = {};
@@ -159,13 +166,13 @@ watch(
   { immediate: true }
 );
 
-watch(
-  () => stateMap.value,
-  (val) => {
-    console.log("[GAMES] stateMap changed:", JSON.stringify(val, null, 2));
-  },
-  { deep: true }
-);
+// watch(
+//   () => stateMap.value,
+//   (val) => {
+//     console.log("[GAMES] stateMap changed:", JSON.stringify(val, null, 2));
+//   },
+//   { deep: true }
+// );
 </script>
 
 <template>
