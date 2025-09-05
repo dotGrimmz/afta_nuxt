@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { _BingoCardType } from "~/types/bingo";
 import type { Database } from "~/types/supabase";
 
 type BingoGame = Database["public"]["Tables"]["bingo_games"]["Row"] & {
@@ -13,63 +12,29 @@ const props = defineProps<{
   game: BingoGame;
   draws: number[];
   winners: WinnerCandidate[];
-  candidates?: _BingoCardType[];
   contestants?: BingoContestant[];
   loading?: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: "start", payload: { gameId: string; payout: number }): void;
   (e: "draw", gameId: string): void;
   (e: "stop", gameId: string): void;
-  (
-    e: "confirm",
-    payload: {
-      gameId: string;
-      cardId: string;
-      contestantId: string;
-      payout: number;
-    }
-  ): void;
 }>();
 
-// 👇 Track the reactive status so template always updates
+// 👇 Track reactive status
 const currentStatus = ref(props.game.status);
-console.log("current", toRaw(currentStatus.value));
-// watch(
-//   () => props.game.status,
-//   (newStatus) => {
-//     currentStatus.value = newStatus;
-//   },
-//   { immediate: true }
-// );
-
-// if (currentStatus.value === "active") {
-//   console.log("current status:", toRaw(currentStatus.value));
-// }
-
-watch(
-  () => props.draws,
-  (val) => {
-    console.log("[CONTROL] props.draws updated:", val);
-  },
-  { immediate: true }
-);
 </script>
 
 <template>
   <div class="mt-3 p-3 bg-gray-900 rounded border border-gray-700 space-y-3">
     <h3 class="font-semibold text-lg">Game Control</h3>
+
     <div v-if="loading" class="text-gray-400 text-sm">
       Loading game state...
     </div>
 
-    <!-- Admin Action buttons -->
+    <!-- Admin buttons -->
     <div v-else class="flex gap-2 items-center">
-      <!-- Lobby: Start + payout -->
-
-      <!-- Active: Draw + Stop -->
-      <!-- <template> -->
       <UButton
         :disabled="currentStatus !== 'active'"
         @click="emit('draw', game.id)"
@@ -86,9 +51,7 @@ watch(
       >
         Stop Game
       </UButton>
-      <!-- </template> -->
 
-      <!-- Ended -->
       <template v-if="currentStatus === 'ended'">
         <span class="text-gray-400 text-sm">Game Ended</span>
       </template>
@@ -108,7 +71,7 @@ watch(
       </div>
     </div>
 
-    <!-- Contestant list -->
+    <!-- Contestants -->
     <div v-if="contestants && contestants.length" class="space-y-2">
       <h3 class="text-lg font-semibold">Contestants</h3>
       <div
@@ -121,44 +84,6 @@ watch(
           <span class="text-xs text-gray-400">Code: {{ c.code }}</span>
         </div>
         <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div>
-        <div
-          v-if="candidates?.some((card: any) => card.contestant_id === c.id)"
-          class="text-yellow-400 text-sm font-semibold"
-        >
-          🚨 Bingo Called!
-        </div>
-      </div>
-    </div>
-
-    <!-- Bingo Calls (candidates) -->
-    <div v-if="candidates && candidates.length" class="space-y-2">
-      <h3 class="text-lg font-semibold">Bingo Calls</h3>
-      <div
-        v-for="card in candidates"
-        :key="card.id"
-        class="p-2 bg-gray-700 rounded space-y-2 flex justify-between items-center"
-      >
-        <div>
-          Contestant: {{ card.contestant_id }}
-          <span class="ml-2 text-gray-400 text-xs">
-            (Card: {{ card.id.slice(0, 6) }})
-          </span>
-        </div>
-        <UButton
-          size="xs"
-          color="primary"
-          :disabled="game.status === 'ended' || winners.length > 0"
-          @click="
-            emit('confirm', {
-              gameId: game.id,
-              cardId: card.id,
-              contestantId: card.contestant_id,
-              payout: game.payout || 0,
-            })
-          "
-        >
-          Confirm
-        </UButton>
       </div>
     </div>
 

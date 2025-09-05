@@ -229,12 +229,12 @@ export const useBingo = () => {
     contestantId: string
   ) => {
     try {
-      const { card } = await $fetch(`/api/bingo/games/${gameId}/call-bingo`, {
+      const response = await $fetch(`/api/bingo/games/${gameId}/call-bingo`, {
         method: "POST",
         body: { cardId, contestantId },
       });
 
-      return card;
+      return "card" in response ? response.card : undefined;
     } catch (err: any) {
       console.error("Failed to call bingo:", err);
       throw err;
