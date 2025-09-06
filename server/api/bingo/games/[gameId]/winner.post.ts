@@ -32,15 +32,22 @@ export default defineEventHandler(async (event) => {
       game_id: gameId,
       card_id: body.cardId,
       contestant_id: body.contestantId,
-      payout: body.payout ?? 0,
+      payout: body.payout,
     })
     .select("*")
     .single();
 
-  if (resultError || !result) {
+  if (resultError) {
+    if (resultError.code === "23505") {
+      // 23505 = unique_violation in Postgres
+      throw createError({
+        statusCode: 400,
+        statusMessage: "This game already has a winner.",
+      });
+    }
     throw createError({
       statusCode: 500,
-      statusMessage: resultError?.message || "Failed to insert bingo result",
+      statusMessage: resultError.message,
     });
   }
 

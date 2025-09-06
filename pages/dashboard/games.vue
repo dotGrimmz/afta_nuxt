@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
 import { calculateCost } from "~/utils/bingo/pricing";
-
+const supabase = useSupabaseClient<Database>();
 const { profile } = useProfile();
 
 // Trivia composable (unchanged)
@@ -40,7 +40,6 @@ const {
   startGame: startBingoGame,
   stopGame,
   drawNumber,
-  confirmWinner,
   joinGame: joinBingoGame,
   getState,
   issueJoinCode,
@@ -141,6 +140,38 @@ onMounted(async () => {
     stateMap.value = newState;
   }
 });
+const subscribeToContestants = (gameId: string) => {
+  supabase
+    .channel(`bingo_contestants_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "bingo_contestants",
+        filter: `game_id=eq.${gameId}`,
+      },
+      (payload) => {
+        const newContestant =
+          payload.new as Database["public"]["Tables"]["bingo_contestants"]["Row"];
+
+        stateMap.value[gameId] = {
+          ...(stateMap.value[gameId] || {
+            draws: [],
+            winners: [],
+            candidates: [],
+            contestants: [],
+          }),
+          contestants: [
+            ...(stateMap.value[gameId]?.contestants || []),
+            newContestant,
+          ],
+          loading: false,
+        };
+      }
+    )
+    .subscribe();
+};
 
 watch(
   bingoGames,
@@ -160,11 +191,44 @@ watch(
       const fullState = await getState(game.id);
 
       newState[game.id] = { ...fullState, loading: false };
+      subscribeToContestants(game.id); // 👈 start realtime sync
     }
     stateMap.value = newState;
   },
   { immediate: true }
 );
+
+// watch(
+//   () =>
+//     bingoGames.value?.map((g) => ({
+//       id: g.id,
+//       status: g.status,
+//       ended_at: g.ended_at,
+//     })),
+//   async (newGames, oldGames) => {
+//     if (!newGames || !oldGames) return;
+
+//     for (let i = 0; i < newGames.length; i++) {
+//       const newGame = newGames[i];
+//       const oldGame = oldGames[i];
+
+//       if (!oldGame) continue; // new game created, skip or handle separately
+
+//       if (
+//         newGame.status !== oldGame.status ||
+//         newGame.ended_at !== oldGame.ended_at
+//       ) {
+//         console.log("[WATCH] Game changed:", newGame.id);
+
+//         stateMap.value[newGame.id] = {
+//           ...(await getState(newGame.id)),
+//           loading: false,
+//         };
+//       }
+//     }
+//   },
+//   { deep: true }
+// );
 </script>
 
 <template>
@@ -388,6 +452,8 @@ watch(
 
           <!-- Admin control panel -->
 
+          <!-- in this, do the actions do something to state that is bad? things
+          things arent being updated  -->
           <BingoGameControl
             v-if="profile?.role === 'admin'"
             :game="game"

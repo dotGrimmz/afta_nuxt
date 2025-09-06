@@ -20,6 +20,7 @@ export const useBingo = () => {
     const { data, error } = await supabase
       .from("bingo_games")
       .select("*")
+      .neq("status", "ended")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -164,6 +165,7 @@ export const useBingo = () => {
     winners: _BingoCardType[];
     candidates: _BingoCardType[];
     contestants: ContestantType[];
+    game?: any;
   }> => {
     try {
       const data = await $fetch<{
@@ -172,7 +174,9 @@ export const useBingo = () => {
         candidates: _BingoCardType[];
         contestants: ContestantType[];
       }>(`/api/bingo/games/${gameId}/state`);
+      console.log("data from api", data);
       return {
+        game: data,
         draws: data.draws.map((d) => d.number), // always new array
         winners: [...data.winnerCandidates],
         contestants: [...(data.contestants ?? [])],

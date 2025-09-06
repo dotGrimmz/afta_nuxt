@@ -10,6 +10,8 @@ type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
 type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"];
 
 const route = useRoute();
+const router = useRouter();
+
 const supabase = useSupabaseClient<Database>();
 const { joinGame, getState, callBingo } = useBingo();
 
@@ -20,6 +22,8 @@ const winnerId = ref<string | null>(null);
 const winnerName = ref<string | null>(null);
 const winnerPayout = ref<number | null>(null);
 const gameEnded = ref(false);
+const gameLobby = ref(false);
+const contestants = ref<BingoContestant[]>([]);
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -110,6 +114,26 @@ const subscribeToGame = (gameId: string) => {
     .subscribe();
 };
 
+const subscribeToContestants = (gameId: string) => {
+  supabase
+    .channel(`bingo_contestants_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "bingo_contestants",
+        filter: `game_id=eq.${gameId}`,
+      },
+      (payload) => {
+        const newContestant =
+          payload.new as Database["public"]["Tables"]["bingo_contestants"]["Row"];
+        contestants.value = [...contestants.value, newContestant]; // 👈 update local list
+      }
+    )
+    .subscribe();
+};
+
 // ✅ Handle "Call Bingo!"
 const handleCallBingo = async (cardId: string) => {
   try {
@@ -125,10 +149,10 @@ const handleCallBingo = async (cardId: string) => {
     }
 
     await callBingo(contestant.value.game_id, cardId, contestant.value.id);
-    message.value = "Bingo called! Waiting for confirmation...";
+    message.value = "Bingo!";
     card.is_winner_candidate = true;
   } catch (err: any) {
-    message.value = err.message || "Error calling bingo.";
+    message.value = "Error calling bingo. Someone Prolly Won";
   } finally {
     calling.value = false;
   }
@@ -140,18 +164,36 @@ onMounted(async () => {
     const result = await joinGame(code);
 
     if (result) {
+      console.log(result);
       contestant.value = result.contestant;
       cards.value = result.cards;
 
       const gameId = result.cards[0]?.game_id;
       if (gameId) {
         const state = await getState(gameId);
+        console.log("state", state.game.game.status);
+        if (state.game.game.status === "lobby") gameLobby.value = true;
+
+        if (state.winners.length) {
+          gameLobby.value = false;
+          gameEnded.value = true;
+          winnerId.value = state.winners[0].contestant_id;
+          const winningContestant = state.contestants.find(
+            (user: any) => user.id === state.winners[0].contestant_id
+          );
+
+          //@ts-ignore
+          winnerName.value = winningContestant?.username || "Another Player"; // fallback
+        }
+        if (state.game.game.status === "ended") gameEnded.value = true;
+
         if (state) {
           draws.value = state.draws;
         }
         subscribeToDraws(gameId);
         subscribeToResults(gameId);
         subscribeToGame(gameId);
+        subscribeToContestants(gameId);
       }
     } else {
       error.value = "Invalid or expired join code.";
@@ -162,6 +204,13 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+const enterAnotherCode = (event: MouseEvent) => {
+  event.preventDefault();
+  router.push("/play/bingo");
+};
+
+console.log("game lobby??", gameLobby.value);
 </script>
 
 <template>
@@ -200,9 +249,10 @@ onMounted(async () => {
           color="primary"
           size="sm"
           :loading="calling"
+          :disabled="gameEnded"
           @click="handleCallBingo(card.id)"
         >
-          {{ card.is_winner_candidate ? "Bingo Called" : "Call Bingo" }}
+          {{ gameEnded ? "Game Ended" : "Call Bingo" }}
         </UButton>
       </div>
 
@@ -223,7 +273,17 @@ onMounted(async () => {
           </div>
         </template>
         <template v-else>
-          ❌ Game Over — {{ winnerName }} has already won.
+          <div class="flex flex-col gap-2">
+            <span>❌ Game Over — Give it another shot!.</span>
+
+            <UButton
+              @click="enterAnotherCode"
+              size="sm"
+              class="text-center"
+              color="primary"
+              >Enter Another Code
+            </UButton>
+          </div>
           <div v-if="winnerPayout !== null" class="mt-2 text-sm">
             Prize: {{ winnerPayout }} 💎
           </div>
