@@ -180,7 +180,6 @@ watch(
 
     const newState: Record<string, any> = {};
     for (const game of games) {
-      console.log("game obj:", game);
       newState[game.id] = {
         draws: [],
         winners: [],
@@ -463,7 +462,6 @@ watch(
             :loading="stateMap[game.id]?.loading"
             @draw="
               async (gameId) => {
-                console.log('[GAMES] Draw clicked for', gameId);
                 await drawNumber(gameId);
 
                 stateMap[gameId] = {

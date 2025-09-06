@@ -211,6 +211,18 @@ const enterAnotherCode = (event: MouseEvent) => {
 };
 
 console.log("game lobby??", gameLobby.value);
+
+watch([gameEnded, winnerId], ([ended, winner]) => {
+  if (ended) {
+    if (winner && contestant.value?.id === winner) {
+      // 👑 This contestant is the winner
+      message.value = `🎉 You won this round!`;
+    } else {
+      // ❌ Someone else won or admin ended the game
+      message.value = "❌ Game Over — Better luck next time.";
+    }
+  }
+});
 </script>
 
 <template>
