@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
 import { calculateCost } from "~/utils/bingo/pricing";
-
+const supabase = useSupabaseClient<Database>();
 const { profile } = useProfile();
 
 // Trivia composable (unchanged)
@@ -40,7 +40,6 @@ const {
   startGame: startBingoGame,
   stopGame,
   drawNumber,
-  confirmWinner,
   joinGame: joinBingoGame,
   getState,
   issueJoinCode,
@@ -119,6 +118,13 @@ const handleIssueCode = async (gameId: string) => {
   }
 };
 
+const refreshGameState = async (gameId: string) => {
+  stateMap.value[gameId] = {
+    ...(await getState(gameId)),
+    loading: false,
+  };
+};
+
 onMounted(async () => {
   if (bingoGames.value) {
     const newState: Record<string, any> = {};
@@ -134,6 +140,38 @@ onMounted(async () => {
     stateMap.value = newState;
   }
 });
+const subscribeToContestants = (gameId: string) => {
+  supabase
+    .channel(`bingo_contestants_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "bingo_contestants",
+        filter: `game_id=eq.${gameId}`,
+      },
+      (payload) => {
+        const newContestant =
+          payload.new as Database["public"]["Tables"]["bingo_contestants"]["Row"];
+
+        stateMap.value[gameId] = {
+          ...(stateMap.value[gameId] || {
+            draws: [],
+            winners: [],
+            candidates: [],
+            contestants: [],
+          }),
+          contestants: [
+            ...(stateMap.value[gameId]?.contestants || []),
+            newContestant,
+          ],
+          loading: false,
+        };
+      }
+    )
+    .subscribe();
+};
 
 watch(
   bingoGames,
@@ -147,17 +185,96 @@ watch(
         winners: [],
         candidates: [],
         contestants: [],
-        loading: true,
       };
 
       const fullState = await getState(game.id);
 
       newState[game.id] = { ...fullState, loading: false };
+      subscribeToContestants(game.id); // 👈 start realtime sync
     }
     stateMap.value = newState;
   },
-  { immediate: true } // 👈 run immediately too
+  { immediate: true }
 );
+
+// watch(
+//   () =>
+//     bingoGames.value?.map((g) => ({
+//       id: g.id,
+//       status: g.status,
+//       ended_at: g.ended_at,
+//     })),
+//   async (newGames, oldGames) => {
+//     if (!newGames || !oldGames) return;
+
+//     for (let i = 0; i < newGames.length; i++) {
+//       const newGame = newGames[i];
+//       const oldGame = oldGames[i];
+
+//       if (!oldGame) continue; // new game created, skip or handle separately
+
+//       if (
+//         newGame.status !== oldGame.status ||
+//         newGame.ended_at !== oldGame.ended_at
+//       ) {
+//         console.log("[WATCH] Game changed:", newGame.id);
+
+//         stateMap.value[newGame.id] = {
+//           ...(await getState(newGame.id)),
+//           loading: false,
+//         };
+//       }
+//     }
+//   },
+//   { deep: true }
+// );
+
+const recentResults = ref<any[]>([]);
+const recentResultsLoading = ref(true);
+
+onMounted(async () => {
+  try {
+    const data = await $fetch<any>("/api/bingo/results/recent");
+    console.log("results", data);
+
+    recentResults.value = data;
+  } catch (err) {
+    console.error("Failed to fetch results", err);
+  } finally {
+    recentResultsLoading.value = false;
+  }
+});
+
+onMounted(() => {
+  if (!bingoGames.value) return;
+
+  // Subscribe to realtime updates on bingo_games
+  bingoGames.value.forEach((game) => {
+    supabase
+      .channel(`bingo_games_${game.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "bingo_games",
+          filter: `id=eq.${game.id}`,
+        },
+        async (payload) => {
+          const updated =
+            payload.new as Database["public"]["Tables"]["bingo_games"]["Row"];
+          console.log("[Realtime] Game update:", updated);
+
+          // Refresh state for that game
+          stateMap.value[updated.id] = {
+            ...(await getState(updated.id)),
+            loading: false,
+          };
+        }
+      )
+      .subscribe();
+  });
+});
 </script>
 
 <template>
@@ -375,68 +492,37 @@ watch(
             </UButton>
 
             <p v-if="lastIssuedCode" class="text-xs text-green-400 mt-2">
-              Code issued: {{ lastIssuedCode }}
+              Code issued: {{ lastIssuedCode }} for
             </p>
           </div>
 
-          <!-- Contestant list -->
-          <div
-            v-if="
-              stateMap[game.id]?.contestants &&
-              (stateMap[game.id]?.contestants?.length ?? 0)
-            "
-            class="mt-4 bg-gray-700 p-3 rounded"
-          >
-            <h3 class="text-sm font-semibold text-gray-200 mb-2">
-              Contestants
-            </h3>
-            <ul class="text-xs text-gray-300 space-y-1">
-              <li
-                v-for="c in stateMap[game.id].contestants"
-                :key="c.id"
-                class="flex justify-between"
-              >
-                <span>{{ c.username }} ({{ c.num_cards }} cards)</span>
-                <span class="text-green-400">{{ c.code }}</span>
-              </li>
-            </ul>
-          </div>
-
           <!-- Admin control panel -->
+
+          <!-- in this, do the actions do something to state that is bad? things
+          things arent being updated  -->
           <BingoGameControl
             v-if="profile?.role === 'admin'"
             :game="game"
             :draws="stateMap[game.id]?.draws || []"
             :winners="stateMap[game.id]?.winners || []"
-            :candidates="stateMap[game.id]?.candidates || []"
-            :loading="stateMap[game.id]?.loading ?? true"
+            :contestants="stateMap[game.id]?.contestants || []"
+            :loading="stateMap[game.id]?.loading"
             @draw="
               async (gameId) => {
                 await drawNumber(gameId);
-                const newState = await getState(gameId);
-                stateMap.value = {
-                  ...stateMap.value,
-                  [gameId]: { ...newState, loading: false },
+
+                stateMap[gameId] = {
+                  ...(await getState(gameId)),
+                  loading: false,
                 };
               }
             "
             @stop="
               async (gameId) => {
                 await stopGame(gameId);
-                const newState = await getState(gameId);
-                stateMap.value = {
-                  ...stateMap.value,
-                  [gameId]: { ...newState, loading: false },
-                };
-              }
-            "
-            @confirm="
-              async ({ gameId, cardId, contestantId, payout }) => {
-                await confirmWinner(gameId, cardId, contestantId, payout);
-                const newState = await getState(gameId);
-                stateMap.value = {
-                  ...stateMap.value,
-                  [gameId]: { ...newState, loading: false },
+                stateMap[gameId] = {
+                  ...(await getState(gameId)),
+                  loading: false,
                 };
               }
             "
@@ -450,6 +536,30 @@ watch(
           </div>
         </div>
       </div>
+      <section v-if="profile?.role === 'admin'">
+        <h2 class="text-xl font-bold mb-2">Recent Bingo Winners</h2>
+
+        <div v-if="recentResultsLoading" class="text-gray-400">
+          Loading results...
+        </div>
+        <div v-else-if="!recentResults.length" class="text-gray-400">
+          No results yet.
+        </div>
+
+        <ul v-else class="space-y-2">
+          <li
+            v-for="res in recentResults"
+            :key="res.id"
+            class="p-2 bg-gray-800 rounded text-sm flex justify-between"
+          >
+            <span>{{ res.username || res.contestant_id }}</span>
+            <span class="text-green-400">{{ res.payout }} 💎</span>
+            <span class="text-gray-400">{{
+              new Date(res.created_at).toLocaleString()
+            }}</span>
+          </li>
+        </ul>
+      </section>
     </section>
   </main>
 </template>

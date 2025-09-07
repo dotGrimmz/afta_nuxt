@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // 1️⃣ Insert result
+  // 1️⃣ Insert result (ignore duplicates safely)
   const { data: result, error: resultError } = await client
     .from("bingo_results")
     .insert({
@@ -37,14 +37,31 @@ export default defineEventHandler(async (event) => {
     .select("*")
     .single();
 
-  if (resultError || !result) {
+  if (resultError) {
+    if (resultError.code === "23505") {
+      // 23505 = unique_violation in Postgres
+      throw createError({
+        statusCode: 400,
+        statusMessage: "This game already has a winner.",
+      });
+    }
     throw createError({
       statusCode: 500,
-      statusMessage: resultError?.message || "Failed to insert bingo result",
+      statusMessage: resultError.message,
     });
   }
 
-  // 2️⃣ End the game
+  // 2️⃣ Mark the card as confirmed winner
+  const { error: cardError } = await client
+    .from("bingo_cards")
+    .update({ is_winner_candidate: true })
+    .eq("id", body.cardId);
+
+  if (cardError) {
+    console.error("Failed to update card state:", cardError.message);
+  }
+
+  // 3️⃣ End the game
   const { data: updatedGame, error: updateError } = await client
     .from("bingo_games")
     .update({ status: "ended", ended_at: new Date().toISOString() })
@@ -59,7 +76,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // 3️⃣ Return both
+  // 4️⃣ Return both
   return {
     result,
     game: updatedGame,

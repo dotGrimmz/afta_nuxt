@@ -4,6 +4,7 @@ const code = ref("");
 const error = ref("");
 
 const join = () => {
+  console.log("hello?");
   if (!code.value.trim()) {
     error.value = "Please enter a code.";
     return;

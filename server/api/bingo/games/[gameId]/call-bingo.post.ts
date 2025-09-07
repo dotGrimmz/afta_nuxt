@@ -15,6 +15,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<{
     cardId: string;
     contestantId: string;
+    payout: number;
   }>(event);
 
   if (!body?.cardId || !body?.contestantId) {
@@ -24,7 +25,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Verify that the card belongs to this game + contestant
+  // 1️⃣ Verify the card belongs to this game + contestant
   const { data: card, error: cardError } = await client
     .from("bingo_cards")
     .select("id, game_id, contestant_id")
@@ -40,25 +41,58 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Mark card as winner candidate
-  const { data, error } = await client
-    .from("bingo_cards")
-    .update({ is_winner_candidate: true })
-    .eq("id", body.cardId)
-    .eq("contestant_id", body.contestantId)
-    .eq("game_id", gameId)
-    .select()
+  // 2️⃣ Fetch contestant to get username
+  const { data: contestant, error: contestantError } = await client
+    .from("bingo_contestants")
+    .select("username")
+    .eq("id", body.contestantId)
     .single();
 
-  if (error) {
+  if (contestantError || !contestant) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Contestant not found",
+    });
+  }
+
+  // 3️⃣ Insert into bingo_results (with username)
+  const { data: result, error: resultError } = await client
+    .from("bingo_results")
+    .insert({
+      game_id: gameId,
+      card_id: body.cardId,
+      contestant_id: body.contestantId,
+      payout: body.payout,
+      username: contestant.username, // 👈 required now
+    })
+    .select("*")
+    .single();
+
+  if (resultError || !result) {
     throw createError({
       statusCode: 500,
-      statusMessage: error.message,
+      statusMessage: resultError?.message || "Failed to insert bingo result",
+    });
+  }
+
+  // 4️⃣ End the game immediately
+  const { data: updatedGame, error: updateError } = await client
+    .from("bingo_games")
+    .update({ status: "ended", ended_at: new Date().toISOString() })
+    .eq("id", gameId)
+    .select("*")
+    .single();
+
+  if (updateError || !updatedGame) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: updateError?.message || "Failed to end game",
     });
   }
 
   return {
-    message: "Bingo called successfully",
-    card: data,
+    message: "Bingo confirmed and game ended",
+    result,
+    game: updatedGame,
   };
 });

@@ -3,55 +3,35 @@ import type { Json } from "~/types/supabase";
 export const checkBingo = (card: { grid: Json; draws: number[] }): boolean => {
   const grid = card.grid as {
     numbers: number[][];
-    marked: boolean[][];
+    marked: boolean[][]; // already contains free space if the card has one
   };
 
-  if (!grid?.numbers || !grid?.marked) {
-    return false;
-  }
+  if (!grid?.numbers || !grid?.marked) return false;
 
   const size = 5;
 
-  // Helper: check full row or column
-  const isComplete = (cells: boolean[]): boolean => {
-    return cells.every((marked) => marked === true);
-  };
+  // Merge DB `marked` + current draws
+  const marked: boolean[][] = grid.numbers.map((row, r) =>
+    row.map((num, c) => grid.marked[r][c] || card.draws.includes(num))
+  );
+
+  const isComplete = (cells: boolean[]): boolean => cells.every((x) => x);
 
   // Rows
-  for (let row = 0; row < size; row++) {
-    if (isComplete(grid.marked[row])) {
-      return true;
-    }
+  for (let r = 0; r < size; r++) {
+    if (isComplete(marked[r])) return true;
   }
 
   // Columns
-  for (let col = 0; col < size; col++) {
-    const column = [];
-    for (let row = 0; row < size; row++) {
-      column.push(grid.marked[row][col]);
-    }
-    if (isComplete(column)) {
-      return true;
-    }
+  for (let c = 0; c < size; c++) {
+    if (isComplete(marked.map((row) => row[c]))) return true;
   }
 
-  // Diagonal (top-left to bottom-right)
-  const diag1 = [];
-  for (let i = 0; i < size; i++) {
-    diag1.push(grid.marked[i][i]);
-  }
-  if (isComplete(diag1)) {
-    return true;
-  }
+  // Diagonal TL → BR
+  if (isComplete(marked.map((row, i) => row[i]))) return true;
 
-  // Diagonal (top-right to bottom-left)
-  const diag2 = [];
-  for (let i = 0; i < size; i++) {
-    diag2.push(grid.marked[i][size - 1 - i]);
-  }
-  if (isComplete(diag2)) {
-    return true;
-  }
+  // Diagonal TR → BL
+  if (isComplete(marked.map((row, i) => row[size - 1 - i]))) return true;
 
   return false;
 };

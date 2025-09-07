@@ -20,6 +20,7 @@ export const useBingo = () => {
     const { data, error } = await supabase
       .from("bingo_games")
       .select("*")
+      .neq("status", "ended")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -130,6 +131,7 @@ export const useBingo = () => {
         method: "POST",
         body: { cardId, contestantId, payout },
       });
+      await refresh();
     } catch (err: any) {
       console.error("Failed to confirm winner:", err);
       throw err;
@@ -163,6 +165,7 @@ export const useBingo = () => {
     winners: _BingoCardType[];
     candidates: _BingoCardType[];
     contestants: ContestantType[];
+    game?: any;
   }> => {
     try {
       const data = await $fetch<{
@@ -171,12 +174,13 @@ export const useBingo = () => {
         candidates: _BingoCardType[];
         contestants: ContestantType[];
       }>(`/api/bingo/games/${gameId}/state`);
-
+      console.log("data from api", data);
       return {
-        draws: data.draws.map((d) => d.number),
-        winners: data.winnerCandidates || [],
-        candidates: data.candidates || [], // 👈 new, but defaults safe
-        contestants: data.contestants || [],
+        game: data,
+        draws: data.draws.map((d) => d.number), // always new array
+        winners: [...data.winnerCandidates],
+        contestants: [...(data.contestants ?? [])],
+        candidates: [...(data.candidates ?? [])],
       };
     } catch (err: any) {
       console.error(err);
@@ -214,26 +218,28 @@ export const useBingo = () => {
       .select("id, username, num_cards, code")
       .eq("game_id", gameId);
 
+    await refresh();
+
     if (error) {
       console.error("Failed to fetch contestants:", error.message);
-      return [];
     }
 
-    return data || [];
+    return data;
   };
 
   const callBingo = async (
     gameId: string,
     cardId: string,
-    contestantId: string
+    contestantId: string,
+    username?: string | null
   ) => {
     try {
-      const { card } = await $fetch(`/api/bingo/games/${gameId}/call-bingo`, {
+      const response = await $fetch(`/api/bingo/games/${gameId}/call-bingo`, {
         method: "POST",
-        body: { cardId, contestantId },
+        body: { cardId, contestantId, username },
       });
 
-      return card;
+      return "card" in response ? response.card : undefined;
     } catch (err: any) {
       console.error("Failed to call bingo:", err);
       throw err;
