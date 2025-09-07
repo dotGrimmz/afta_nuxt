@@ -244,6 +244,37 @@ onMounted(async () => {
     recentResultsLoading.value = false;
   }
 });
+
+onMounted(() => {
+  if (!bingoGames.value) return;
+
+  // Subscribe to realtime updates on bingo_games
+  bingoGames.value.forEach((game) => {
+    supabase
+      .channel(`bingo_games_${game.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "bingo_games",
+          filter: `id=eq.${game.id}`,
+        },
+        async (payload) => {
+          const updated =
+            payload.new as Database["public"]["Tables"]["bingo_games"]["Row"];
+          console.log("[Realtime] Game update:", updated);
+
+          // Refresh state for that game
+          stateMap.value[updated.id] = {
+            ...(await getState(updated.id)),
+            loading: false,
+          };
+        }
+      )
+      .subscribe();
+  });
+});
 </script>
 
 <template>
@@ -506,7 +537,7 @@ onMounted(async () => {
         </div>
       </div>
       <section v-if="profile?.role === 'admin'">
-        <h2 class="text-xl font-bold mb-2">Recent Bingo Results</h2>
+        <h2 class="text-xl font-bold mb-2">Recent Bingo Winners</h2>
 
         <div v-if="recentResultsLoading" class="text-gray-400">
           Loading results...

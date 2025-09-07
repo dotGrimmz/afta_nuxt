@@ -15,8 +15,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<{
     cardId: string;
     contestantId: string;
-    payout?: number;
-    username: string | null;
+    payout: number;
   }>(event);
 
   if (!body?.cardId || !body?.contestantId) {
@@ -26,10 +25,10 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Verify ownership (card belongs to this game + contestant)
+  // 1️⃣ Verify the card belongs to this game + contestant
   const { data: card, error: cardError } = await client
     .from("bingo_cards")
-    .select("id")
+    .select("id, game_id, contestant_id")
     .eq("id", body.cardId)
     .eq("game_id", gameId)
     .eq("contestant_id", body.contestantId)
@@ -42,17 +41,29 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  console.log("username in api:", body.username);
+  // 2️⃣ Fetch contestant to get username
+  const { data: contestant, error: contestantError } = await client
+    .from("bingo_contestants")
+    .select("username")
+    .eq("id", body.contestantId)
+    .single();
 
-  // 1️⃣ Insert result (mark winner + payout if passed)
+  if (contestantError || !contestant) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Contestant not found",
+    });
+  }
+
+  // 3️⃣ Insert into bingo_results (with username)
   const { data: result, error: resultError } = await client
     .from("bingo_results")
     .insert({
       game_id: gameId,
       card_id: body.cardId,
       contestant_id: body.contestantId,
-      payout: body.payout ?? 0,
-      username: body.username,
+      payout: body.payout,
+      username: contestant.username, // 👈 required now
     })
     .select("*")
     .single();
@@ -64,7 +75,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // 2️⃣ End the game immediately
+  // 4️⃣ End the game immediately
   const { data: updatedGame, error: updateError } = await client
     .from("bingo_games")
     .update({ status: "ended", ended_at: new Date().toISOString() })
@@ -79,9 +90,8 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // 🎉 Return winner + updated game
   return {
-    message: "Bingo confirmed automatically — game ended.",
+    message: "Bingo confirmed and game ended",
     result,
     game: updatedGame,
   };
