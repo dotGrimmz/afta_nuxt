@@ -228,6 +228,22 @@ watch(
 //   },
 //   { deep: true }
 // );
+
+const recentResults = ref<any[]>([]);
+const recentResultsLoading = ref(true);
+
+onMounted(async () => {
+  try {
+    const data = await $fetch<any>("/api/bingo/results/recent");
+    console.log("results", data);
+
+    recentResults.value = data;
+  } catch (err) {
+    console.error("Failed to fetch results", err);
+  } finally {
+    recentResultsLoading.value = false;
+  }
+});
 </script>
 
 <template>
@@ -489,6 +505,30 @@ watch(
           </div>
         </div>
       </div>
+      <section v-if="profile?.role === 'admin'">
+        <h2 class="text-xl font-bold mb-2">Recent Bingo Results</h2>
+
+        <div v-if="recentResultsLoading" class="text-gray-400">
+          Loading results...
+        </div>
+        <div v-else-if="!recentResults.length" class="text-gray-400">
+          No results yet.
+        </div>
+
+        <ul v-else class="space-y-2">
+          <li
+            v-for="res in recentResults"
+            :key="res.id"
+            class="p-2 bg-gray-800 rounded text-sm flex justify-between"
+          >
+            <span>{{ res.username || res.contestant_id }}</span>
+            <span class="text-green-400">{{ res.payout }} 💎</span>
+            <span class="text-gray-400">{{
+              new Date(res.created_at).toLocaleString()
+            }}</span>
+          </li>
+        </ul>
+      </section>
     </section>
   </main>
 </template>

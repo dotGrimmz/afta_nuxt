@@ -148,7 +148,12 @@ const handleCallBingo = async (cardId: string) => {
       return;
     }
 
-    await callBingo(contestant.value.game_id, cardId, contestant.value.id);
+    await callBingo(
+      contestant.value.game_id,
+      cardId,
+      contestant.value.id,
+      winnerName?.value
+    );
     message.value = "Bingo!";
     card.is_winner_candidate = true;
   } catch (err: any) {

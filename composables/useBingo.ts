@@ -230,12 +230,13 @@ export const useBingo = () => {
   const callBingo = async (
     gameId: string,
     cardId: string,
-    contestantId: string
+    contestantId: string,
+    username?: string | null
   ) => {
     try {
       const response = await $fetch(`/api/bingo/games/${gameId}/call-bingo`, {
         method: "POST",
-        body: { cardId, contestantId },
+        body: { cardId, contestantId, username },
       });
 
       return "card" in response ? response.card : undefined;

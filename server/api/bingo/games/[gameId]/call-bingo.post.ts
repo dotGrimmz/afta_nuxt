@@ -16,6 +16,7 @@ export default defineEventHandler(async (event) => {
     cardId: string;
     contestantId: string;
     payout?: number;
+    username: string | null;
   }>(event);
 
   if (!body?.cardId || !body?.contestantId) {
@@ -41,6 +42,8 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  console.log("username in api:", body.username);
+
   // 1️⃣ Insert result (mark winner + payout if passed)
   const { data: result, error: resultError } = await client
     .from("bingo_results")
@@ -49,6 +52,7 @@ export default defineEventHandler(async (event) => {
       card_id: body.cardId,
       contestant_id: body.contestantId,
       payout: body.payout ?? 0,
+      username: body.username,
     })
     .select("*")
     .single();
