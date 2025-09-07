@@ -10,6 +10,27 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing gameId" });
   }
 
+  // 🔎 Count contestants for this game
+  const { count, error: countError } = await client
+    .from("bingo_contestants")
+    .select("*", { count: "exact", head: true })
+    .eq("game_id", gameId);
+
+  if (countError) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: countError.message,
+    });
+  }
+
+  if (!count || count < 2) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "At least 2 contestants are required to start the game.",
+    });
+  }
+
+  // ✅ Safe to start game
   const { data, error } = await client
     .from("bingo_games")
     .update({
