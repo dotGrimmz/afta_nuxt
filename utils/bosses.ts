@@ -18,8 +18,9 @@ export const bosses = [
   },
   {
     rank: 4,
-    name: "Bļãćķ Vèłmã 👓",
-    avatarUrl: "/images/bosses/blk_velma.jpg",
+    name: "🤘🏾⚜️♛ȺƑའįҠȺហɖơƖƖ⚜️💰📺💰",
+    avatarUrl: "/images/bosses/a_doll.jpg",
+    siteUrl: "https://tagged.com/afrikandoll",
     // objectPosition: "50% -60%",
   },
 ];
