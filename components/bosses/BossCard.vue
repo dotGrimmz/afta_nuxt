@@ -3,7 +3,22 @@
     class="relative group overflow-hidden rounded-2xl shadow-xl aspect-[4/5]"
   >
     <!-- Diagonal Slice -->
-    <div class="absolute inset-0 z-0 bg-black">
+    <a
+      v-if="boss.siteUrl"
+      :href="boss.siteUrl"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="absolute inset-0 z-0 bg-black cursor-pointer block"
+    >
+      <img
+        :style="{ objectPosition: boss.objectPosition || 'center' }"
+        class="object-cover object-top w-full h-full transform scale-125"
+        :src="boss.avatarUrl"
+      />
+    </a>
+
+    <!-- Otherwise, render original block -->
+    <div v-else class="absolute inset-0 z-0 bg-black">
       <img
         :style="{ objectPosition: boss.objectPosition || 'center' }"
         class="object-cover object-top w-full h-full transform scale-125"
