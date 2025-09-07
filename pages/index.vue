@@ -132,9 +132,9 @@ const allTime = [
     name: "🅹𝖚𝖘♠️𝕏𝖙𝖗𝖆 🅷𝖔𝖙🔥",
   },
   {
-    avatarUrl: "/images/overall/slim_thick_goodie.jpg",
-    class: "mt-6",
-    name: "Slim Thick Goodie",
+    avatarUrl: "/images/overall/choc_vibes.jpg",
+    class: "mt-8",
+    name: "🍫ChocolateVIBESSS 🍫",
   },
 ];
 </script>

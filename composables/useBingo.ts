@@ -69,6 +69,8 @@ export const useBingo = () => {
         body: { payout },
       });
 
+      console.log("game from:", game);
+
       // update local state with returned game
       games.value = (games.value ?? []).map((g) =>
         g.id === game.id ? game : g
@@ -131,7 +133,6 @@ export const useBingo = () => {
         method: "POST",
         body: { cardId, contestantId, payout },
       });
-      await refresh();
     } catch (err: any) {
       console.error("Failed to confirm winner:", err);
       throw err;

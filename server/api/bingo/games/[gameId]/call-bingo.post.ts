@@ -5,6 +5,7 @@ export default defineEventHandler(async (event) => {
   const client = await serverSupabaseClient<Database>(event);
   const gameId = event.context.params?.gameId;
 
+  console.log({ gameId });
   if (!gameId) {
     throw createError({
       statusCode: 400,
@@ -48,6 +49,7 @@ export default defineEventHandler(async (event) => {
     .eq("id", body.contestantId)
     .single();
 
+  console.log("contestant", contestant);
   if (contestantError || !contestant) {
     throw createError({
       statusCode: 404,
