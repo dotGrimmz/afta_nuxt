@@ -36,6 +36,7 @@ export default defineEventHandler(async (event) => {
     .single();
 
   if (cardError || !card) {
+    console.error(cardError);
     throw createError({
       statusCode: 404,
       statusMessage: "Card not found for this game/contestant",
@@ -51,6 +52,7 @@ export default defineEventHandler(async (event) => {
 
   console.log("contestant", contestant);
   if (contestantError || !contestant) {
+    console.error(contestantError);
     throw createError({
       statusCode: 404,
       statusMessage: "Contestant not found",
@@ -73,6 +75,7 @@ export default defineEventHandler(async (event) => {
   console.log("result", result);
 
   if (resultError || !result) {
+    console.error(resultError);
     throw createError({
       statusCode: 500,
       statusMessage: resultError?.message || "Failed to insert bingo result",
@@ -95,6 +98,7 @@ export default defineEventHandler(async (event) => {
     .single();
 
   if (updateError || !updatedGame) {
+    console.error(updateError);
     throw createError({
       statusCode: 500,
       statusMessage: updateError?.message || "Failed to end game",
