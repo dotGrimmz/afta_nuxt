@@ -5,6 +5,7 @@ import { useBingo } from "~/composables/useBingo";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { _BingoCardType } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { toast } from "#build/ui";
 
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
@@ -42,6 +43,24 @@ const error = ref<string | null>(null);
 const calling = ref(false);
 const message = ref("");
 const subscriptions: RealtimeChannel[] = [];
+const { $toast } = useNuxtApp();
+const toastOpts = ref({
+  //@ts-ignore
+  position: "top-left",
+  timeout: 2000,
+  closeOnClick: true,
+  pauseOnHover: true,
+});
+
+const showBingoToast = (payout: number | string) => {
+  $toast.success(`BINGO 🎉 ${payout} 💎`, {
+    //@ts-ignore
+    position: "top-left",
+    timeout: 2000,
+    closeOnClick: true,
+    pauseOnHover: true,
+  });
+};
 
 // ✅ Subscribe to realtime draws
 const subscribeToDraws = (gameId: string) => {
@@ -79,6 +98,9 @@ const subscribeToResults = (gameId: string) => {
         filter: `game_id=eq.${gameId}`,
       },
       async (payload) => {
+        // in this logic we need to determine if it was an admin stop
+        // then display the corresponding toast message
+
         const confirmed = payload.new as BingoGame;
         console.log("Bingo Winner Info Payload", payload);
         winnerId.value = confirmed?.winner_id || null;
@@ -105,7 +127,6 @@ const subscribeToGame = (gameId: string) => {
       },
       (payload) => {
         const updated = payload.new as BingoGame;
-        console.log({ updated });
         currentGame.value = updated;
 
         if (updated.status === "ended") {
@@ -155,7 +176,13 @@ const handleCallBingo = async (cardId: string) => {
 
     const hasBingo = checkBingo({ grid: card.grid, draws: draws.value });
     if (!hasBingo) {
-      message.value = "No bingo yet — keep playing!";
+      $toast.error("No bingo yet — keep playing!", {
+        //@ts-ignore
+        position: "top-left",
+        timeout: 2000,
+        closeOnClick: true,
+        pauseOnHover: true,
+      });
       return;
     }
 
@@ -173,6 +200,8 @@ const handleCallBingo = async (cardId: string) => {
       message.value = `Bingo! ${data.result.username} Won ${data.result.payout} 💎`;
       //@ts-ignore
       winnerName.value = data.result.username;
+
+      showBingoToast(data.result.payout);
     }
   } catch (err: any) {
     console.error(err);
@@ -194,8 +223,8 @@ onMounted(async () => {
       const gameId = result.cards[0]?.game_id;
       if (gameId) {
         const state = await getState(gameId);
-        console.log("setting current game", state.game.game);
         winnerPayout.value = state.game.game.payout;
+        currentGame.value = state.game.game;
         if (state.game.game.status === "lobby") {
           gameLobby.value = true;
         }
@@ -235,13 +264,25 @@ const enterAnotherCode = (event: MouseEvent) => {
 console.log("game lobby??", gameLobby.value);
 
 watch([gameEnded, winnerId], ([ended, winner]) => {
-  console.log({ winner, ended, gameEnded, winnerId, contestant });
+  console.log(
+    { winner, ended, gameEnded, winnerId, contestant },
+    isWinner.value
+  );
   if (ended) {
-    if (contestant.value?.id === winner) {
-      message.value = `🎉 You won this round!`;
-    } else {
-      message.value = "❌ Game Over — Better luck next time.";
+    const contestantHasWon = contestant.value?.id === winner;
+
+    if (!winner) {
+      //@ts-ignore
+      return $toast.warning("Game Ended - Admin Stop", toastOpts.value);
     }
+
+    if (!contestantHasWon) {
+      //@ts-ignore
+      return $toast.error("Game Ended - Try again!", toastOpts.value);
+    }
+
+    //@ts-ignore
+    return $toast.error(`💎 BINGO 💎`, toastOpts.value);
   }
 });
 
@@ -342,7 +383,7 @@ console.log("current Game", currentGame.value);
               >Enter Another Code
             </UButton>
           </div>
-          <div v-if="winnerPayout !== null" class="mt-2 text-sm">
+          <div v-if="isWinner" class="mt-2 text-sm">
             Prize: {{ winnerPayout }} 💎
           </div>
         </template>

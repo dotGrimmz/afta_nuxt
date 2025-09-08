@@ -109,6 +109,7 @@ type RTESubs = {
   id: string;
 };
 const lastIssuedCode = ref<string | null>(null);
+const lastContestantUsername = ref<string | null>(null);
 const gameEnded = ref(false);
 const overlay = useOverlay();
 const subscriptions: RTESubs[] = [];
@@ -142,6 +143,7 @@ const handleIssueCode = async (gameId: string) => {
     );
 
     lastIssuedCode.value = code;
+    lastContestantUsername.value = newContestant.username;
 
     // reset form
     newContestant.username = "";
@@ -151,13 +153,6 @@ const handleIssueCode = async (gameId: string) => {
   } catch (err) {
     console.error("Error issuing join code:", err);
   }
-};
-
-const refreshGameState = async (gameId: string) => {
-  stateMap.value[gameId] = {
-    ...(await getState(gameId)),
-    loading: false,
-  };
 };
 
 onMounted(async () => {
@@ -223,8 +218,6 @@ const subscribeToResults = (gameId: string) => {
       },
       async (payload) => {
         const confirmed = payload?.new as BingoResult;
-        console.log("Bingo Winner Info Payload", payload);
-        console.log("Bingo Winner Info confirmed", confirmed);
 
         // if the new result has a winner name then we open the modal
         if (confirmed.username) {
@@ -234,46 +227,6 @@ const subscribeToResults = (gameId: string) => {
             confirmed.payout ?? confirmed.payout
           );
         }
-        // confirmed  = {
-        //card_id
-        // :
-        // "8b13d766-d45d-4794-9b72-b7acb3bfb874"
-        // contestant_id
-        // :
-        // "90bce1b5-ccc1-4722-bc4a-40e5c17cf5e4"
-        // created_at
-        // :
-        // "2025-09-08T11:31:44.658676+00:00"
-        // game_id
-        // :
-        // "99e8d2b6-a1b4-4224-a5d0-eabc9e5fd78d"
-        // id
-        // :
-        // "6e3555ab-312b-40a0-9dbe-dd217eef88c5"
-        // payout
-        // :
-        // 0
-        // username
-        // :
-        // "tae"
-        // won_at
-        // :
-        // "2025-09-08T11:31:44.658676+00:00" }
-
-        //   .from("bingo_contestants")
-        //   .select("username")
-        //   .eq("id", confirmed.contestant_id)
-        //   .single();
-
-        // winnerName.value =
-        //   winnerContestant?.username || confirmed.contestant_id;
-
-        // console.log(
-        //   "winner name value after winner bingo results called cus a winner is selected:",
-        //   winnerName.value
-        // );
-
-        // we can just check gamestate here in this ref,
       }
     )
     .subscribe();
@@ -281,10 +234,6 @@ const subscribeToResults = (gameId: string) => {
 };
 
 watch(
-  // in this watcher we subscribe to all the games in bingo games,
-  // but when this watcher of bingo games updates, we need to also
-  // unsub from that game as well. this should be checked on
-  // every new bingo game and when this component unmounts.
   bingoGames,
   async (games) => {
     if (!games || games.length === 0) return;
@@ -588,7 +537,7 @@ onBeforeUnmount(() => {
             </UButton>
 
             <p v-if="lastIssuedCode" class="text-xs text-green-400 mt-2">
-              Code issued: {{ lastIssuedCode }} for
+              Code issued: {{ lastIssuedCode }} for {{ lastContestantUsername }}
             </p>
           </div>
 
