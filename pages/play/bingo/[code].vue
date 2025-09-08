@@ -35,6 +35,7 @@ const gameEnded = ref(false);
 const gameLobby = ref(false);
 const contestants = ref<BingoContestant[]>([]);
 const isWinner = ref(false);
+const currentGame = ref<BingoGame>();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -105,6 +106,7 @@ const subscribeToGame = (gameId: string) => {
       (payload) => {
         const updated = payload.new as BingoGame;
         console.log({ updated });
+        currentGame.value = updated;
 
         if (updated.status === "ended") {
           gameEnded.value = true;
@@ -192,6 +194,8 @@ onMounted(async () => {
       const gameId = result.cards[0]?.game_id;
       if (gameId) {
         const state = await getState(gameId);
+        console.log("setting current game", state.game.game);
+        winnerPayout.value = state.game.game.payout;
         if (state.game.game.status === "lobby") {
           gameLobby.value = true;
         }
@@ -247,6 +251,7 @@ onBeforeUnmount(() => {
   });
   subscriptions.length = 0; // clear refs
 });
+console.log("current Game", currentGame.value);
 </script>
 
 <template>
@@ -265,11 +270,21 @@ onBeforeUnmount(() => {
         Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
       </h1>
 
-      <div class="flex justify-between">
+      <div class="flex justify-between mb-2">
         <p class="text-sm text-gray-400">
           You have {{ cards.length }} card<span v-if="cards.length !== 1"
             >s</span
           >.
+        </p>
+        <p>
+          Lobby Status:
+          {{
+            draws.length === 0 && !gameEnded
+              ? "Waiting for Admin to begin"
+              : gameEnded
+              ? "Ended"
+              : "Active"
+          }}
         </p>
         <p>Prize: {{ winnerPayout }} 💎</p>
       </div>

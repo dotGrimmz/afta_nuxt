@@ -6,14 +6,6 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{ close: [boolean] }>();
-
-// title should be game ended
-//body should be winner name, winner id, payout,
-// should refresh page?
-
-// const handleClose = () => {
-//     refreshBingoGames()?
-// }
 </script>
 <template>
   <UModal
