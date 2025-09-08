@@ -80,7 +80,12 @@ export default defineEventHandler(async (event) => {
   // 4️⃣ End the game immediately
   const { data: updatedGame, error: updateError } = await client
     .from("bingo_games")
-    .update({ status: "ended", ended_at: new Date().toISOString() })
+    .update({
+      status: "ended",
+      ended_at: new Date().toISOString(),
+      winner_id: body.contestantId,
+      winner_username: contestant.username,
+    })
     .eq("id", gameId)
     .select("*")
     .single();

@@ -24,6 +24,7 @@ const winnerPayout = ref<number | null>(null);
 const gameEnded = ref(false);
 const gameLobby = ref(false);
 const contestants = ref<BingoContestant[]>([]);
+const isWinner = ref(false);
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -66,20 +67,26 @@ const subscribeToResults = (gameId: string) => {
       },
       async (payload) => {
         const confirmed = payload.new as BingoResult;
-        console.log("Winner confirmed:", confirmed);
-
+        console.log("Bingo Winner Info Payload", payload);
         winnerId.value = confirmed.contestant_id;
         winnerPayout.value = confirmed.payout ?? 0;
-        gameEnded.value = true; // 👈 mark game ended for all
+        gameEnded.value = true; // game is over once result is inserted ✅
 
-        const { data: winnerContestant } = await supabase
-          .from("bingo_contestants")
-          .select("username")
-          .eq("id", confirmed.contestant_id)
-          .single();
+        // const { data: winnerContestant } = await supabase
+        //   .from("bingo_contestants")
+        //   .select("username")
+        //   .eq("id", confirmed.contestant_id)
+        //   .single();
 
-        winnerName.value =
-          winnerContestant?.username || confirmed.contestant_id;
+        // winnerName.value =
+        //   winnerContestant?.username || confirmed.contestant_id;
+
+        // console.log(
+        //   "winner name value after winner bingo results called cus a winner is selected:",
+        //   winnerName.value
+        // );
+
+        // we can just check gamestate here in this ref,
       }
     )
     .subscribe();
@@ -100,14 +107,12 @@ const subscribeToGame = (gameId: string) => {
       (payload) => {
         const updated =
           payload.new as Database["public"]["Tables"]["bingo_games"]["Row"];
+
         if (updated.status === "ended") {
           gameEnded.value = true;
           if (!winnerId.value) {
-            winnerName.value = "Another player";
+            winnerName.value = "Another player"; // admin stopped, no winner row
           }
-          cards.value.forEach((c) => {
-            c.is_winner_candidate = false;
-          });
         }
       }
     )
@@ -148,16 +153,26 @@ const handleCallBingo = async (cardId: string) => {
       return;
     }
 
-    await callBingo(
+    console.log("calling bingo");
+    const data = await callBingo(
       contestant.value.game_id,
       cardId,
       contestant.value.id,
-      winnerName?.value
+      contestant.value.username
     );
-    message.value = "Bingo!";
-    card.is_winner_candidate = true;
+
+    console.log({ data });
+    if (data) {
+      gameEnded.value = true;
+      isWinner.value = true;
+      //@ts-ignore
+      message.value = `Bingo! ${data.result.username} Won ${data.result.payout} 💎`;
+      //@ts-ignore
+      winnerName.value = data.result.username;
+    }
   } catch (err: any) {
-    message.value = "Error calling bingo. Someone Prolly Won";
+    console.error(err);
+    message.value = err;
   } finally {
     calling.value = false;
   }
@@ -169,28 +184,32 @@ onMounted(async () => {
     const result = await joinGame(code);
 
     if (result) {
-      console.log(result);
+      console.log("result on Mount:", result);
       contestant.value = result.contestant;
       cards.value = result.cards;
 
       const gameId = result.cards[0]?.game_id;
       if (gameId) {
         const state = await getState(gameId);
-        console.log("state", state.game.game.status);
-        if (state.game.game.status === "lobby") gameLobby.value = true;
-
-        if (state.winners.length) {
-          gameLobby.value = false;
-          gameEnded.value = true;
-          winnerId.value = state.winners[0].contestant_id;
-          const winningContestant = state.contestants.find(
-            (user: any) => user.id === state.winners[0].contestant_id
-          );
-
-          //@ts-ignore
-          winnerName.value = winningContestant?.username || "Another Player"; // fallback
+        console.log("state", state.game.game);
+        if (state.game.game.status === "lobby") {
+          gameLobby.value = true;
         }
-        if (state.game.game.status === "ended") gameEnded.value = true;
+
+        // if (state.winners.length) {
+        //   gameLobby.value = false;
+        //   gameEnded.value = true;
+        //   winnerId.value = state.winners[0].contestant_id;
+
+        // }
+        if (state.game.game.status === "ended") {
+          const game = state.game.game;
+          winnerName.value = game.winner_username;
+          winnerId.value = game.winner_id;
+          gameEnded.value = true;
+          console.log("current contestant:", contestant);
+          isWinner.value = game.winner_id === contestant.value?.id;
+        }
 
         if (state) {
           draws.value = state.draws;
@@ -218,12 +237,11 @@ const enterAnotherCode = (event: MouseEvent) => {
 console.log("game lobby??", gameLobby.value);
 
 watch([gameEnded, winnerId], ([ended, winner]) => {
+  console.log({ winner, ended, gameEnded, winnerId, contestant });
   if (ended) {
-    if (winner && contestant.value?.id === winner) {
-      // 👑 This contestant is the winner
+    if (contestant.value?.id === winner) {
       message.value = `🎉 You won this round!`;
     } else {
-      // ❌ Someone else won or admin ended the game
       message.value = "❌ Game Over — Better luck next time.";
     }
   }
@@ -283,7 +301,7 @@ watch([gameEnded, winnerId], ([ended, winner]) => {
             : 'bg-red-700 text-white'
         "
       >
-        <template v-if="winnerId === contestant?.id">
+        <template v-if="isWinner">
           🎉 Congratulations {{ winnerName }} — You Won!
           <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
             Prize: {{ winnerPayout }} 💎

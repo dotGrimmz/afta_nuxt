@@ -239,8 +239,8 @@ export const useBingo = () => {
         method: "POST",
         body: { cardId, contestantId, username },
       });
-
-      return "card" in response ? response.card : undefined;
+      console.log({ response });
+      return response;
     } catch (err: any) {
       console.error("Failed to call bingo:", err);
       throw err;
