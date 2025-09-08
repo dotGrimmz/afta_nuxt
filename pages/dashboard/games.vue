@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
 import { calculateCost } from "~/utils/bingo/pricing";
+import BaseModal from "~/components/BaseModal.vue";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { sub } from "three/tsl";
+
 const supabase = useSupabaseClient<Database>();
 const { profile } = useProfile();
 
@@ -26,10 +30,15 @@ type BingoGame = {
   min_players: number;
   status: string;
   payout?: number;
+  winner_id?: string | null;
+  winner_username?: string | null;
 };
 
 type ContestantType =
   Database["public"]["Tables"]["bingo_contestants"]["Row"][];
+type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"] & {
+  username?: string;
+};
 
 const {
   games: bingoGames,
@@ -44,7 +53,9 @@ const {
   getState,
   issueJoinCode,
   getContestants,
+  refresh: refreshBingo,
 } = useBingo() as {
+  refresh: () => void;
   games: Ref<BingoGame[]>;
   loading: Ref<boolean>;
   creating: Ref<boolean>;
@@ -93,9 +104,34 @@ const newContestant = reactive({
   freeSpace: false,
   autoMark: false,
 });
-
+type RTESubs = {
+  channel: RealtimeChannel;
+  id: string;
+};
 const lastIssuedCode = ref<string | null>(null);
+const lastContestantUsername = ref<string | null>(null);
+const gameEnded = ref(false);
+const overlay = useOverlay();
+const subscriptions: RTESubs[] = [];
 
+const modal = overlay.create(BaseModal);
+const open = async (
+  username: string,
+  winner_id: string,
+  payout: string | number
+) => {
+  const instance = modal.open({
+    winner_id,
+    payout,
+    winner_username: username,
+  });
+
+  const shouldRefresh = await instance.result;
+
+  if (shouldRefresh) {
+    refreshBingo();
+  }
+};
 const handleIssueCode = async (gameId: string) => {
   try {
     const { code } = await issueJoinCode(
@@ -107,6 +143,7 @@ const handleIssueCode = async (gameId: string) => {
     );
 
     lastIssuedCode.value = code;
+    lastContestantUsername.value = newContestant.username;
 
     // reset form
     newContestant.username = "";
@@ -116,13 +153,6 @@ const handleIssueCode = async (gameId: string) => {
   } catch (err) {
     console.error("Error issuing join code:", err);
   }
-};
-
-const refreshGameState = async (gameId: string) => {
-  stateMap.value[gameId] = {
-    ...(await getState(gameId)),
-    loading: false,
-  };
 };
 
 onMounted(async () => {
@@ -141,7 +171,7 @@ onMounted(async () => {
   }
 });
 const subscribeToContestants = (gameId: string) => {
-  supabase
+  const channel = supabase
     .channel(`bingo_contestants_${gameId}`)
     .on(
       "postgres_changes",
@@ -171,12 +201,50 @@ const subscribeToContestants = (gameId: string) => {
       }
     )
     .subscribe();
+  subscriptions.push({ id: gameId, channel });
+};
+
+const subscribeToResults = (gameId: string) => {
+  console.log("subscribing to ", gameId);
+  const channel = supabase
+    .channel(`bingo_results_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "bingo_results",
+        filter: `game_id=eq.${gameId}`,
+      },
+      async (payload) => {
+        const confirmed = payload?.new as BingoResult;
+
+        // if the new result has a winner name then we open the modal
+        if (confirmed.username) {
+          open(
+            confirmed.username ?? confirmed.contestant_id,
+            confirmed.contestant_id ?? confirmed.contestant_id,
+            confirmed.payout ?? confirmed.payout
+          );
+        }
+      }
+    )
+    .subscribe();
+  subscriptions.push({ id: gameId, channel });
 };
 
 watch(
   bingoGames,
   async (games) => {
     if (!games || games.length === 0) return;
+    console.log("subscriptions", subscriptions);
+    const gameIds = games.map((game) => game.id);
+    subscriptions.forEach((sub) => {
+      console.log("currently subbed:", sub);
+      if (gameIds.includes(sub.id)) {
+        sub.channel.unsubscribe();
+      }
+    });
 
     const newState: Record<string, any> = {};
     for (const game of games) {
@@ -191,43 +259,12 @@ watch(
 
       newState[game.id] = { ...fullState, loading: false };
       subscribeToContestants(game.id); // 👈 start realtime sync
+      subscribeToResults(game.id);
     }
     stateMap.value = newState;
   },
   { immediate: true }
 );
-
-// watch(
-//   () =>
-//     bingoGames.value?.map((g) => ({
-//       id: g.id,
-//       status: g.status,
-//       ended_at: g.ended_at,
-//     })),
-//   async (newGames, oldGames) => {
-//     if (!newGames || !oldGames) return;
-
-//     for (let i = 0; i < newGames.length; i++) {
-//       const newGame = newGames[i];
-//       const oldGame = oldGames[i];
-
-//       if (!oldGame) continue; // new game created, skip or handle separately
-
-//       if (
-//         newGame.status !== oldGame.status ||
-//         newGame.ended_at !== oldGame.ended_at
-//       ) {
-//         console.log("[WATCH] Game changed:", newGame.id);
-
-//         stateMap.value[newGame.id] = {
-//           ...(await getState(newGame.id)),
-//           loading: false,
-//         };
-//       }
-//     }
-//   },
-//   { deep: true }
-// );
 
 const recentResults = ref<any[]>([]);
 const recentResultsLoading = ref(true);
@@ -235,7 +272,6 @@ const recentResultsLoading = ref(true);
 onMounted(async () => {
   try {
     const data = await $fetch<any>("/api/bingo/results/recent");
-    console.log("results", data);
 
     recentResults.value = data;
   } catch (err) {
@@ -274,6 +310,15 @@ onMounted(() => {
       )
       .subscribe();
   });
+});
+
+onBeforeUnmount(() => {
+  console.log("onBeforeUnmount", subscriptions);
+  subscriptions.forEach((sub) => {
+    console.log("unsubscribing from", sub);
+    supabase.removeChannel(sub.channel);
+  });
+  subscriptions.length = 0; // clear refs
 });
 </script>
 
@@ -492,7 +537,7 @@ onMounted(() => {
             </UButton>
 
             <p v-if="lastIssuedCode" class="text-xs text-green-400 mt-2">
-              Code issued: {{ lastIssuedCode }} for
+              Code issued: {{ lastIssuedCode }} for {{ lastContestantUsername }}
             </p>
           </div>
 

@@ -4,11 +4,22 @@ import BingoCard from "~/components/bingo/BingoCard.vue";
 import { useBingo } from "~/composables/useBingo";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { _BingoCardType } from "~/types/bingo";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { toast } from "#build/ui";
 
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
 type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"];
-
+type BingoGame = {
+  id: string;
+  created_at: string;
+  ended_at: string | null;
+  min_players: number;
+  status: string;
+  payout?: number;
+  winner_id?: string | null;
+  winner_username?: string | null;
+};
 const route = useRoute();
 const router = useRouter();
 
@@ -24,15 +35,36 @@ const winnerPayout = ref<number | null>(null);
 const gameEnded = ref(false);
 const gameLobby = ref(false);
 const contestants = ref<BingoContestant[]>([]);
+const isWinner = ref(false);
+const currentGame = ref<BingoGame>();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
 const calling = ref(false);
 const message = ref("");
+const subscriptions: RealtimeChannel[] = [];
+const { $toast } = useNuxtApp();
+const toastOpts = ref({
+  //@ts-ignore
+  position: "top-left",
+  timeout: 2000,
+  closeOnClick: true,
+  pauseOnHover: true,
+});
+
+const showBingoToast = (payout: number | string) => {
+  $toast.success(`BINGO 🎉 ${payout} 💎`, {
+    //@ts-ignore
+    position: "top-left",
+    timeout: 2000,
+    closeOnClick: true,
+    pauseOnHover: true,
+  });
+};
 
 // ✅ Subscribe to realtime draws
 const subscribeToDraws = (gameId: string) => {
-  supabase
+  const channel = supabase
     .channel(`bingo_draws_${gameId}`)
     .on(
       "postgres_changes",
@@ -50,11 +82,12 @@ const subscribeToDraws = (gameId: string) => {
       }
     )
     .subscribe();
+  subscriptions.push(channel);
 };
 
 // ✅ Subscribe to confirmed winners
 const subscribeToResults = (gameId: string) => {
-  supabase
+  const channel = supabase
     .channel(`bingo_results_${gameId}`)
     .on(
       "postgres_changes",
@@ -65,29 +98,24 @@ const subscribeToResults = (gameId: string) => {
         filter: `game_id=eq.${gameId}`,
       },
       async (payload) => {
-        const confirmed = payload.new as BingoResult;
-        console.log("Winner confirmed:", confirmed);
+        // in this logic we need to determine if it was an admin stop
+        // then display the corresponding toast message
 
-        winnerId.value = confirmed.contestant_id;
+        const confirmed = payload.new as BingoGame;
+        console.log("Bingo Winner Info Payload", payload);
+        winnerId.value = confirmed?.winner_id || null;
         winnerPayout.value = confirmed.payout ?? 0;
-        gameEnded.value = true; // 👈 mark game ended for all
-
-        const { data: winnerContestant } = await supabase
-          .from("bingo_contestants")
-          .select("username")
-          .eq("id", confirmed.contestant_id)
-          .single();
-
-        winnerName.value =
-          winnerContestant?.username || confirmed.contestant_id;
+        gameEnded.value = true; // game is over once result is inserted ✅
+        isWinner.value = confirmed.winner_id === contestant.value?.id;
       }
     )
     .subscribe();
+  subscriptions.push(channel);
 };
 
 // ✅ Subscribe to game status
 const subscribeToGame = (gameId: string) => {
-  supabase
+  const channel = supabase
     .channel(`bingo_games_${gameId}`)
     .on(
       "postgres_changes",
@@ -98,24 +126,27 @@ const subscribeToGame = (gameId: string) => {
         filter: `id=eq.${gameId}`,
       },
       (payload) => {
-        const updated =
-          payload.new as Database["public"]["Tables"]["bingo_games"]["Row"];
+        const updated = payload.new as BingoGame;
+        currentGame.value = updated;
+
         if (updated.status === "ended") {
           gameEnded.value = true;
-          if (!winnerId.value) {
-            winnerName.value = "Another player";
-          }
-          cards.value.forEach((c) => {
-            c.is_winner_candidate = false;
-          });
+          //@ts-ignore
+          winnerId.value = updated.winner_id;
+
+          isWinner.value = updated.winner_id === contestant.value?.id;
+          // if (!winnerId.value) {
+          //   winnerName.value = updated?.winner_username; // admin stopped, no winner row
+          // }
         }
       }
     )
     .subscribe();
+  subscriptions.push(channel);
 };
 
 const subscribeToContestants = (gameId: string) => {
-  supabase
+  const channel = supabase
     .channel(`bingo_contestants_${gameId}`)
     .on(
       "postgres_changes",
@@ -132,6 +163,7 @@ const subscribeToContestants = (gameId: string) => {
       }
     )
     .subscribe();
+  subscriptions.push(channel);
 };
 
 // ✅ Handle "Call Bingo!"
@@ -144,20 +176,36 @@ const handleCallBingo = async (cardId: string) => {
 
     const hasBingo = checkBingo({ grid: card.grid, draws: draws.value });
     if (!hasBingo) {
-      message.value = "No bingo yet — keep playing!";
+      $toast.error("No bingo yet — keep playing!", {
+        //@ts-ignore
+        position: "top-left",
+        timeout: 2000,
+        closeOnClick: true,
+        pauseOnHover: true,
+      });
       return;
     }
 
-    await callBingo(
+    const data = await callBingo(
       contestant.value.game_id,
       cardId,
       contestant.value.id,
-      winnerName?.value
+      contestant.value.username
     );
-    message.value = "Bingo!";
-    card.is_winner_candidate = true;
+
+    if (data) {
+      gameEnded.value = true;
+      isWinner.value = true;
+      //@ts-ignore
+      message.value = `Bingo! ${data.result.username} Won ${data.result.payout} 💎`;
+      //@ts-ignore
+      winnerName.value = data.result.username;
+
+      showBingoToast(data.result.payout);
+    }
   } catch (err: any) {
-    message.value = "Error calling bingo. Someone Prolly Won";
+    console.error(err);
+    message.value = err;
   } finally {
     calling.value = false;
   }
@@ -169,28 +217,26 @@ onMounted(async () => {
     const result = await joinGame(code);
 
     if (result) {
-      console.log(result);
       contestant.value = result.contestant;
       cards.value = result.cards;
 
       const gameId = result.cards[0]?.game_id;
       if (gameId) {
         const state = await getState(gameId);
-        console.log("state", state.game.game.status);
-        if (state.game.game.status === "lobby") gameLobby.value = true;
-
-        if (state.winners.length) {
-          gameLobby.value = false;
-          gameEnded.value = true;
-          winnerId.value = state.winners[0].contestant_id;
-          const winningContestant = state.contestants.find(
-            (user: any) => user.id === state.winners[0].contestant_id
-          );
-
-          //@ts-ignore
-          winnerName.value = winningContestant?.username || "Another Player"; // fallback
+        winnerPayout.value = state.game.game.payout;
+        currentGame.value = state.game.game;
+        if (state.game.game.status === "lobby") {
+          gameLobby.value = true;
         }
-        if (state.game.game.status === "ended") gameEnded.value = true;
+
+        if (state.game.game.status === "ended") {
+          const game = state.game.game;
+          winnerName.value = game.winner_username;
+          winnerId.value = game.winner_id;
+          gameEnded.value = true;
+          isWinner.value = game.winner_id === contestant.value?.id;
+          winnerPayout.value = game.payout;
+        }
 
         if (state) {
           draws.value = state.draws;
@@ -218,16 +264,35 @@ const enterAnotherCode = (event: MouseEvent) => {
 console.log("game lobby??", gameLobby.value);
 
 watch([gameEnded, winnerId], ([ended, winner]) => {
+  console.log(
+    { winner, ended, gameEnded, winnerId, contestant },
+    isWinner.value
+  );
   if (ended) {
-    if (winner && contestant.value?.id === winner) {
-      // 👑 This contestant is the winner
-      message.value = `🎉 You won this round!`;
-    } else {
-      // ❌ Someone else won or admin ended the game
-      message.value = "❌ Game Over — Better luck next time.";
+    const contestantHasWon = contestant.value?.id === winner;
+
+    if (!winner) {
+      //@ts-ignore
+      return $toast.warning("Game Ended - Admin Stop", toastOpts.value);
     }
+
+    if (!contestantHasWon) {
+      //@ts-ignore
+      return $toast.error("Game Ended - Try again!", toastOpts.value);
+    }
+
+    //@ts-ignore
+    return $toast.error(`💎 BINGO 💎`, toastOpts.value);
   }
 });
+
+onBeforeUnmount(() => {
+  subscriptions.forEach((sub) => {
+    supabase.removeChannel(sub);
+  });
+  subscriptions.length = 0; // clear refs
+});
+console.log("current Game", currentGame.value);
 </script>
 
 <template>
@@ -245,32 +310,49 @@ watch([gameEnded, winnerId], ([ended, winner]) => {
       <h1 class="text-2xl font-bold">
         Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
       </h1>
-      <p class="text-sm text-gray-400">
-        You have {{ cards.length }} card<span v-if="cards.length !== 1">s</span
-        >.
-      </p>
+
+      <div class="flex justify-between mb-2">
+        <p class="text-sm text-gray-400">
+          You have {{ cards.length }} card<span v-if="cards.length !== 1"
+            >s</span
+          >.
+        </p>
+        <p>
+          Lobby Status:
+          {{
+            draws.length === 0 && !gameEnded
+              ? "Waiting for Admin to begin"
+              : gameEnded
+              ? "Ended"
+              : "Active"
+          }}
+        </p>
+        <p>Prize: {{ winnerPayout }} 💎</p>
+      </div>
 
       <!-- Cards grid -->
-      <div
-        v-for="card in cards"
-        :key="card.id"
-        class="bg-gray-800 p-4 rounded relative"
-        :class="{
-          'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
-        }"
-      >
-        <BingoCard :card="card" :draws="draws" />
-
-        <UButton
-          class="mt-2 w-full"
-          color="primary"
-          size="sm"
-          :loading="calling"
-          :disabled="gameEnded"
-          @click="handleCallBingo(card.id)"
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
+        <div
+          v-for="card in cards"
+          :key="card.id"
+          class="bg-gray-800 p-4 rounded relative"
+          :class="{
+            'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
+          }"
         >
-          {{ gameEnded ? "Game Ended" : "Call Bingo" }}
-        </UButton>
+          <BingoCard :card="card" :draws="draws" />
+
+          <UButton
+            class="mt-2 w-full"
+            color="primary"
+            size="sm"
+            :loading="calling"
+            :disabled="gameEnded"
+            @click="handleCallBingo(card.id)"
+          >
+            {{ gameEnded ? "Game Ended" : "Call Bingo" }}
+          </UButton>
+        </div>
       </div>
 
       <!-- Winner / Game Over -->
@@ -283,7 +365,7 @@ watch([gameEnded, winnerId], ([ended, winner]) => {
             : 'bg-red-700 text-white'
         "
       >
-        <template v-if="winnerId === contestant?.id">
+        <template v-if="isWinner">
           🎉 Congratulations {{ winnerName }} — You Won!
           <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
             Prize: {{ winnerPayout }} 💎
@@ -301,7 +383,7 @@ watch([gameEnded, winnerId], ([ended, winner]) => {
               >Enter Another Code
             </UButton>
           </div>
-          <div v-if="winnerPayout !== null" class="mt-2 text-sm">
+          <div v-if="isWinner" class="mt-2 text-sm">
             Prize: {{ winnerPayout }} 💎
           </div>
         </template>
