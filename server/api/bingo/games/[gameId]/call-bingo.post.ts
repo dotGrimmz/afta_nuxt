@@ -57,6 +57,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  console.log("storing payout in results", body.payout);
   // 3️⃣ Insert into bingo_results (with username)
   const { data: result, error: resultError } = await client
     .from("bingo_results")
@@ -69,6 +70,7 @@ export default defineEventHandler(async (event) => {
     })
     .select("*")
     .single();
+  console.log("result", result);
 
   if (resultError || !result) {
     throw createError({
@@ -77,6 +79,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  console.log(" body?", body);
   // 4️⃣ End the game immediately
   const { data: updatedGame, error: updateError } = await client
     .from("bingo_games")
@@ -85,6 +88,7 @@ export default defineEventHandler(async (event) => {
       ended_at: new Date().toISOString(),
       winner_id: body.contestantId,
       winner_username: contestant.username,
+      payout: body.payout,
     })
     .eq("id", gameId)
     .select("*")

@@ -62,7 +62,11 @@ export const useBingo = () => {
     }
   };
 
-  const startGame = async (gameId: string, payout: number): Promise<void> => {
+  const startGame = async (
+    gameId: string,
+    payout: number | undefined | string
+  ): Promise<void> => {
+    console.log("payout in start game call function in composable", payout);
     try {
       const { game } = await $fetch(`/api/bingo/games/${gameId}/start`, {
         method: "POST",
@@ -232,12 +236,13 @@ export const useBingo = () => {
     gameId: string,
     cardId: string,
     contestantId: string,
-    username?: string | null
+    username?: string | null,
+    payout?: string | number
   ) => {
     try {
       const response = await $fetch(`/api/bingo/games/${gameId}/call-bingo`, {
         method: "POST",
-        body: { cardId, contestantId, username },
+        body: { cardId, contestantId, username, payout },
       });
       console.log({ response });
       return response;

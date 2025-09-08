@@ -30,12 +30,13 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  console.log("payout:", body.payout);
   // ✅ Safe to start game
   const { data, error } = await client
     .from("bingo_games")
     .update({
       status: "active",
-      payout: body?.payout ?? 0,
+      payout: body.payout,
     })
     .eq("id", gameId)
     .select()

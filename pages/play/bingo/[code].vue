@@ -5,7 +5,6 @@ import { useBingo } from "~/composables/useBingo";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { _BingoCardType } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { toast } from "#build/ui";
 
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
@@ -190,11 +189,13 @@ const handleCallBingo = async (cardId: string) => {
       return;
     }
 
+    console.log("current game prior calling bingo:", currentGame.value);
     const data = await callBingo(
       contestant.value.game_id,
       cardId,
       contestant.value.id,
-      contestant.value.username
+      contestant.value.username,
+      currentGame.value?.payout
     );
 
     if (data) {
