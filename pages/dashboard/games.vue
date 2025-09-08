@@ -3,6 +3,7 @@ import type { Database } from "~/types/supabase";
 import { calculateCost } from "~/utils/bingo/pricing";
 import BaseModal from "~/components/BaseModal.vue";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { sub } from "three/tsl";
 
 const supabase = useSupabaseClient<Database>();
 const { profile } = useProfile();
@@ -52,7 +53,9 @@ const {
   getState,
   issueJoinCode,
   getContestants,
+  refresh: refreshBingo,
 } = useBingo() as {
+  refresh: () => void;
   games: Ref<BingoGame[]>;
   loading: Ref<boolean>;
   creating: Ref<boolean>;
@@ -101,19 +104,32 @@ const newContestant = reactive({
   freeSpace: false,
   autoMark: false,
 });
-
+type RTESubs = {
+  channel: RealtimeChannel;
+  id: string;
+};
 const lastIssuedCode = ref<string | null>(null);
 const gameEnded = ref(false);
 const overlay = useOverlay();
-const subscriptions: RealtimeChannel[] = [];
+const subscriptions: RTESubs[] = [];
 
 const modal = overlay.create(BaseModal);
-const open = (username: string, winner_id: string, payout: string | number) => {
+const open = async (
+  username: string,
+  winner_id: string,
+  payout: string | number
+) => {
   const instance = modal.open({
     winner_id,
     payout,
     winner_username: username,
   });
+
+  const shouldRefresh = await instance.result;
+
+  if (shouldRefresh) {
+    refreshBingo();
+  }
 };
 const handleIssueCode = async (gameId: string) => {
   try {
@@ -190,7 +206,7 @@ const subscribeToContestants = (gameId: string) => {
       }
     )
     .subscribe();
-  subscriptions.push(channel);
+  subscriptions.push({ id: gameId, channel });
 };
 
 const subscribeToResults = (gameId: string) => {
@@ -261,13 +277,25 @@ const subscribeToResults = (gameId: string) => {
       }
     )
     .subscribe();
-  subscriptions.push(channel);
+  subscriptions.push({ id: gameId, channel });
 };
 
 watch(
+  // in this watcher we subscribe to all the games in bingo games,
+  // but when this watcher of bingo games updates, we need to also
+  // unsub from that game as well. this should be checked on
+  // every new bingo game and when this component unmounts.
   bingoGames,
   async (games) => {
     if (!games || games.length === 0) return;
+    console.log("subscriptions", subscriptions);
+    const gameIds = games.map((game) => game.id);
+    subscriptions.forEach((sub) => {
+      console.log("currently subbed:", sub);
+      if (gameIds.includes(sub.id)) {
+        sub.channel.unsubscribe();
+      }
+    });
 
     const newState: Record<string, any> = {};
     for (const game of games) {
@@ -336,9 +364,10 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  console.log("onBeforeUnmount", subscriptions);
   subscriptions.forEach((sub) => {
-    console.log("unsubscribing from", sub.state);
-    supabase.removeChannel(sub);
+    console.log("unsubscribing from", sub);
+    supabase.removeChannel(sub.channel);
   });
   subscriptions.length = 0; // clear refs
 });

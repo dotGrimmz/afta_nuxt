@@ -10,14 +10,19 @@ const emit = defineEmits<{ close: [boolean] }>();
 // title should be game ended
 //body should be winner name, winner id, payout,
 // should refresh page?
+
+// const handleClose = () => {
+//     refreshBingoGames()?
+// }
 </script>
 <template>
   <UModal
-    :close="{ onClick: () => emit('close', false) }"
+    :dismissible="false"
+    :close="{ onClick: () => emit('close', true) }"
     :title="`Winner ${winner_username} got Bingo!`"
   >
-    <template #content>
-      <div class="flex justify-between">
+    <template #body>
+      <div class="flex justify-around">
         <div class="flex">winner: {{ winner_username }}</div>
 
         <div class="flex">winner id: {{ winner_id }}</div>
@@ -26,11 +31,7 @@ const emit = defineEmits<{ close: [boolean] }>();
 
     <template #footer>
       <div class="flex gap-2">
-        <UButton
-          color="neutral"
-          label="Dismiss"
-          @click="emit('close', false)"
-        />
+        <UButton color="success" label="Dismiss" @click="emit('close', true)" />
       </div>
     </template>
   </UModal>
