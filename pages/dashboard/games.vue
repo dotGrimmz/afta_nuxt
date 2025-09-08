@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
 import { calculateCost } from "~/utils/bingo/pricing";
+import BaseModal from "~/components/BaseModal.vue";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+
 const supabase = useSupabaseClient<Database>();
 const { profile } = useProfile();
 
@@ -32,7 +35,9 @@ type BingoGame = {
 
 type ContestantType =
   Database["public"]["Tables"]["bingo_contestants"]["Row"][];
-type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"];
+type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"] & {
+  username?: string;
+};
 
 const {
   games: bingoGames,
@@ -99,7 +104,17 @@ const newContestant = reactive({
 
 const lastIssuedCode = ref<string | null>(null);
 const gameEnded = ref(false);
+const overlay = useOverlay();
+const subscriptions: RealtimeChannel[] = [];
 
+const modal = overlay.create(BaseModal);
+const open = (username: string, winner_id: string, payout: string | number) => {
+  const instance = modal.open({
+    winner_id,
+    payout,
+    winner_username: username,
+  });
+};
 const handleIssueCode = async (gameId: string) => {
   try {
     const { code } = await issueJoinCode(
@@ -145,7 +160,7 @@ onMounted(async () => {
   }
 });
 const subscribeToContestants = (gameId: string) => {
-  supabase
+  const channel = supabase
     .channel(`bingo_contestants_${gameId}`)
     .on(
       "postgres_changes",
@@ -175,10 +190,12 @@ const subscribeToContestants = (gameId: string) => {
       }
     )
     .subscribe();
+  subscriptions.push(channel);
 };
 
 const subscribeToResults = (gameId: string) => {
-  supabase
+  console.log("subscribing to ", gameId);
+  const channel = supabase
     .channel(`bingo_results_${gameId}`)
     .on(
       "postgres_changes",
@@ -189,9 +206,43 @@ const subscribeToResults = (gameId: string) => {
         filter: `game_id=eq.${gameId}`,
       },
       async (payload) => {
-        const confirmed = payload.new as BingoResult;
+        const confirmed = payload?.new as BingoResult;
         console.log("Bingo Winner Info Payload", payload);
         console.log("Bingo Winner Info confirmed", confirmed);
+
+        // if the new result has a winner name then we open the modal
+        if (confirmed.username) {
+          open(
+            confirmed.username ?? confirmed.contestant_id,
+            confirmed.contestant_id ?? confirmed.contestant_id,
+            confirmed.payout ?? confirmed.payout
+          );
+        }
+        // confirmed  = {
+        //card_id
+        // :
+        // "8b13d766-d45d-4794-9b72-b7acb3bfb874"
+        // contestant_id
+        // :
+        // "90bce1b5-ccc1-4722-bc4a-40e5c17cf5e4"
+        // created_at
+        // :
+        // "2025-09-08T11:31:44.658676+00:00"
+        // game_id
+        // :
+        // "99e8d2b6-a1b4-4224-a5d0-eabc9e5fd78d"
+        // id
+        // :
+        // "6e3555ab-312b-40a0-9dbe-dd217eef88c5"
+        // payout
+        // :
+        // 0
+        // username
+        // :
+        // "tae"
+        // won_at
+        // :
+        // "2025-09-08T11:31:44.658676+00:00" }
 
         //   .from("bingo_contestants")
         //   .select("username")
@@ -210,6 +261,7 @@ const subscribeToResults = (gameId: string) => {
       }
     )
     .subscribe();
+  subscriptions.push(channel);
 };
 
 watch(
@@ -236,38 +288,6 @@ watch(
   },
   { immediate: true }
 );
-
-// watch(
-//   () =>
-//     bingoGames.value?.map((g) => ({
-//       id: g.id,
-//       status: g.status,
-//       ended_at: g.ended_at,
-//     })),
-//   async (newGames, oldGames) => {
-//     if (!newGames || !oldGames) return;
-
-//     for (let i = 0; i < newGames.length; i++) {
-//       const newGame = newGames[i];
-//       const oldGame = oldGames[i];
-
-//       if (!oldGame) continue; // new game created, skip or handle separately
-
-//       if (
-//         newGame.status !== oldGame.status ||
-//         newGame.ended_at !== oldGame.ended_at
-//       ) {
-//         console.log("[WATCH] Game changed:", newGame.id);
-
-//         stateMap.value[newGame.id] = {
-//           ...(await getState(newGame.id)),
-//           loading: false,
-//         };
-//       }
-//     }
-//   },
-//   { deep: true }
-// );
 
 const recentResults = ref<any[]>([]);
 const recentResultsLoading = ref(true);
@@ -313,6 +333,14 @@ onMounted(() => {
       )
       .subscribe();
   });
+});
+
+onBeforeUnmount(() => {
+  subscriptions.forEach((sub) => {
+    console.log("unsubscribing from", sub.state);
+    supabase.removeChannel(sub);
+  });
+  subscriptions.length = 0; // clear refs
 });
 </script>
 

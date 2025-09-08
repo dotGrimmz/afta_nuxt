@@ -4,6 +4,7 @@ import BingoCard from "~/components/bingo/BingoCard.vue";
 import { useBingo } from "~/composables/useBingo";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { _BingoCardType } from "~/types/bingo";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
@@ -39,10 +40,11 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 const calling = ref(false);
 const message = ref("");
+const subscriptions: RealtimeChannel[] = [];
 
 // ✅ Subscribe to realtime draws
 const subscribeToDraws = (gameId: string) => {
-  supabase
+  const channel = supabase
     .channel(`bingo_draws_${gameId}`)
     .on(
       "postgres_changes",
@@ -60,11 +62,12 @@ const subscribeToDraws = (gameId: string) => {
       }
     )
     .subscribe();
+  subscriptions.push(channel);
 };
 
 // ✅ Subscribe to confirmed winners
 const subscribeToResults = (gameId: string) => {
-  supabase
+  const channel = supabase
     .channel(`bingo_results_${gameId}`)
     .on(
       "postgres_changes",
@@ -84,11 +87,12 @@ const subscribeToResults = (gameId: string) => {
       }
     )
     .subscribe();
+  subscriptions.push(channel);
 };
 
 // ✅ Subscribe to game status
 const subscribeToGame = (gameId: string) => {
-  supabase
+  const channel = supabase
     .channel(`bingo_games_${gameId}`)
     .on(
       "postgres_changes",
@@ -104,8 +108,10 @@ const subscribeToGame = (gameId: string) => {
 
         if (updated.status === "ended") {
           gameEnded.value = true;
-          isWinner.value = updated.winner_id === contestant.value?.id;
+          //@ts-ignore
+          winnerId.value = updated.winner_id;
 
+          isWinner.value = updated.winner_id === contestant.value?.id;
           // if (!winnerId.value) {
           //   winnerName.value = updated?.winner_username; // admin stopped, no winner row
           // }
@@ -113,10 +119,11 @@ const subscribeToGame = (gameId: string) => {
       }
     )
     .subscribe();
+  subscriptions.push(channel);
 };
 
 const subscribeToContestants = (gameId: string) => {
-  supabase
+  const channel = supabase
     .channel(`bingo_contestants_${gameId}`)
     .on(
       "postgres_changes",
@@ -133,6 +140,7 @@ const subscribeToContestants = (gameId: string) => {
       }
     )
     .subscribe();
+  subscriptions.push(channel);
 };
 
 // ✅ Handle "Call Bingo!"
@@ -231,6 +239,13 @@ watch([gameEnded, winnerId], ([ended, winner]) => {
       message.value = "❌ Game Over — Better luck next time.";
     }
   }
+});
+
+onBeforeUnmount(() => {
+  subscriptions.forEach((sub) => {
+    supabase.removeChannel(sub);
+  });
+  subscriptions.length = 0; // clear refs
 });
 </script>
 
