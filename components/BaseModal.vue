@@ -15,7 +15,9 @@ const emit = defineEmits<{ close: [boolean] }>();
   >
     <template #body>
       <div class="flex justify-around">
-        <div class="flex">winner: {{ winner_username }}</div>
+        <div class="flex">
+          winner: {{ winner_username }} is owed {{ payout }} 💎
+        </div>
 
         <div class="flex">winner id: {{ winner_id }}</div>
       </div>

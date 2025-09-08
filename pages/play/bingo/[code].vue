@@ -5,7 +5,6 @@ import { useBingo } from "~/composables/useBingo";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { _BingoCardType } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { toast } from "#build/ui";
 
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
@@ -44,6 +43,7 @@ const calling = ref(false);
 const message = ref("");
 const subscriptions: RealtimeChannel[] = [];
 const { $toast } = useNuxtApp();
+
 const toastOpts = ref({
   //@ts-ignore
   position: "top-left",
@@ -52,7 +52,7 @@ const toastOpts = ref({
   pauseOnHover: true,
 });
 
-const showBingoToast = (payout: number | string) => {
+const showBingoToast = (payout: number | string | undefined) => {
   $toast.success(`BINGO 🎉 ${payout} 💎`, {
     //@ts-ignore
     position: "top-left",
@@ -127,6 +127,9 @@ const subscribeToGame = (gameId: string) => {
       },
       (payload) => {
         const updated = payload.new as BingoGame;
+        // when this updates we can set the payout,
+        // we can set the payout here ?
+        console.log("updated:", updated);
         currentGame.value = updated;
 
         if (updated.status === "ended") {
@@ -186,11 +189,13 @@ const handleCallBingo = async (cardId: string) => {
       return;
     }
 
+    console.log("current game prior calling bingo:", currentGame.value);
     const data = await callBingo(
       contestant.value.game_id,
       cardId,
       contestant.value.id,
-      contestant.value.username
+      contestant.value.username,
+      currentGame.value?.payout
     );
 
     if (data) {
@@ -201,7 +206,7 @@ const handleCallBingo = async (cardId: string) => {
       //@ts-ignore
       winnerName.value = data.result.username;
 
-      showBingoToast(data.result.payout);
+      showBingoToast(currentGame.value?.payout);
     }
   } catch (err: any) {
     console.error(err);
@@ -224,7 +229,11 @@ onMounted(async () => {
       if (gameId) {
         const state = await getState(gameId);
         winnerPayout.value = state.game.game.payout;
-        currentGame.value = state.game.game;
+        const gameState = { ...state.game.game };
+        // console.log("state from mount, need to set current", gameState);
+
+        currentGame.value = gameState;
+        console.log("current game raw", toRaw(currentGame));
         if (state.game.game.status === "lobby") {
           gameLobby.value = true;
         }
@@ -261,28 +270,23 @@ const enterAnotherCode = (event: MouseEvent) => {
   router.push("/play/bingo");
 };
 
-console.log("game lobby??", gameLobby.value);
+console.log("game state in template", currentGame.value);
 
-watch([gameEnded, winnerId], ([ended, winner]) => {
-  console.log(
-    { winner, ended, gameEnded, winnerId, contestant },
-    isWinner.value
-  );
+watch([gameEnded, winnerId, currentGame], ([ended, winner, game]) => {
+  console.log("game state watcher", game);
   if (ended) {
     const contestantHasWon = contestant.value?.id === winner;
 
-    if (!winner) {
-      //@ts-ignore
-      return $toast.warning("Game Ended - Admin Stop", toastOpts.value);
-    }
-
-    if (!contestantHasWon) {
-      //@ts-ignore
-      return $toast.error("Game Ended - Try again!", toastOpts.value);
-    }
-
-    //@ts-ignore
-    return $toast.error(`💎 BINGO 💎`, toastOpts.value);
+    // if (!winner) {
+    //   //@ts-ignore
+    //   $toast.warning("Game Ended - Admin Stop", toastOpts.value);
+    // } else if (!contestantHasWon) {
+    //   //@ts-ignore
+    //   $toast.error("Game Ended - Try again!", toastOpts.value);
+    // } else {
+    //   //@ts-ignore
+    //   $toast.error(`💎 BINGO 💎`, toastOpts.value);
+    // }
   }
 });
 
@@ -319,15 +323,10 @@ console.log("current Game", currentGame.value);
         </p>
         <p>
           Lobby Status:
-          {{
-            draws.length === 0 && !gameEnded
-              ? "Waiting for Admin to begin"
-              : gameEnded
-              ? "Ended"
-              : "Active"
-          }}
+
+          {{ currentGame?.status }}
         </p>
-        <p>Prize: {{ winnerPayout }} 💎</p>
+        <p>Prize: {{ currentGame?.payout }} 💎</p>
       </div>
 
       <!-- Cards grid -->
@@ -368,7 +367,7 @@ console.log("current Game", currentGame.value);
         <template v-if="isWinner">
           🎉 Congratulations {{ winnerName }} — You Won!
           <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
-            Prize: {{ winnerPayout }} 💎
+            Prize: {{ currentGame?.payout }} 💎
           </div>
         </template>
         <template v-else>
@@ -384,7 +383,7 @@ console.log("current Game", currentGame.value);
             </UButton>
           </div>
           <div v-if="isWinner" class="mt-2 text-sm">
-            Prize: {{ winnerPayout }} 💎
+            Prize: {{ currentGame?.payout }} 💎
           </div>
         </template>
       </div>

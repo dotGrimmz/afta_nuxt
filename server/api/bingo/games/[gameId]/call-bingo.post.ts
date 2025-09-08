@@ -36,6 +36,7 @@ export default defineEventHandler(async (event) => {
     .single();
 
   if (cardError || !card) {
+    console.error(cardError);
     throw createError({
       statusCode: 404,
       statusMessage: "Card not found for this game/contestant",
@@ -51,12 +52,14 @@ export default defineEventHandler(async (event) => {
 
   console.log("contestant", contestant);
   if (contestantError || !contestant) {
+    console.error(contestantError);
     throw createError({
       statusCode: 404,
       statusMessage: "Contestant not found",
     });
   }
 
+  console.log("storing payout in results", body.payout);
   // 3️⃣ Insert into bingo_results (with username)
   const { data: result, error: resultError } = await client
     .from("bingo_results")
@@ -69,14 +72,17 @@ export default defineEventHandler(async (event) => {
     })
     .select("*")
     .single();
+  console.log("result", result);
 
   if (resultError || !result) {
+    console.error(resultError);
     throw createError({
       statusCode: 500,
       statusMessage: resultError?.message || "Failed to insert bingo result",
     });
   }
 
+  console.log(" body?", body);
   // 4️⃣ End the game immediately
   const { data: updatedGame, error: updateError } = await client
     .from("bingo_games")
@@ -85,12 +91,14 @@ export default defineEventHandler(async (event) => {
       ended_at: new Date().toISOString(),
       winner_id: body.contestantId,
       winner_username: contestant.username,
+      payout: body.payout,
     })
     .eq("id", gameId)
     .select("*")
     .single();
 
   if (updateError || !updatedGame) {
+    console.error(updateError);
     throw createError({
       statusCode: 500,
       statusMessage: updateError?.message || "Failed to end game",
