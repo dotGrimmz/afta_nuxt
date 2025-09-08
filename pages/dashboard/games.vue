@@ -26,10 +26,13 @@ type BingoGame = {
   min_players: number;
   status: string;
   payout?: number;
+  winner_id?: string | null;
+  winner_username?: string | null;
 };
 
 type ContestantType =
   Database["public"]["Tables"]["bingo_contestants"]["Row"][];
+type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"];
 
 const {
   games: bingoGames,
@@ -95,6 +98,7 @@ const newContestant = reactive({
 });
 
 const lastIssuedCode = ref<string | null>(null);
+const gameEnded = ref(false);
 
 const handleIssueCode = async (gameId: string) => {
   try {
@@ -173,6 +177,41 @@ const subscribeToContestants = (gameId: string) => {
     .subscribe();
 };
 
+const subscribeToResults = (gameId: string) => {
+  supabase
+    .channel(`bingo_results_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "bingo_results",
+        filter: `game_id=eq.${gameId}`,
+      },
+      async (payload) => {
+        const confirmed = payload.new as BingoResult;
+        console.log("Bingo Winner Info Payload", payload);
+        console.log("Bingo Winner Info confirmed", confirmed);
+
+        //   .from("bingo_contestants")
+        //   .select("username")
+        //   .eq("id", confirmed.contestant_id)
+        //   .single();
+
+        // winnerName.value =
+        //   winnerContestant?.username || confirmed.contestant_id;
+
+        // console.log(
+        //   "winner name value after winner bingo results called cus a winner is selected:",
+        //   winnerName.value
+        // );
+
+        // we can just check gamestate here in this ref,
+      }
+    )
+    .subscribe();
+};
+
 watch(
   bingoGames,
   async (games) => {
@@ -191,6 +230,7 @@ watch(
 
       newState[game.id] = { ...fullState, loading: false };
       subscribeToContestants(game.id); // 👈 start realtime sync
+      subscribeToResults(game.id);
     }
     stateMap.value = newState;
   },
@@ -235,7 +275,6 @@ const recentResultsLoading = ref(true);
 onMounted(async () => {
   try {
     const data = await $fetch<any>("/api/bingo/results/recent");
-    console.log("results", data);
 
     recentResults.value = data;
   } catch (err) {

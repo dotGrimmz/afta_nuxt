@@ -8,7 +8,16 @@ import type { _BingoCardType } from "~/types/bingo";
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
 type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"];
-
+type BingoGame = {
+  id: string;
+  created_at: string;
+  ended_at: string | null;
+  min_players: number;
+  status: string;
+  payout?: number;
+  winner_id?: string | null;
+  winner_username?: string | null;
+};
 const route = useRoute();
 const router = useRouter();
 
@@ -66,27 +75,12 @@ const subscribeToResults = (gameId: string) => {
         filter: `game_id=eq.${gameId}`,
       },
       async (payload) => {
-        const confirmed = payload.new as BingoResult;
+        const confirmed = payload.new as BingoGame;
         console.log("Bingo Winner Info Payload", payload);
-        winnerId.value = confirmed.contestant_id;
+        winnerId.value = confirmed?.winner_id || null;
         winnerPayout.value = confirmed.payout ?? 0;
         gameEnded.value = true; // game is over once result is inserted ✅
-
-        // const { data: winnerContestant } = await supabase
-        //   .from("bingo_contestants")
-        //   .select("username")
-        //   .eq("id", confirmed.contestant_id)
-        //   .single();
-
-        // winnerName.value =
-        //   winnerContestant?.username || confirmed.contestant_id;
-
-        // console.log(
-        //   "winner name value after winner bingo results called cus a winner is selected:",
-        //   winnerName.value
-        // );
-
-        // we can just check gamestate here in this ref,
+        isWinner.value = confirmed.winner_id === contestant.value?.id;
       }
     )
     .subscribe();
@@ -105,14 +99,16 @@ const subscribeToGame = (gameId: string) => {
         filter: `id=eq.${gameId}`,
       },
       (payload) => {
-        const updated =
-          payload.new as Database["public"]["Tables"]["bingo_games"]["Row"];
+        const updated = payload.new as BingoGame;
+        console.log({ updated });
 
         if (updated.status === "ended") {
           gameEnded.value = true;
-          if (!winnerId.value) {
-            winnerName.value = "Another player"; // admin stopped, no winner row
-          }
+          isWinner.value = updated.winner_id === contestant.value?.id;
+
+          // if (!winnerId.value) {
+          //   winnerName.value = updated?.winner_username; // admin stopped, no winner row
+          // }
         }
       }
     )
