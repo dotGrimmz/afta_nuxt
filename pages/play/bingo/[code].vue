@@ -153,7 +153,6 @@ const handleCallBingo = async (cardId: string) => {
       return;
     }
 
-    console.log("calling bingo");
     const data = await callBingo(
       contestant.value.game_id,
       cardId,
@@ -161,7 +160,6 @@ const handleCallBingo = async (cardId: string) => {
       contestant.value.username
     );
 
-    console.log({ data });
     if (data) {
       gameEnded.value = true;
       isWinner.value = true;
@@ -184,31 +182,23 @@ onMounted(async () => {
     const result = await joinGame(code);
 
     if (result) {
-      console.log("result on Mount:", result);
       contestant.value = result.contestant;
       cards.value = result.cards;
 
       const gameId = result.cards[0]?.game_id;
       if (gameId) {
         const state = await getState(gameId);
-        console.log("state", state.game.game);
         if (state.game.game.status === "lobby") {
           gameLobby.value = true;
         }
 
-        // if (state.winners.length) {
-        //   gameLobby.value = false;
-        //   gameEnded.value = true;
-        //   winnerId.value = state.winners[0].contestant_id;
-
-        // }
         if (state.game.game.status === "ended") {
           const game = state.game.game;
           winnerName.value = game.winner_username;
           winnerId.value = game.winner_id;
           gameEnded.value = true;
-          console.log("current contestant:", contestant);
           isWinner.value = game.winner_id === contestant.value?.id;
+          winnerPayout.value = game.payout;
         }
 
         if (state) {
@@ -263,10 +253,15 @@ watch([gameEnded, winnerId], ([ended, winner]) => {
       <h1 class="text-2xl font-bold">
         Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
       </h1>
-      <p class="text-sm text-gray-400">
-        You have {{ cards.length }} card<span v-if="cards.length !== 1">s</span
-        >.
-      </p>
+
+      <div class="flex justify-between">
+        <p class="text-sm text-gray-400">
+          You have {{ cards.length }} card<span v-if="cards.length !== 1"
+            >s</span
+          >.
+        </p>
+        <p>Prize: {{ winnerPayout }} 💎</p>
+      </div>
 
       <!-- Cards grid -->
       <div
