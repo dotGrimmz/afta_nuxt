@@ -290,26 +290,28 @@ console.log("current Game", currentGame.value);
       </div>
 
       <!-- Cards grid -->
-      <div
-        v-for="card in cards"
-        :key="card.id"
-        class="bg-gray-800 p-4 rounded relative"
-        :class="{
-          'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
-        }"
-      >
-        <BingoCard :card="card" :draws="draws" />
-
-        <UButton
-          class="mt-2 w-full"
-          color="primary"
-          size="sm"
-          :loading="calling"
-          :disabled="gameEnded"
-          @click="handleCallBingo(card.id)"
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
+        <div
+          v-for="card in cards"
+          :key="card.id"
+          class="bg-gray-800 p-4 rounded relative"
+          :class="{
+            'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
+          }"
         >
-          {{ gameEnded ? "Game Ended" : "Call Bingo" }}
-        </UButton>
+          <BingoCard :card="card" :draws="draws" />
+
+          <UButton
+            class="mt-2 w-full"
+            color="primary"
+            size="sm"
+            :loading="calling"
+            :disabled="gameEnded"
+            @click="handleCallBingo(card.id)"
+          >
+            {{ gameEnded ? "Game Ended" : "Call Bingo" }}
+          </UButton>
+        </div>
       </div>
 
       <!-- Winner / Game Over -->
