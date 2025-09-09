@@ -1,59 +1,57 @@
 // middleware/auth.global.ts
+
+interface Profile {
+  id: string;
+  email: string | null;
+  username: string | null;
+  role: "admin" | "user";
+}
 export default defineNuxtRouteMiddleware(async (to) => {
   if (process.server) return;
 
+  const supabase = useSupabaseClient();
   const user = useSupabaseUser();
-  const { profile, loading } = useProfile();
+
+  if (!to.path.startsWith("/dashboard")) return; // only guard dashboard
+
+  // 🔑 Check authenticated user
   const { data } = await supabase.auth.getUser();
-  console.log({ data });
-
-  // 1️⃣ If navigating to dashboard while Supabase is still hydrating → wait
-  if (to.path.startsWith("/dashboard") && user.value === null) {
-    console.log("[auth] waiting for Supabase session...");
-    return abortNavigation({
-      statusCode: 401,
-      statusMessage: "Auth not ready",
-    });
+  if (!data.user) {
+    if (to.path !== "/login") {
+      console.log("[auth] no user → redirecting to /login");
+      return navigateTo("/login");
+    }
+    return;
   }
 
-  // 2️⃣ If still loading profile → wait, but with timeout protection
-  if (to.path.startsWith("/dashboard") && loading.value) {
-    console.log("[auth] profile loading...");
-    return; // don’t block forever
+  // ✅ Fetch profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, email, username, role")
+    .eq("id", data.user.id)
+    .single<Profile>();
+
+  // 🚨 Fallback if no profile
+  if (!profile) {
+    if (to.path !== "/dashboard/profile") {
+      console.log("[auth] no profile → redirecting to /dashboard/profile");
+      return navigateTo("/dashboard/profile");
+    }
+    return;
   }
 
-  // 3️⃣ Redirect guests (no session at all)
-  if (to.path.startsWith("/dashboard") && !user.value) {
-    console.log("[auth] no user → redirecting to /login");
-    return navigateTo("/login");
-  }
-
-  // 4️⃣ Enforce admin-only dashboard index
-  if (to.path === "/dashboard") {
-    if (!profile.value || profile.value.role !== "admin") {
-      console.log("[auth] non-admin user redirected to /dashboard/games");
-      return navigateTo("/dashboard/games");
+  // 🛡️ Enforce role-based access
+  if (profile.role === "admin") {
+    // Admins should land on `/dashboard`
+    if (to.path === "/dashboard/profile") {
+      console.log("[auth] admin detected → redirect to /dashboard");
+      return navigateTo("/dashboard");
+    }
+  } else {
+    // Regular users should land on `/dashboard/profile`
+    if (to.path === "/dashboard") {
+      console.log("[auth] user detected → redirect to /dashboard/profile");
+      return navigateTo("/dashboard/profile");
     }
   }
 });
-
-// export default defineNuxtRouteMiddleware(async (to) => {
-//   if (process.server) return;
-
-//   const user = useSupabaseUser();
-//   if (!user.value) return navigateTo("/login");
-
-//   if (to.path === "/dashboard") {
-//     const supabase = useSupabaseClient();
-//     const { data: profile } = await supabase
-//       .from("profiles")
-//       .select("role")
-//       .eq("id", user.value.id)
-//       .single();
-
-//       console.log
-//     if (profile?.role !== "admin") {
-//       return navigateTo("/dashboard/profile");
-//     }
-//   }
-// });

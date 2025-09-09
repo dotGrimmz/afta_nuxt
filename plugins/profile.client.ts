@@ -36,4 +36,5 @@ export default defineNuxtPlugin((nuxtApp) => {
       profile.value = null;
     }
   });
+  console.log(profile.value);
 });
