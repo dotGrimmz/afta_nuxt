@@ -1,33 +1,37 @@
 // middleware/auth.global.ts
-export default defineNuxtRouteMiddleware((to) => {
-  // ✅ Only run client-side (supabase user doesn’t exist on server)
+export default defineNuxtRouteMiddleware(async (to) => {
   if (process.server) return;
 
   const user = useSupabaseUser();
   const { profile, loading } = useProfile();
+  const { data } = await supabase.auth.getUser();
+  console.log({ data });
 
-  // 1️⃣ Still waiting for Supabase/user to hydrate
+  // 1️⃣ If navigating to dashboard while Supabase is still hydrating → wait
   if (to.path.startsWith("/dashboard") && user.value === null) {
     console.log("[auth] waiting for Supabase session...");
-    return abortNavigation();
+    return abortNavigation({
+      statusCode: 401,
+      statusMessage: "Auth not ready",
+    });
   }
 
-  // 2️⃣ Redirect guests (confirmed no user) to login
+  // 2️⃣ If still loading profile → wait, but with timeout protection
+  if (to.path.startsWith("/dashboard") && loading.value) {
+    console.log("[auth] profile loading...");
+    return; // don’t block forever
+  }
+
+  // 3️⃣ Redirect guests (no session at all)
   if (to.path.startsWith("/dashboard") && !user.value) {
-    console.log("[auth] no user → redirecting");
+    console.log("[auth] no user → redirecting to /login");
     return navigateTo("/login");
   }
 
-  // 3️⃣ Wait until profile has loaded from DB
-  if (to.path.startsWith("/dashboard") && loading.value) {
-    console.log("[auth] profile loading...");
-    return abortNavigation();
-  }
-
-  // 4️⃣ Enforce admin-only for `/dashboard` root
+  // 4️⃣ Enforce admin-only dashboard index
   if (to.path === "/dashboard") {
-    console.log("[auth] dashboard index check:", profile.value?.role);
     if (!profile.value || profile.value.role !== "admin") {
+      console.log("[auth] non-admin user redirected to /dashboard/games");
       return navigateTo("/dashboard/games");
     }
   }
