@@ -104,7 +104,7 @@ const router = useRouter();
 const supabase = useSupabaseClient();
 
 // ✅ new: no await here
-const { profile } = useProfile();
+const { profile, loading } = useProfile();
 
 const signOut = async (): Promise<void> => {
   const { error } = await (supabase as SupabaseClient).auth.signOut();
@@ -141,7 +141,6 @@ const userLinks = [
 const isActive = (to: string) => route.path.endsWith(to);
 
 // ✅ clean loading state derived from profile
-const loading = computed(() => !profile.value);
 
 const pageTitle = computed((): string => {
   if (loading.value) {
