@@ -30,6 +30,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 
   // Supabase auth state listener
   supabase.auth.onAuthStateChange((_event, session) => {
+    console.log("event and session from auth state listener:", _event, session);
     if (session?.user?.id) {
       fetchProfile(session.user.id);
     } else {
