@@ -1,40 +1,33 @@
 // middleware/auth.global.ts
-export default defineNuxtRouteMiddleware(async (to) => {
+export default defineNuxtRouteMiddleware((to) => {
+  // ✅ Only run client-side (supabase user doesn’t exist on server)
   if (process.server) return;
-
-  //@ts-ignore
-  const clientReady = import.meta.client;
-  if (!clientReady) {
-    console.log("client failed");
-  }
 
   const user = useSupabaseUser();
   const { profile, loading } = useProfile();
-  console.log("process is on the client.", profile.value);
-  // 1. If navigating into dashboard but user not yet known → wait
+
+  // 1️⃣ Still waiting for Supabase/user to hydrate
   if (to.path.startsWith("/dashboard") && user.value === null) {
-    console.log("option 1", loading);
-    return abortNavigation(); // ⏸ wait until Supabase hydrates
-  }
-
-  // 2. Redirect guests (confirmed no session) to login
-  if (to.path.startsWith("/dashboard") && !user.value) {
-    console.log("option 2");
-
-    return navigateTo("/login");
-  }
-
-  // 3. Wait until profile is loaded
-  if (to.path.startsWith("/dashboard") && !profile.value) {
-    console.log("option 3");
-
+    console.log("[auth] waiting for Supabase session...");
     return abortNavigation();
   }
 
-  // 4. Enforce admin-only dashboard index
+  // 2️⃣ Redirect guests (confirmed no user) to login
+  if (to.path.startsWith("/dashboard") && !user.value) {
+    console.log("[auth] no user → redirecting");
+    return navigateTo("/login");
+  }
+
+  // 3️⃣ Wait until profile has loaded from DB
+  if (to.path.startsWith("/dashboard") && loading.value) {
+    console.log("[auth] profile loading...");
+    return abortNavigation();
+  }
+
+  // 4️⃣ Enforce admin-only for `/dashboard` root
   if (to.path === "/dashboard") {
-    console.log("", profile.value?.role);
-    if (profile.value?.role !== "admin" || !profile.value) {
+    console.log("[auth] dashboard index check:", profile.value?.role);
+    if (!profile.value || profile.value.role !== "admin") {
       return navigateTo("/dashboard/games");
     }
   }
