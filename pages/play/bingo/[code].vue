@@ -311,9 +311,19 @@ console.log("current Game", currentGame.value);
     </div>
 
     <div v-else>
-      <h1 class="text-2xl font-bold">
-        Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
-      </h1>
+      <div class="flex justify-between">
+        <h1 class="text-2xl font-bold">
+          Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
+        </h1>
+        <div class="flex">
+          <UButton
+            label="Home"
+            size="sm"
+            variant="link"
+            href="/dashboard/games"
+          />
+        </div>
+      </div>
 
       <div class="flex justify-between mb-2">
         <p class="text-sm text-gray-400">

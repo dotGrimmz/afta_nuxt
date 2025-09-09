@@ -3,10 +3,11 @@ import type { Database } from "~/types/supabase";
 import { calculateCost } from "~/utils/bingo/pricing";
 import BaseModal from "~/components/BaseModal.vue";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { sub } from "three/tsl";
+import type { _BingoCardType } from "~/types/bingo";
 
 const supabase = useSupabaseClient<Database>();
 const { profile } = useProfile();
+const router = useRouter();
 
 // Trivia composable (unchanged)
 const {
@@ -34,8 +35,13 @@ type BingoGame = {
   winner_username?: string | null;
 };
 
-type ContestantType =
-  Database["public"]["Tables"]["bingo_contestants"]["Row"][];
+type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
+
+type JoinGameResult = {
+  contestant: BingoContestant | null;
+  cards: _BingoCardType[];
+};
+
 type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"] & {
   username?: string;
 };
@@ -70,7 +76,7 @@ const {
     contestantId: string,
     payout: number
   ) => void;
-  joinGame: (id: string) => void;
+  joinGame: (code: string) => Promise<JoinGameResult>;
   getState: (
     id: string
   ) => Promise<{ draws: number[]; winners: any[]; contestants: any[] }>;
@@ -103,6 +109,14 @@ const newContestant = reactive({
   numCards: 1,
   freeSpace: false,
   autoMark: false,
+});
+
+const loggedInContestant = reactive({
+  username: profile.value?.username,
+  numCards: 1,
+  freeSpace: false,
+  autoMark: false,
+  code: null,
 });
 type RTESubs = {
   channel: RealtimeChannel;
@@ -152,6 +166,55 @@ const handleIssueCode = async (gameId: string) => {
     newContestant.autoMark = false;
   } catch (err) {
     console.error("Error issuing join code:", err);
+  }
+};
+
+const findGameCode = (gameId: string): string | null => {
+  if (!gameId) return null;
+
+  const contestants = stateMap.value?.[gameId]?.contestants;
+  if (!contestants || !Array.isArray(contestants)) return null;
+
+  const currentUsername = profile.value?.username?.trim();
+  if (!currentUsername) return null;
+
+  const alreadyContestant = contestants.find(
+    (c) => c.username?.trim() === currentUsername
+  );
+
+  return alreadyContestant ? alreadyContestant.code : null;
+};
+
+const handleJoin = async (gameId: string) => {
+  const bingoGameCode = findGameCode(gameId);
+
+  if (bingoGameCode) {
+    router.push(`/play/bingo/${bingoGameCode}`);
+    return;
+  }
+
+  console.log("creating new candidate");
+  try {
+    const { code } = await issueJoinCode(
+      gameId,
+      loggedInContestant.username ?? "",
+      loggedInContestant.numCards,
+      loggedInContestant.freeSpace,
+      true
+    );
+
+    const data = await joinBingoGame(code);
+    console.log(data.contestant, data.cards);
+    router.push(`/play/bingo/${code}`);
+
+    // reset form
+    loggedInContestant.username = "";
+    loggedInContestant.numCards = 1;
+    loggedInContestant.freeSpace = false;
+    loggedInContestant.autoMark = false;
+    console.log(code, loggedInContestant);
+  } catch (e: any) {
+    console.error(e);
   }
 };
 
@@ -574,10 +637,45 @@ onBeforeUnmount(() => {
           />
 
           <!-- Player control -->
-          <div v-else class="flex gap-2 mt-2">
-            <UButton @click="joinBingoGame(game.id)" size="sm" color="primary">
-              Join
-            </UButton>
+          <div v-else class="flex flex-col gap-2 mt-2">
+            <div class="flex justify-between">
+              <UButton @click="handleJoin(game.id)" size="sm" color="primary">
+                Join
+              </UButton>
+              <UInput
+                v-model.number="loggedInContestant.numCards"
+                type="number"
+                min="1"
+                placeholder="Cards"
+                size="sm"
+                class="text-white"
+              />
+            </div>
+            <div class="flex gap-2 justify-start">
+              <label class="flex items-center text-xs text-gray-300 space-x-1">
+                <input v-model="loggedInContestant.freeSpace" type="checkbox" />
+                <span>Free Space</span>
+              </label>
+              <label class="flex items-center text-xs text-gray-300 space-x-1">
+                <input v-model="loggedInContestant.autoMark" type="checkbox" />
+                <span>Auto Mark</span>
+              </label>
+              <p class="text-xs text-gray-400">
+                Expected Cost:
+                {{
+                  calculateCost(
+                    loggedInContestant.numCards || 0,
+                    loggedInContestant.freeSpace || false
+                  )
+                }}
+                diamonds
+              </p>
+            </div>
+            <div v-if="findGameCode(game.id)" class="flex">
+              Bingo Code: {{ findGameCode(game.id) }}
+            </div>
+
+            <!-- <div class="flex">Bingo Code: {{ findGameCode(game.id) }}</div> -->
           </div>
         </div>
       </div>
