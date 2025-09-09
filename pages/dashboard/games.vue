@@ -376,9 +376,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  console.log("onBeforeUnmount", subscriptions);
   subscriptions.forEach((sub) => {
-    console.log("unsubscribing from", sub);
     supabase.removeChannel(sub.channel);
   });
   subscriptions.length = 0; // clear refs

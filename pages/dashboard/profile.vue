@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const supabase = useSupabaseClient();
 const user = useSupabaseUser();
-const { profile } = useProfile(); // 🔑 shared global profile
+const { profile } = await useProfile(); // 🔑 shared global profile
 
 const username = ref("");
 const saving = ref(false);

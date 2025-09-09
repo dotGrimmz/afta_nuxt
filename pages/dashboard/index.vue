@@ -106,7 +106,7 @@ const {
   resetEventForm,
 } = useEventsAdmin();
 
-const { profile } = useProfile();
+const { profile } = await useProfile();
 const router = useRouter();
 
 // loading is true until profile has resolved
