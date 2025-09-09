@@ -37,6 +37,7 @@ onMounted((): void => {
         }
 
         if (profile?.role === "admin") {
+          console.log("role:", profile.role);
           router.push("/dashboard");
         } else {
           router.push("/dashboard/games");
