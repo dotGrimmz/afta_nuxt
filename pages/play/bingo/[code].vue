@@ -132,6 +132,13 @@ const subscribeToGame = (gameId: string) => {
         console.log("updated:", updated);
         currentGame.value = updated;
 
+        // when the lobby goes from lobby to active
+        // we want to populate the payout.
+
+        if (updated.status === "lobby") {
+          console.log("lobby has not started");
+        }
+
         if (updated.status === "ended") {
           gameEnded.value = true;
           //@ts-ignore
