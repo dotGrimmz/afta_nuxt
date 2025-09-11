@@ -275,27 +275,6 @@ const enterAnotherCode = (event: MouseEvent) => {
 
 console.log("draw state in template", draws.value);
 
-watch(
-  [gameEnded, winnerId, currentGame, draws],
-  ([ended, winner, game, draws]) => {
-    console.log("draw state watcher", draws.values());
-    if (ended) {
-      const contestantHasWon = contestant.value?.id === winner;
-
-      // if (!winner) {
-      //   //@ts-ignore
-      //   $toast.warning("Game Ended - Admin Stop", toastOpts.value);
-      // } else if (!contestantHasWon) {
-      //   //@ts-ignore
-      //   $toast.error("Game Ended - Try again!", toastOpts.value);
-      // } else {
-      //   //@ts-ignore
-      //   $toast.error(`💎 BINGO 💎`, toastOpts.value);
-      // }
-    }
-  }
-);
-
 onBeforeUnmount(() => {
   subscriptions.forEach((sub) => {
     supabase.removeChannel(sub);
@@ -341,16 +320,14 @@ const lastSixDesc = computed<number[]>(() => {
             >s</span
           >.
         </p>
-        <p>
-          Lobby Status:
 
-          {{ currentGame?.status }}
-        </p>
         <p>Prize: {{ currentGame?.payout }} 💎</p>
       </div>
       <!-- draws - I want to animate in and out each of these items --->
       <div class="p-4">
-        <h2 class="text-xl font-bold mb-2">Draws</h2>
+        <h2 class="text-xl font-bold mb-2">
+          {{ currentGame?.status === "lobby" ? "Waiting to Start" : "Draws" }}
+        </h2>
         <div class="flex flex-wrap gap-2">
           <div
             v-for="(num, idx) in lastSixDesc"
