@@ -322,12 +322,8 @@ const lastSixDesc = computed<number[]>(() => {
         <h2 class="text-xl font-bold mb-2">
           {{ currentGame?.status === "lobby" ? "Waiting to Start" : "Draws" }}
         </h2>
-        <!-- i need this to always be one row. the first div takes up auto minus 1. then the last item takes up the one
-          remove the gap for each item and just have a set margin for each item so its consistent rendering across all
-          screens and displays. we can use rem for the values.  
-        
-        -->
-        <div class="flex flex-wrap border border-red">
+
+        <div class="flex flex-wrap justify-between">
           <div
             v-for="(num, idx) in lastSixDesc"
             :key="`${num}-${idx}`"
