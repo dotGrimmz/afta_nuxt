@@ -5,6 +5,7 @@ import { useBingo } from "~/composables/useBingo";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { _BingoCardType } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import CountUp from "~/components/vue-bits/Animations/CountUp/CountUp.vue";
 
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
@@ -76,8 +77,10 @@ const subscribeToDraws = (gameId: string) => {
       },
       (payload) => {
         const newDraw = payload.new as BingoDraw;
+
         if (!draws.value.includes(newDraw.number)) {
           draws.value.push(newDraw.number);
+          console.log("draws rte:", draws.value);
         }
       }
     )
@@ -270,25 +273,28 @@ const enterAnotherCode = (event: MouseEvent) => {
   router.push("/play/bingo");
 };
 
-console.log("game state in template", currentGame.value);
+console.log("draw state in template", draws.value);
 
-watch([gameEnded, winnerId, currentGame], ([ended, winner, game]) => {
-  console.log("game state watcher", game);
-  if (ended) {
-    const contestantHasWon = contestant.value?.id === winner;
+watch(
+  [gameEnded, winnerId, currentGame, draws],
+  ([ended, winner, game, draws]) => {
+    console.log("draw state watcher", draws.values());
+    if (ended) {
+      const contestantHasWon = contestant.value?.id === winner;
 
-    // if (!winner) {
-    //   //@ts-ignore
-    //   $toast.warning("Game Ended - Admin Stop", toastOpts.value);
-    // } else if (!contestantHasWon) {
-    //   //@ts-ignore
-    //   $toast.error("Game Ended - Try again!", toastOpts.value);
-    // } else {
-    //   //@ts-ignore
-    //   $toast.error(`💎 BINGO 💎`, toastOpts.value);
-    // }
+      // if (!winner) {
+      //   //@ts-ignore
+      //   $toast.warning("Game Ended - Admin Stop", toastOpts.value);
+      // } else if (!contestantHasWon) {
+      //   //@ts-ignore
+      //   $toast.error("Game Ended - Try again!", toastOpts.value);
+      // } else {
+      //   //@ts-ignore
+      //   $toast.error(`💎 BINGO 💎`, toastOpts.value);
+      // }
+    }
   }
-});
+);
 
 onBeforeUnmount(() => {
   subscriptions.forEach((sub) => {
@@ -296,7 +302,11 @@ onBeforeUnmount(() => {
   });
   subscriptions.length = 0; // clear refs
 });
-console.log("current Game", currentGame.value);
+
+const lastSixDesc = computed<number[]>(() => {
+  const six = draws.value.slice(-6);
+  return six.reverse();
+});
 </script>
 
 <template>
@@ -338,7 +348,23 @@ console.log("current Game", currentGame.value);
         </p>
         <p>Prize: {{ currentGame?.payout }} 💎</p>
       </div>
-
+      <!-- draws - I want to animate in and out each of these items --->
+      <div class="p-4">
+        <h2 class="text-xl font-bold mb-2">Draws</h2>
+        <div class="flex flex-wrap gap-2">
+          <div
+            v-for="(num, idx) in lastSixDesc"
+            :key="`${num}-${idx}`"
+            class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full bg-blue-600 text-white font-bold text-base md:text-lg shadow-md select-none"
+            :class="{
+              // Newest is always index 0 (leftmost)
+              'animate-pulse ring-2 ring-white/70 scale-105': idx === 0,
+            }"
+          >
+            {{ num }}
+          </div>
+        </div>
+      </div>
       <!-- Cards grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
         <div
