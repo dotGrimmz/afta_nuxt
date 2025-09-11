@@ -6,6 +6,7 @@ import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { _BingoCardType } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import CountUp from "~/components/vue-bits/Animations/CountUp/CountUp.vue";
+import BingoModal from "@/components/bingo/BingoModal.vue";
 
 type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
@@ -44,14 +45,7 @@ const calling = ref(false);
 const message = ref("");
 const subscriptions: RealtimeChannel[] = [];
 const { $toast } = useNuxtApp();
-
-const toastOpts = ref({
-  //@ts-ignore
-  position: "top-left",
-  timeout: 2000,
-  closeOnClick: true,
-  pauseOnHover: true,
-});
+const showBingoModal = ref(false);
 
 const showBingoToast = (payout: number | string | undefined) => {
   $toast.success(`BINGO 🎉 ${payout} 💎`, {
@@ -328,7 +322,12 @@ const lastSixDesc = computed<number[]>(() => {
         <h2 class="text-xl font-bold mb-2">
           {{ currentGame?.status === "lobby" ? "Waiting to Start" : "Draws" }}
         </h2>
-        <div class="flex flex-wrap gap-2">
+        <!-- i need this to always be one row. the first div takes up auto minus 1. then the last item takes up the one
+          remove the gap for each item and just have a set margin for each item so its consistent rendering across all
+          screens and displays. we can use rem for the values.  
+        
+        -->
+        <div class="flex flex-wrap border border-red">
           <div
             v-for="(num, idx) in lastSixDesc"
             :key="`${num}-${idx}`"
@@ -340,7 +339,21 @@ const lastSixDesc = computed<number[]>(() => {
           >
             {{ num }}
           </div>
+          <!-- "All" button that toggles modal -->
+          <button
+            type="button"
+            class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full border border-blue-600 text-blue-600 font-semibold text-sm md:text-base hover:bg-blue-600 hover:text-white transition"
+            @click="showBingoModal = true"
+          >
+            All
+          </button>
         </div>
+
+        <BingoModal
+          v-model="showBingoModal"
+          title="All Numbers Drawn"
+          :numbers="draws"
+        />
       </div>
       <!-- Cards grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
