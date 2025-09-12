@@ -3,10 +3,20 @@ import type { Database } from "~/types/supabase";
 import { calculateCost } from "~/utils/bingo/pricing";
 import BaseModal from "~/components/BaseModal.vue";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import type { _BingoCardType } from "~/types/bingo";
+import type {
+  BaseGameRow,
+  BingoResultRow,
+  ClientGameState,
+  ContestantType,
+  DashboardGameState,
+  IssueJoinCodeResponse,
+  JoinGameResponse,
+  UseBingo,
+} from "~/types/bingo";
+// import type { _BingoCardType } from "~/types/bingo";
 
 const supabase = useSupabaseClient<Database>();
-const { profile } = useProfile();
+const { profile, isAdmin } = useProfile();
 const router = useRouter();
 
 // Trivia composable (unchanged)
@@ -35,17 +45,6 @@ type BingoGame = {
   winner_username?: string | null;
 };
 
-type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
-
-type JoinGameResult = {
-  contestant: BingoContestant | null;
-  cards: _BingoCardType[];
-};
-
-type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"] & {
-  username?: string;
-};
-
 const {
   games: bingoGames,
   loading: bingoLoading,
@@ -60,50 +59,40 @@ const {
   issueJoinCode,
   getContestants,
   refresh: refreshBingo,
-} = useBingo() as {
-  refresh: () => void;
-  games: Ref<BingoGame[]>;
-  loading: Ref<boolean>;
-  creating: Ref<boolean>;
-  message: Ref<string>;
-  createGame: () => void;
-  startGame: (id: string, payout: number) => void;
-  stopGame: (id: string) => void;
-  drawNumber: (id: string) => void;
-  confirmWinner: (
-    gameId: string,
-    cardId: string,
-    contestantId: string,
-    payout: number
-  ) => void;
-  joinGame: (code: string) => Promise<JoinGameResult>;
-  getState: (
-    id: string
-  ) => Promise<{ draws: number[]; winners: any[]; contestants: any[] }>;
-  issueJoinCode: (
-    gameId: string,
-    username: string,
-    numCards: number,
-    freeSpace: boolean,
-    autoMark: boolean
-  ) => Promise<{ contestant: any; code: string; cards: any[] }>;
-  getContestants: (gameId: string) => Promise<any[]>;
-};
+  loadGame: loadBingoGame,
+  narrowGame,
+} = useBingo() as UseBingo;
 
-const stateMap = ref<
-  Record<
-    string,
-    {
-      draws: number[];
-      winners: any[];
-      contestants?: any[];
-      candidates?: any[];
-      loading: boolean;
+const stateMap = ref<Record<string, DashboardGameState>>({});
+const currentGame = ref<DashboardGameState>({
+  game: null,
+  draws: [],
+  candidates: [],
+  contestants: [],
+  loading: false,
+});
+
+const isLobby = computed(() => currentGame.value.game?.status === "lobby");
+const isActive = computed(() => currentGame.value.game?.status === "active");
+const isEnded = computed(() => currentGame.value.game?.status === "ended");
+
+const handleCreateBingoGame = async () => {
+  if (!currentGame.value) {
+    console.log("current game", currentGame.value);
+    bingoMessage.value = "Bingo Game Exists";
+    return;
+  }
+  bingoLoading.value = true;
+
+  try {
+    const gameInitialized = await createBingoGame();
+    if (gameInitialized) {
+      currentGame.value.game = gameInitialized;
     }
-  >
->({});
-
-// For issuing join codes
+  } catch (e: any) {
+    bingoMessage.value = e.message;
+  }
+}; // For issuing join codes
 const newContestant = reactive({
   username: "",
   numCards: 1,
@@ -127,6 +116,7 @@ const lastContestantUsername = ref<string | null>(null);
 const gameEnded = ref(false);
 const overlay = useOverlay();
 const subscriptions: RTESubs[] = [];
+const channels: Record<string, RealtimeChannel> = {};
 
 const modal = overlay.create(BaseModal);
 const open = async (
@@ -148,13 +138,13 @@ const open = async (
 };
 const handleIssueCode = async (gameId: string) => {
   try {
-    const { code } = await issueJoinCode(
+    const { code } = (await issueJoinCode(
       gameId,
       newContestant.username,
       newContestant.numCards,
       newContestant.freeSpace,
       newContestant.autoMark
-    );
+    )) as IssueJoinCodeResponse;
 
     lastIssuedCode.value = code;
     lastContestantUsername.value = newContestant.username;
@@ -169,7 +159,7 @@ const handleIssueCode = async (gameId: string) => {
   }
 };
 
-const findGameCode = (gameId: string): string | null => {
+const findGameCode = (gameId: BingoGame["id"]): string | null => {
   if (!gameId) return null;
 
   const contestants = stateMap.value?.[gameId]?.contestants;
@@ -185,7 +175,7 @@ const findGameCode = (gameId: string): string | null => {
   return alreadyContestant ? alreadyContestant.code : null;
 };
 
-const handleJoin = async (gameId: string) => {
+const handleJoin = async (gameId: BingoGame["id"]) => {
   const bingoGameCode = findGameCode(gameId);
 
   if (bingoGameCode) {
@@ -195,7 +185,7 @@ const handleJoin = async (gameId: string) => {
 
   console.log("creating new candidate");
   try {
-    const { code } = await issueJoinCode(
+    const codeData = await issueJoinCode(
       gameId,
       loggedInContestant.username ?? "",
       loggedInContestant.numCards,
@@ -203,7 +193,13 @@ const handleJoin = async (gameId: string) => {
       true
     );
 
-    const data = await joinBingoGame(code);
+    //@ts-ignore
+    const { code } = codeData;
+
+    const data = (await joinBingoGame(code)) as IssueJoinCodeResponse;
+    if (!data) {
+      bingoMessage.value = `Error joining Bingo with code: ${code}`;
+    }
     console.log(data.contestant, data.cards);
     router.push(`/play/bingo/${code}`);
 
@@ -218,23 +214,9 @@ const handleJoin = async (gameId: string) => {
   }
 };
 
-onMounted(async () => {
-  if (bingoGames.value) {
-    const newState: Record<string, any> = {};
-
-    for (const game of bingoGames.value) {
-      newState[game.id] = {
-        ...(await getState(game.id)),
-        contestants: await getContestants(game.id),
-      };
-    }
-
-    // 👈 replace the whole object so Vue reactivity kicks in
-    stateMap.value = newState;
-  }
-});
-const subscribeToContestants = (gameId: string) => {
-  const channel = supabase
+const subscribeToContestants = (gameId: BingoGame["id"]) => {
+  if (channels.contestants) return;
+  channels.contestants = supabase
     .channel(`bingo_contestants_${gameId}`)
     .on(
       "postgres_changes",
@@ -245,31 +227,17 @@ const subscribeToContestants = (gameId: string) => {
         filter: `game_id=eq.${gameId}`,
       },
       (payload) => {
-        const newContestant =
-          payload.new as Database["public"]["Tables"]["bingo_contestants"]["Row"];
-
-        stateMap.value[gameId] = {
-          ...(stateMap.value[gameId] || {
-            draws: [],
-            winners: [],
-            candidates: [],
-            contestants: [],
-          }),
-          contestants: [
-            ...(stateMap.value[gameId]?.contestants || []),
-            newContestant,
-          ],
-          loading: false,
-        };
+        const c = payload.new as ContestantType;
+        currentGame.value.contestants = [...currentGame.value.contestants, c];
       }
     )
     .subscribe();
-  subscriptions.push({ id: gameId, channel });
+
+  console.log("Subscribed to Contestants");
 };
 
-const subscribeToResults = (gameId: string) => {
-  console.log("subscribing to ", gameId);
-  const channel = supabase
+const subscribeToResults = (gameId: BingoGame["id"]) => {
+  supabase
     .channel(`bingo_results_${gameId}`)
     .on(
       "postgres_changes",
@@ -280,7 +248,7 @@ const subscribeToResults = (gameId: string) => {
         filter: `game_id=eq.${gameId}`,
       },
       async (payload) => {
-        const confirmed = payload?.new as BingoResult;
+        const confirmed = payload?.new as BingoResultRow;
 
         // if the new result has a winner name then we open the modal
         if (confirmed.username) {
@@ -290,44 +258,63 @@ const subscribeToResults = (gameId: string) => {
             confirmed.payout ?? confirmed.payout
           );
         }
+        // refresh gamestate here ?
       }
     )
     .subscribe();
-  subscriptions.push({ id: gameId, channel });
+  console.log("Subscribed to Results");
 };
 
-watch(
-  bingoGames,
-  async (games) => {
-    if (!games || games.length === 0) return;
-    console.log("subscriptions", subscriptions);
-    const gameIds = games.map((game) => game.id);
-    subscriptions.forEach((sub) => {
-      console.log("currently subbed:", sub);
-      if (gameIds.includes(sub.id)) {
-        sub.channel.unsubscribe();
+const subscribeToGame = (gameId: BingoGame["id"]) => {
+  if (channels.game) return;
+  channels.game = supabase
+    .channel(`bingo_games_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "bingo_games",
+        filter: `id=eq.${gameId}`,
+      },
+      (payload) => {
+        const updated = payload.new as BingoGame;
+        // keep app-level status union
+        currentGame.value.game = narrowGame(updated);
       }
-    });
+    )
+    .subscribe();
+  console.log("Subscribed to Game");
+};
 
-    const newState: Record<string, any> = {};
-    for (const game of games) {
-      newState[game.id] = {
-        draws: [],
-        winners: [],
-        candidates: [],
-        contestants: [],
-      };
+const subscribeToDraws = (gameId: BingoGame["id"]) => {
+  if (channels.draws) return;
+  channels.draws = supabase
+    .channel(`bingo_draws_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "bingo_draws",
+        filter: `game_id=eq.${gameId}`,
+      },
+      (payload) => {
+        const row =
+          payload.new as Database["public"]["Tables"]["bingo_draws"]["Row"];
+        if (!currentGame.value.draws.includes(row.number)) {
+          currentGame.value.draws.push(row.number); // mutate to preserve reactivity
+        }
+      }
+    )
+    .subscribe();
+  console.log("Subscribed to Draws");
+};
 
-      const fullState = await getState(game.id);
-
-      newState[game.id] = { ...fullState, loading: false };
-      subscribeToContestants(game.id); // 👈 start realtime sync
-      subscribeToResults(game.id);
-    }
-    stateMap.value = newState;
-  },
-  { immediate: true }
-);
+const unsubscribeAll = () => {
+  Object.values(channels).forEach((ch) => supabase.removeChannel(ch));
+  for (const k of Object.keys(channels)) delete channels[k];
+};
 
 const recentResults = ref<any[]>([]);
 const recentResultsLoading = ref(true);
@@ -344,35 +331,25 @@ onMounted(async () => {
   }
 });
 
-onMounted(() => {
-  if (!bingoGames.value) return;
+// on mounted lets fetch the first active or lobby game
 
-  // Subscribe to realtime updates on bingo_games
-  bingoGames.value.forEach((game) => {
-    supabase
-      .channel(`bingo_games_${game.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "bingo_games",
-          filter: `id=eq.${game.id}`,
-        },
-        async (payload) => {
-          const updated =
-            payload.new as Database["public"]["Tables"]["bingo_games"]["Row"];
-          console.log("[Realtime] Game update:", updated);
+onMounted(async () => {
+  // fetch the latest non-ended game
+  const game = await loadBingoGame();
+  if (!game) return;
 
-          // Refresh state for that game
-          stateMap.value[updated.id] = {
-            ...(await getState(updated.id)),
-            loading: false,
-          };
-        }
-      )
-      .subscribe();
-  });
+  currentGame.value.game = game;
+  await hydrateGameState(game.id);
+
+  // subscribe after initial hydration
+  subscribeToGame(game.id);
+  subscribeToDraws(game.id);
+  subscribeToContestants(game.id);
+  subscribeToResults(game.id);
+});
+
+onBeforeUnmount(() => {
+  unsubscribeAll();
 });
 
 onBeforeUnmount(() => {
@@ -381,6 +358,90 @@ onBeforeUnmount(() => {
   });
   subscriptions.length = 0; // clear refs
 });
+
+async function hydrateGameState(gameId: string) {
+  currentGame.value.loading = true;
+  try {
+    const state = await getState(gameId); // ClientGameState: draws:number[], winners, candidates, contestants
+    if (!state.game) return;
+    currentGame.value.game = state.game;
+
+    // mutate arrays to preserve identity
+    currentGame.value.draws.splice(
+      0,
+      currentGame.value.draws.length,
+      ...state.draws
+    );
+    currentGame.value.candidates.splice(
+      0,
+      currentGame.value.candidates.length,
+      ...state.candidates
+    );
+    currentGame.value.contestants.splice(
+      0,
+      currentGame.value.contestants.length,
+      ...state.contestants
+    );
+  } finally {
+    currentGame.value.loading = false;
+  }
+}
+
+const refreshCurrentGame = async (gameId: string) => {
+  currentGame.value.loading = true;
+  try {
+    const next = await getState(gameId); // ClientGameState (draws:number[])
+
+    if (!next.game) {
+      return;
+    }
+    currentGame.value.game = next.game;
+
+    // keep array identity (reactivity-safe)
+    currentGame.value.draws.splice(
+      0,
+      currentGame.value.draws.length,
+      ...next.draws
+    );
+    currentGame.value.candidates.splice(
+      0,
+      currentGame.value.candidates.length,
+      ...next.candidates
+    );
+    currentGame.value.contestants.splice(
+      0,
+      currentGame.value.contestants.length,
+      ...next.contestants
+    );
+  } finally {
+    currentGame.value.loading = false;
+  }
+};
+
+const onDraw = async (gameId: string) => {
+  // try to apply the minimal change first
+  const res = await drawNumber(gameId); // => { draw } | undefined
+  if (res?.draw && !currentGame.value.draws.includes(res.draw.number)) {
+    currentGame.value.draws.push(res.draw.number);
+  } else {
+    // fallback: full refresh
+    await refreshCurrentGame(gameId);
+  }
+};
+
+const onStop = async (gameId: string) => {
+  const res = await stopGame(gameId); // => { game } | undefined
+  if (res?.game) {
+    currentGame.value.game = res.game; // status should be 'ended' now
+  } else {
+    await refreshCurrentGame(gameId);
+  }
+};
+
+watch(
+  () => currentGame.value.game?.status,
+  (s) => console.log("[status]", s, "draws:", toRaw(currentGame.value.draws))
+);
 </script>
 
 <template>
@@ -390,10 +451,7 @@ onBeforeUnmount(() => {
       <h1 class="text-2xl font-bold mb-2">Trivia Games</h1>
 
       <!-- Admin-only: Create Trivia Game -->
-      <div
-        v-if="profile?.role === 'admin'"
-        class="bg-gray-800 p-4 rounded space-y-3"
-      >
+      <div v-if="isAdmin" class="bg-gray-800 p-4 rounded space-y-3">
         <label class="block">
           <span class="text-sm text-gray-300">Game Title</span>
           <input
@@ -422,7 +480,7 @@ onBeforeUnmount(() => {
 
       <!-- No games -->
       <div v-else-if="visibleTriviaGames.length === 0" class="text-gray-400">
-        <span v-if="profile?.role === 'admin'">
+        <span v-if="isAdmin">
           No trivia games created yet. Create one to get started!
         </span>
         <span v-else> No live trivia games available right now. </span>
@@ -441,7 +499,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="flex gap-2">
-            <template v-if="profile?.role === 'admin'">
+            <template v-if="isAdmin">
               <UButton :to="`/play/${game.id}`" size="sm">Open</UButton>
               <UButton
                 v-if="game.status === 'lobby'"
@@ -475,13 +533,10 @@ onBeforeUnmount(() => {
       <h1 class="text-2xl font-bold mb-2">Bingo Games</h1>
 
       <!-- Admin-only: Create Bingo Game -->
-      <div
-        v-if="profile?.role === 'admin'"
-        class="bg-gray-800 p-4 rounded space-y-3"
-      >
+      <div v-if="isAdmin" class="bg-gray-800 p-4 rounded space-y-3">
         <UButton
           :loading="bingoCreating"
-          @click="createBingoGame()"
+          @click="handleCreateBingoGame()"
           color="primary"
           class="w-full"
         >
@@ -495,11 +550,8 @@ onBeforeUnmount(() => {
       <div v-if="bingoLoading">Loading games...</div>
 
       <!-- No games -->
-      <div
-        v-else-if="!bingoGames || bingoGames.length === 0"
-        class="text-gray-400"
-      >
-        <span v-if="profile?.role === 'admin'">
+      <div v-else-if="!currentGame.game" class="text-gray-400">
+        <span v-if="isAdmin">
           No bingo games created yet. Create one to get started!
         </span>
         <span v-else> No live bingo games available right now. </span>
@@ -507,33 +559,34 @@ onBeforeUnmount(() => {
 
       <!-- Games list -->
       <div v-else>
-        <div
-          v-for="(game, index) in bingoGames"
-          :key="game.id"
-          class="p-2 my-2 bg-gray-800 rounded"
-        >
+        <div :key="currentGame.game.id" class="p-2 my-2 bg-gray-800 rounded">
           <!-- Game header -->
           <div class="flex justify-between items-center">
             <div>
-              <p class="font-semibold">
-                Bingo Game – # {{ bingoGames.length - index }}
+              <p class="font-semibold">Bingo Game</p>
+              <p class="text-sm text-gray-400">
+                Status: {{ currentGame.game.status }}
               </p>
-              <p class="text-sm text-gray-400">Status: {{ game.status }}</p>
             </div>
 
             <!-- Inline: Start & payout input -->
-            <div v-if="profile?.role === 'admin'" class="flex gap-2">
+            <div v-if="isAdmin" class="flex gap-2">
               <UInput
-                v-if="game.status === 'lobby'"
-                v-model.number="game.payout"
+                v-if="isLobby"
+                v-model.number="currentGame.game.payout"
                 type="number"
                 class="w-24 p-1 rounded bg-gray-900 border border-gray-600 text-white text-sm"
                 placeholder="Payout"
               />
 
               <UButton
-                v-if="game.status === 'lobby'"
-                @click="startBingoGame(game.id, game.payout || 0)"
+                v-if="isLobby"
+                @click="
+                  startBingoGame(
+                    currentGame.game.id,
+                    currentGame.game.payout || 0
+                  )
+                "
                 size="sm"
                 color="primary"
               >
@@ -543,10 +596,7 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Issue Join Code panel -->
-          <div
-            v-if="profile?.role === 'admin' && game.status === 'lobby'"
-            class="mt-4 bg-gray-700 p-3 rounded"
-          >
+          <div v-if="isAdmin && isLobby" class="mt-4 bg-gray-700 p-3 rounded">
             <h3 class="text-sm font-semibold text-gray-200 mb-2">
               Issue Join Code
             </h3>
@@ -592,7 +642,7 @@ onBeforeUnmount(() => {
               class="mt-2 w-full"
               size="sm"
               color="primary"
-              @click="handleIssueCode(game.id)"
+              @click="handleIssueCode(currentGame.game.id)"
             >
               Generate Code
             </UButton>
@@ -607,37 +657,23 @@ onBeforeUnmount(() => {
           <!-- in this, do the actions do something to state that is bad? things
           things arent being updated  -->
           <BingoGameControl
-            v-if="profile?.role === 'admin'"
-            :game="game"
-            :draws="stateMap[game.id]?.draws || []"
-            :winners="stateMap[game.id]?.winners || []"
-            :contestants="stateMap[game.id]?.contestants || []"
-            :loading="stateMap[game.id]?.loading"
-            @draw="
-              async (gameId) => {
-                await drawNumber(gameId);
-
-                stateMap[gameId] = {
-                  ...(await getState(gameId)),
-                  loading: false,
-                };
-              }
-            "
-            @stop="
-              async (gameId) => {
-                await stopGame(gameId);
-                stateMap[gameId] = {
-                  ...(await getState(gameId)),
-                  loading: false,
-                };
-              }
-            "
+            v-if="isAdmin && currentGame.game"
+            :game="currentGame.game"
+            :draws="currentGame.draws"
+            :contestants="currentGame.contestants"
+            :loading="currentGame.loading"
+            @draw="onDraw"
+            @stop="onStop"
           />
 
           <!-- Player control -->
           <div v-else class="flex flex-col gap-2 mt-2">
             <div class="flex justify-between">
-              <UButton @click="handleJoin(game.id)" size="sm" color="primary">
+              <UButton
+                @click="handleJoin(currentGame.game.id)"
+                size="sm"
+                color="primary"
+              >
                 Join
               </UButton>
               <UInput
@@ -669,15 +705,15 @@ onBeforeUnmount(() => {
                 diamonds
               </p>
             </div>
-            <div v-if="findGameCode(game.id)" class="flex">
-              Bingo Code: {{ findGameCode(game.id) }}
+            <div v-if="findGameCode(currentGame.game.id)" class="flex">
+              Bingo Code: {{ findGameCode(currentGame.game.id) }}
             </div>
 
             <!-- <div class="flex">Bingo Code: {{ findGameCode(game.id) }}</div> -->
           </div>
         </div>
       </div>
-      <section v-if="profile?.role === 'admin'">
+      <section v-if="isAdmin">
         <h2 class="text-xl font-bold mb-2">Recent Bingo Winners</h2>
 
         <div v-if="recentResultsLoading" class="text-gray-400">
@@ -704,3 +740,4 @@ onBeforeUnmount(() => {
     </section>
   </main>
 </template>
+<!-- :draws="stateMap[game.id]?.draws || []" -->

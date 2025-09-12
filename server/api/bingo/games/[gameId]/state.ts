@@ -89,6 +89,7 @@ export default defineEventHandler(async (event) => {
     contestants: contestants ?? [],
     winnerCandidates: winnerCards,
     candidates: allCardsTyped,
+    winners: [],
   };
 
   return payload;

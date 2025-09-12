@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
-
-type BingoGame = Database["public"]["Tables"]["bingo_games"]["Row"] & {
-  payout?: number;
-};
-type BingoCard = Database["public"]["Tables"]["bingo_cards"]["Row"];
-type WinnerCandidate = BingoCard & { payout?: number };
-type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
-
+import type {
+  BingoGameRow,
+  ContestantType,
+  BingoCard,
+  BingoDrawRow,
+  BingoCardRow,
+  BingoCardGrid,
+  GameStateResponse,
+} from "~/types/bingo";
 const props = defineProps<{
-  game: BingoGame;
+  game: BingoGameRow;
   draws: number[];
-  winners: WinnerCandidate[];
-  contestants?: BingoContestant[];
+  contestants?: ContestantType[];
   loading?: boolean;
 }>();
 
@@ -23,6 +23,7 @@ const emit = defineEmits<{
 
 // 👇 Track reactive status
 const currentStatus = ref(props.game.status);
+console.log("game", props.game);
 </script>
 
 <template>
@@ -80,15 +81,16 @@ const currentStatus = ref(props.game.status);
         class="p-2 bg-gray-800 rounded space-y-1"
       >
         <div class="flex justify-between items-center">
-          <span class="font-semibold">{{ c.username }}</span>
-          <span class="text-xs text-gray-400">Code: {{ c.code }}</span>
+          <!-- <span class="font-semibold">{{ c.username }}</span>
+          <span class="text-xs text-gray-400">Code: {{ c.code }}</span> -->
         </div>
-        <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div>
+        <!-- <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div> -->
       </div>
     </div>
 
     <!-- Confirmed winners -->
-    <div v-if="winners.length" class="space-y-2">
+    <!-- deprecated. we no longer need to see confirmed winners? -->
+    <!-- <div v-if="winners.length" class="space-y-2">
       <h3 class="text-lg font-semibold">Confirmed Winners</h3>
       <div
         v-for="card in winners"
@@ -99,6 +101,6 @@ const currentStatus = ref(props.game.status);
         <div class="text-sm text-gray-200">Card: {{ card.id.slice(0, 6) }}</div>
         <div class="text-lg font-bold">Prize: {{ card.payout ?? 0 }} 💎</div>
       </div>
-    </div>
+    </div> -->
   </div>
 </template>

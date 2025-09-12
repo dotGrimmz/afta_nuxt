@@ -16,7 +16,7 @@ const router = useRouter();
 
 const supabase = useSupabaseClient<Database>();
 
-const { joinGame, getState, callBingo } = useBingo();
+const { joinGame, getState, callBingo, narrowGame } = useBingo();
 
 const contestant = ref<ContestantType | null>(null);
 const cards = ref<BingoCard[]>([]);
@@ -105,7 +105,12 @@ onMounted(async () => {
     // game state has 3 phases. lobby - pregame
 
     // assign server state to local state - should set defaults
-    currentGame.value = state.game;
+    if (!state.game) {
+      console.error("unable to assign server state to local state. Debug!");
+      message.value = "unable to assign server state to local state. Debug!";
+      return;
+    }
+    currentGame.value = narrowGame(state.game); // ✅ narrow status here
     // winnerPayout.value = state.game.payout ?? null;
     console.log(
       "server state assigned to current game in code.vue",
@@ -117,11 +122,7 @@ onMounted(async () => {
     //const gameLobby = computed(() => currentGame.value?.status === "lobby");
 
     // hydrate draws without replacing the array ref
-    draws.value.splice(
-      0,
-      draws.value.length,
-      ...state.draws.map((d) => d.number)
-    );
+    draws.value.splice(0, draws.value.length, ...state.draws.map((d) => d)); // if state.draws is already number[]
 
     // subscribe after hydration
     subscribeToDraws(gameId);
@@ -280,12 +281,8 @@ const handleCallBingo = async (cardId: string) => {
     );
 
     if (data) {
-      // gameEnded.value = true;
-      // isWinner.value = true;
-
       await refreshGameRow(data.game.id);
 
-      console.log("current game after bingo call", currentGame.value);
       message.value = `Bingo! ${data.result.username} Won ${data.result.payout} 💎`;
 
       showBingoToast(currentGame.value.payout);

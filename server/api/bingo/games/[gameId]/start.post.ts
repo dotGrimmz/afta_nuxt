@@ -37,6 +37,7 @@ export default defineEventHandler(async (event) => {
     .update({
       status: "active",
       payout: body.payout,
+      min_players: count,
     })
     .eq("id", gameId)
     .select()

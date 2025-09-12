@@ -1,7 +1,7 @@
 import type { Database } from "~/types/supabase";
 
 /** ── DB row aliases (exactly as Supabase generates) ───────────────────────── */
-type BaseGameRow = Database["public"]["Tables"]["bingo_games"]["Row"];
+export type BaseGameRow = Database["public"]["Tables"]["bingo_games"]["Row"];
 
 export type BingoGameRow = Omit<BaseGameRow, "status"> & {
   status: GameStatus;
@@ -46,6 +46,7 @@ export type GameStateResponse = {
   contestants: BingoContestantRow[];
   winnerCandidates: BingoCard[];
   candidates: BingoCard[];
+  winners: any[];
 };
 
 export type FourChars = `${string}${string}${string}${string}`;
@@ -67,3 +68,85 @@ export type CallBingoResponse = {
     "status" | "created_at" | "ended_at" | "id" | "min_players"
   >;
 };
+
+export type DashboardGameState = {
+  game: BingoGameRow | null;
+  draws: number[];
+  candidates: BingoCard[];
+  contestants: BingoContestantRow[];
+  loading: boolean;
+};
+
+// Add this client-normalized state (numbers instead of draw rows)
+export type ClientGameState = {
+  game: BingoGameRow | undefined | null;
+  draws: number[];
+  winners?: BingoCard[]; // winnerCandidates normalized
+  candidates: BingoCard[];
+  contestants: BingoContestantRow[];
+};
+
+// (optional) response when adding a contestant / issuing a join code
+export type IssueJoinCodeResponse = {
+  contestant: BingoContestantRow;
+  code: JoinCode | "";
+  cards: BingoCard[];
+};
+
+// The interface your composable will return
+import type { Ref } from "vue";
+
+export interface UseBingo {
+  games?: Ref<BingoGameRow[]>; // non-null (we’ll set a default)
+  loading: Ref<boolean>;
+  creating: Ref<boolean>;
+  message: Ref<string>;
+
+  refresh: () => Promise<void>;
+
+  createGame: () => Promise<BingoGameRow | undefined>;
+  startGame: (
+    gameId: string,
+    payout: number | string | undefined
+  ) => Promise<void>;
+  stopGame: (gameId: string) => Promise<{ game: BingoGameRow } | undefined>;
+
+  drawNumber: (gameId: string) => Promise<{ draw: BingoDrawRow } | undefined>;
+
+  confirmWinner: (
+    gameId: string,
+    cardId: string,
+    contestantId: string,
+    payout: number
+  ) => Promise<unknown>; // adjust if you have a typed response
+
+  joinGame: (code: string) => Promise<IssueJoinCodeResponse | undefined>;
+
+  // NOTE: client-normalized state (numbers), not server wire type
+  getState: (gameId: string) => Promise<ClientGameState>;
+
+  issueJoinCode: (
+    gameId: string,
+    username: string,
+    numCards: number,
+    freeSpace: boolean,
+    autoMark: boolean
+  ) => Promise<IssueJoinCodeResponse | undefined>;
+
+  getContestants: (gameId: string) => Promise<Array<{
+    id: string;
+    username: string;
+    num_cards: number;
+    code: string;
+  }> | null>;
+
+  callBingo: (
+    gameId: string,
+    cardId: string,
+    contestantId: string,
+    username?: string | null,
+    payout?: string | number
+  ) => Promise<CallBingoResponse>;
+  narrowGame: (row: BaseGameRow) => BingoGameRow;
+  loadGame: () => Promise<BingoGameRow | undefined | null>;
+}
