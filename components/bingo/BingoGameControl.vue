@@ -81,26 +81,11 @@ console.log("game", props.game);
         class="p-2 bg-gray-800 rounded space-y-1"
       >
         <div class="flex justify-between items-center">
-          <!-- <span class="font-semibold">{{ c.username }}</span>
-          <span class="text-xs text-gray-400">Code: {{ c.code }}</span> -->
+          <span class="font-semibold">{{ c.username }}</span>
+          <span class="text-xs text-gray-400">Code: {{ c.code }}</span>
         </div>
-        <!-- <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div> -->
+        <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div>
       </div>
     </div>
-
-    <!-- Confirmed winners -->
-    <!-- deprecated. we no longer need to see confirmed winners? -->
-    <!-- <div v-if="winners.length" class="space-y-2">
-      <h3 class="text-lg font-semibold">Confirmed Winners</h3>
-      <div
-        v-for="card in winners"
-        :key="card.id"
-        class="p-3 bg-green-700 rounded text-white space-y-1"
-      >
-        <div class="font-semibold">Contestant: {{ card.contestant_id }}</div>
-        <div class="text-sm text-gray-200">Card: {{ card.id.slice(0, 6) }}</div>
-        <div class="text-lg font-bold">Prize: {{ card.payout ?? 0 }} 💎</div>
-      </div>
-    </div> -->
   </div>
 </template>
