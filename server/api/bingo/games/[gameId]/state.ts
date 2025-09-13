@@ -1,10 +1,14 @@
+import { Database } from "#build/types/supabase-database";
 import { serverSupabaseClient } from "#supabase/server";
-import type { Database } from "~/types/supabase";
-
-type BingoGame = Database["public"]["Tables"]["bingo_games"]["Row"];
-type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
-type BingoCard = Database["public"]["Tables"]["bingo_cards"]["Row"];
-type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
+import type {
+  BingoGameRow,
+  ContestantType,
+  BingoCard,
+  BingoDrawRow,
+  BingoCardRow,
+  BingoCardGrid,
+  GameStateResponse,
+} from "~/types/bingo";
 
 export default defineEventHandler(async (event) => {
   const gameId = event.context.params?.gameId;
@@ -17,21 +21,18 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Fetch game info
+  // Game info
   const { data: game, error: gameError } = await client
     .from("bingo_games")
     .select("*")
     .eq("id", gameId)
-    .single<BingoGame>();
+    .single<BingoGameRow>();
 
   if (gameError || !game) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: "Game not found",
-    });
+    throw createError({ statusCode: 404, statusMessage: "Game not found" });
   }
 
-  // Fetch draws
+  // Draws
   const { data: draws, error: drawsError } = await client
     .from("bingo_draws")
     .select("*")
@@ -45,7 +46,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Fetch contestants
+  // Contestants
   const { data: contestants, error: contestantsError } = await client
     .from("bingo_contestants")
     .select("*")
@@ -58,25 +59,38 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Fetch winner candidates (cards that called bingo)
-  const { data: winnerCards, error: winnerError } = await client
+  // All cards
+  const { data: allCards, error: cardsError } = await client
     .from("bingo_cards")
     .select("*")
-    .eq("game_id", gameId)
-    .eq("is_winner_candidate", true);
+    .eq("game_id", gameId);
 
-  if (winnerError) {
+  if (cardsError) {
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to fetch winner candidates",
+      statusMessage: "Failed to fetch cards",
     });
   }
 
-  return {
+  // Filter winner candidates
+  const toCard = (c: BingoCardRow): BingoCard => ({
+    ...c,
+    grid: c.grid as unknown as BingoCardGrid,
+  });
+
+  const allCardsTyped: BingoCard[] = (allCards ?? []).map(toCard);
+  const winnerCards: BingoCard[] = allCardsTyped.filter(
+    (c) => c.is_winner_candidate === true
+  );
+
+  const payload: GameStateResponse = {
     game,
-    draws: (draws ?? []) as BingoDraw[],
-    contestants: (contestants ?? []) as BingoContestant[],
-    winnerCandidates: (winnerCards ?? []) as BingoCard[], // 👈 existing
-    candidates: (winnerCards ?? []) as BingoCard[], // 👈 new, alias for backwards-compatibility
+    draws: draws ?? [],
+    contestants: contestants ?? [],
+    winnerCandidates: winnerCards,
+    candidates: allCardsTyped,
+    winners: [],
   };
+
+  return payload;
 });

@@ -1,8 +1,9 @@
 import { serverSupabaseClient } from "#supabase/server";
+import { JoinCode } from "~/types/bingo";
 import type { Database } from "~/types/supabase";
 import { insertBingoCard } from "~/utils/bingo/insertCard";
 
-function generateJoinCode(): string {
+function generateJoinCode(): JoinCode {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let code = "";
   for (let i = 0; i < 4; i++) {
@@ -27,6 +28,7 @@ export default defineEventHandler(async (event) => {
     numCards: number;
     freeSpace?: boolean;
     autoMark?: boolean;
+    contestantId?: string;
   }>(event);
 
   if (!body?.username || !body?.numCards) {

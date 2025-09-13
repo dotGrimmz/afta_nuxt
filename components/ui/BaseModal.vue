@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const isOpen = defineModel<boolean>("modelValue"); // idiomatic v-model usage
+const isOpen = defineModel<boolean>("modelValue");
 
 defineProps<{
   title?: string;
@@ -9,11 +9,18 @@ defineEmits(["close"]);
 </script>
 
 <template>
-  <UModal v-model="isOpen" @close="$emit('close')">
+  <UModal
+    v-model="isOpen"
+    :overlay="true"
+    :transition="true"
+    :prevent-close="false"
+    teleport="#modals"
+    @close="$emit('close')"
+  >
     <div class="p-6 space-y-4">
       <h2 v-if="title" class="text-xl font-bold">{{ title }}</h2>
 
-      <!-- default slot for custom content -->
+      <!-- default slot -->
       <slot />
 
       <!-- optional actions slot -->
