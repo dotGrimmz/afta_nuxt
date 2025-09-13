@@ -13,6 +13,7 @@ import type {
   GameStatus,
   ClientGameState,
   IssueJoinCodeResponse,
+  BingoContestantRow,
 } from "~/types/bingo";
 
 export const useBingo = (): UseBingo => {
@@ -209,10 +210,12 @@ export const useBingo = (): UseBingo => {
     }
   };
 
-  const getContestants = async (gameId: string) => {
+  const getContestants = async (
+    gameId: string
+  ): Promise<BingoContestantRow[] | null> => {
     const { data, error } = await supabase
       .from("bingo_contestants")
-      .select("id, username, num_cards, code")
+      .select("*")
       .eq("game_id", gameId);
 
     await refresh();
@@ -221,7 +224,7 @@ export const useBingo = (): UseBingo => {
       console.error("Failed to fetch contestants:", error.message);
     }
 
-    return data;
+    return data ?? [];
   };
 
   const callBingo = async (

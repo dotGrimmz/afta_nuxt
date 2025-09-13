@@ -225,7 +225,6 @@ const hydrateMyPrefsFromGame = async () => {
   if (card) {
     loggedInContestant.autoMark = !!card.auto_mark_enabled;
     loggedInContestant.freeSpace = !!card.free_space;
-    // (optional) keep their join code around
     loggedInContestant.code = mineContestant.code;
   }
 };
@@ -288,7 +287,7 @@ const subscribeToResults = (gameId: BingoGameRow["id"]) => {
         const confirmed = payload?.new as BingoResultRow;
 
         // if the new result has a winner name then we open the modal
-        if (confirmed.username && confirmed.contestant_id) {
+        if (confirmed.username && confirmed.contestant_id && isAdmin) {
           open(
             confirmed.username ?? confirmed.contestant_id,
             confirmed.contestant_id ?? confirmed.contestant_id,
@@ -296,6 +295,7 @@ const subscribeToResults = (gameId: BingoGameRow["id"]) => {
           );
         }
         // refresh gamestate here ?
+        refreshBingo();
       }
     )
     .subscribe();
@@ -531,6 +531,62 @@ const onStop = async (gameId: string) => {
   }
 };
 
+const handleReloadGame = async () => {
+  currentGame.value.game = null;
+  currentGame.value.draws = [];
+  currentGame.value.candidates = [];
+  currentGame.value.contestants = [];
+  currentGame.value.loading = false;
+  const game = await loadBingoGame();
+  if (!game) return;
+
+  currentGame.value.game = game;
+  await hydrateGameState(game.id);
+  const data = await $fetch<any>("/api/bingo/results/recent");
+
+  recentResults.value = data;
+};
+
+const handleRemoveContestant = async (contestantId: string): Promise<void> => {
+  console.log("calling handle Remove contestant");
+  if (!isLobby) {
+    console.log("Game already started, cannot remove contestant.");
+    return;
+  }
+
+  if (!currentGame.value.game?.id) {
+    console.log("No current game id?");
+    return;
+  }
+  console.log("deleting cards");
+  try {
+    // Delete cards first
+    await supabase
+      .from("bingo_cards")
+      .delete()
+      .eq("contestant_id", contestantId)
+      .eq("game_id", currentGame.value.game?.id);
+    console.log("cards deleted. now deleting from contestant list");
+    // Delete contestant
+    await supabase
+      .from("bingo_contestants")
+      .delete()
+      .eq("id", contestantId)
+      .eq("game_id", currentGame.value.game?.id);
+    console.log("contestant deleted. now refetching contestant list");
+
+    // Refetch contestants list
+    const updatedContestants = await getContestants(currentGame.value.game?.id);
+    console.log("updated contestants", updatedContestants);
+    if (!updatedContestants) return;
+    currentGame.value.contestants = updatedContestants;
+
+    console.log("Contestant removed:", contestantId);
+  } catch (err) {
+    console.error("Error removing contestant:", err);
+  }
+};
+
 watch(
   () => currentGame.value.game?.status,
   (s) => console.log("[status]", s, "draws:", toRaw(currentGame.value.draws))
@@ -756,7 +812,9 @@ watch(
             :contestants="currentGame.contestants"
             :loading="currentGame.loading"
             @draw="onDraw"
+            @reloadGame="handleReloadGame"
             @stop="onStop"
+            @removeContestant="handleRemoveContestant"
           />
 
           <!-- Player control -->
