@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { gain } from "three/tsl";
 import { defineProps, defineEmits } from "vue";
 
 const props = defineProps<{

@@ -134,12 +134,7 @@ export interface UseBingo {
     autoMark: boolean
   ) => Promise<IssueJoinCodeResponse | undefined>;
 
-  getContestants: (gameId: string) => Promise<Array<{
-    id: string;
-    username: string;
-    num_cards: number;
-    code: string;
-  }> | null>;
+  getContestants: (gameId: string) => Promise<BingoContestantRow[] | null>;
 
   callBingo: (
     gameId: string,
