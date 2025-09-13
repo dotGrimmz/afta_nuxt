@@ -303,6 +303,20 @@ const handleCallBingo = async (cardId: string) => {
     calling.value = false;
   }
 };
+
+const restoreMarks = (): void => {
+  for (const card of cards.value) {
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const num = card.grid.numbers[r][c];
+        // if this number was drawn already, mark it
+        if (draws.value.includes(num)) {
+          card.grid.marked[r][c] = true;
+        }
+      }
+    }
+  }
+};
 </script>
 
 <template>
@@ -379,6 +393,8 @@ const handleCallBingo = async (cardId: string) => {
           v-model="showBingoModal"
           title="All Numbers Drawn"
           :numbers="draws"
+          :gameEnded="gameEnded"
+          :restoreMarks="restoreMarks"
         />
       </div>
       <!-- Cards grid -->

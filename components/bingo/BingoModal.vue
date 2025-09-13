@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { gain } from "three/tsl";
 import { defineProps, defineEmits } from "vue";
 
 const props = defineProps<{
   modelValue: boolean; // control open/close
   title?: string; // optional heading
   numbers: number[]; // list of all drawn numbers
+  restoreMarks: () => void;
+  gameEnded: boolean;
 }>();
 
 const emit = defineEmits(["update:modelValue"]);
@@ -18,6 +21,14 @@ const onBackdropClick = (e: MouseEvent) => {
   if ((e.target as HTMLElement).id === "bingo-modal-backdrop") {
     close();
   }
+};
+
+const handleRestoreMarks = () => {
+  console.log("game ended", props.gameEnded);
+  if (props.gameEnded) {
+    return;
+  }
+  props.restoreMarks();
 };
 </script>
 
@@ -47,6 +58,14 @@ const onBackdropClick = (e: MouseEvent) => {
         <h2 v-if="props.title" class="text-xl font-bold mb-4 text-gray-900">
           {{ props.title }}
         </h2>
+        <UButton
+          class="text-sm font-bold mb-4 text-gray-900"
+          color="secondary"
+          size="sm"
+          @click="handleRestoreMarks"
+        >
+          Mark All Cards
+        </UButton>
 
         <!-- Numbers list -->
         <div class="flex flex-wrap gap-2">
