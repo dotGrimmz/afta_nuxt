@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
-import { calculateCost } from "~/utils/bingo/pricing";
+// import { calculateCost } from "~/utils/bingo/pricing";
 import BaseModal from "~/components/BaseModal.vue";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type {
@@ -591,6 +591,30 @@ watch(
   () => currentGame.value.game?.status,
   (s) => console.log("[status]", s, "draws:", toRaw(currentGame.value.draws))
 );
+
+const baseCardCost = ref(400); // default in diamonds / points / $
+const freeSpaceCost = ref(100);
+const autoMarkCost = ref(0);
+
+// computed → dynamic cost per card
+
+const calculateCost = (
+  numCards: number,
+  freeSpace: boolean,
+  autoMark: boolean
+) => {
+  // should take a number of cards from new contestant or logged in user
+
+  let solution = numCards * baseCardCost.value;
+  if (freeSpace) {
+    solution = solution + freeSpaceCost.value;
+  }
+  if (autoMark) {
+    solution = solution + autoMarkCost.value;
+  }
+
+  return solution;
+};
 </script>
 
 <template>
@@ -691,7 +715,43 @@ watch(
         >
           Create Game
         </UButton>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-gray-300 text-sm mb-1"
+              >Base Card Cost</label
+            >
+            <UInput
+              type="number"
+              v-model="baseCardCost"
+              min="0"
+              class="w-full"
+            />
+          </div>
 
+          <div>
+            <label class="block text-gray-300 text-sm mb-1"
+              >Free Space Cost</label
+            >
+            <UInput
+              type="number"
+              v-model="freeSpaceCost"
+              min="0"
+              class="w-full"
+            />
+          </div>
+
+          <div>
+            <label class="block text-gray-300 text-sm mb-1"
+              >Auto Mark Cost</label
+            >
+            <UInput
+              type="number"
+              v-model="autoMarkCost"
+              min="0"
+              class="w-full"
+            />
+          </div>
+        </div>
         <p v-if="bingoMessage" class="text-sm mt-2">{{ bingoMessage }}</p>
       </div>
 
@@ -777,11 +837,12 @@ watch(
             </div>
 
             <p class="text-xs text-gray-400 mt-2">
-              Expected Cost:
+              Expected Cost - Working:
               {{
                 calculateCost(
                   newContestant.numCards || 0,
-                  newContestant.freeSpace || false
+                  newContestant.freeSpace || false,
+                  newContestant.autoMark
                 )
               }}
               diamonds
@@ -867,16 +928,6 @@ watch(
                 />
                 <span>Auto Mark</span>
               </label>
-              <p class="text-xs text-gray-400">
-                Expected Cost:
-                {{
-                  calculateCost(
-                    loggedInContestant.numCards || 0,
-                    loggedInContestant.freeSpace || false
-                  )
-                }}
-                diamonds
-              </p>
             </div>
             <div v-if="findGameCode(currentGame.game.id)" class="flex">
               Bingo Code: {{ findGameCode(profile?.id) }}
