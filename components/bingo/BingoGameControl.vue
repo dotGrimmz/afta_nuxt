@@ -5,6 +5,7 @@ const props = defineProps<{
   draws: number[];
   contestants?: ContestantType[];
   loading?: boolean;
+  autoDrawRunning: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -30,7 +31,7 @@ console.log("game", props.game);
     <!-- Admin buttons -->
     <div v-else class="flex gap-2 items-center">
       <UButton
-        :disabled="currentStatus !== 'active'"
+        :disabled="currentStatus !== 'active' || autoDrawRunning"
         @click="emit('draw', game.id)"
         size="sm"
         color="primary"

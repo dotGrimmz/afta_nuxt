@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
-// import { calculateCost } from "~/utils/bingo/pricing";
 import BaseModal from "~/components/BaseModal.vue";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useAutoDraw } from "~/composables/useAutoDraw";
+
 import type {
   BaseGameRow,
   BingoCard,
@@ -58,6 +59,13 @@ const currentGame = ref<DashboardGameState>({
   candidates: [],
   contestants: [],
   loading: false,
+});
+
+const game_id = computed(() => currentGame.value.game.id);
+const { start, stop, isRunning } = useAutoDraw({
+  gameId: game_id,
+  drawFn: onDraw,
+  getDraws: () => currentGame.value.draws,
 });
 
 const currentCandidates = computed(() => currentGame.value.candidates);
@@ -511,16 +519,16 @@ const handleSelfJoinCurrentGame = async () => {
   }
 };
 
-const onDraw = async (gameId: string) => {
+async function onDraw(gameId: string) {
   // try to apply the minimal change first
   const res = await drawNumber(gameId); // => { draw } | undefined
   if (res?.draw && !currentGame.value.draws.includes(res.draw.number)) {
     currentGame.value.draws.push(res.draw.number);
   } else {
     // fallback: full refresh
-    await refreshCurrentGame(gameId);
+    // await refreshCurrentGame(gameId);
   }
-};
+}
 
 const onStop = async (gameId: string) => {
   const res = await stopGame(gameId); // => { game } | undefined
@@ -706,7 +714,7 @@ const calculateCost = (
       <h1 class="text-2xl font-bold mb-2">Bingo Games</h1>
 
       <!-- Admin-only: Create Bingo Game -->
-      <div v-if="isAdmin" class="bg-gray-800 p-4 rounded space-y-3">
+      <div v-if="isAdmin && isLobby" class="bg-gray-800 p-4 rounded space-y-3">
         <UButton
           :loading="bingoCreating"
           @click="handleCreateBingoGame()"
@@ -771,11 +779,19 @@ const calculateCost = (
         <div :key="currentGame.game.id" class="p-2 my-2 bg-gray-800 rounded">
           <!-- Game header -->
           <div class="flex justify-between items-center">
-            <div>
-              <p class="font-semibold">Bingo Game</p>
-              <p class="text-sm text-gray-400">
-                Status: {{ currentGame.game.status }}
-              </p>
+            <div class="w-full">
+              <p class="font-semibold">Current Game</p>
+              <div class="flex w-full items-center justify-between">
+                <p class="text-sm text-gray-400">
+                  Status: {{ currentGame.game.status }}
+                </p>
+
+                <USwitch
+                  v-model="isRunning"
+                  label="Auto Draw"
+                  @update:model-value="(val) => (val ? start() : stop())"
+                />
+              </div>
             </div>
 
             <!-- Inline: Start & payout input -->
@@ -872,6 +888,7 @@ const calculateCost = (
             :draws="currentGame.draws"
             :contestants="currentGame.contestants"
             :loading="currentGame.loading"
+            :autoDrawRunning="isRunning"
             @draw="onDraw"
             @reloadGame="handleReloadGame"
             @stop="onStop"
