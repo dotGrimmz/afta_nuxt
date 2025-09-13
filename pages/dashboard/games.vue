@@ -164,6 +164,7 @@ const findGameCode = (
   );
   console.log("player that exists", playerExistsInGame);
   console.log("candidates", currentGame.value.candidates);
+  console.log("logged in user", toRaw(loggedInContestant));
 
   // const contestants = stateMap.value?.[gameId]?.contestants;
   // if (!contestants || !Array.isArray(contestants)) return null;
@@ -249,45 +250,6 @@ watch(
   },
   { immediate: true, deep: false }
 );
-
-const handleJoin = async (gameId: BingoGameRow["id"]) => {
-  const bingoGameCode = findGameCode(gameId);
-
-  if (bingoGameCode) {
-    router.push(`/play/bingo/${bingoGameCode}`);
-    return;
-  }
-
-  console.log("creating new candidate");
-  try {
-    const codeData = await issueJoinCode(
-      gameId,
-      loggedInContestant.username ?? "",
-      loggedInContestant.numCards,
-      loggedInContestant.freeSpace,
-      true
-    );
-
-    //@ts-ignore
-    const { code } = codeData;
-
-    const data = (await joinBingoGame(code)) as IssueJoinCodeResponse;
-    if (!data) {
-      bingoMessage.value = `Error joining Bingo with code: ${code}`;
-    }
-    console.log(data.contestant, data.cards);
-    router.push(`/play/bingo/${code}`);
-
-    // reset form
-    loggedInContestant.username = "";
-    loggedInContestant.numCards = 1;
-    loggedInContestant.freeSpace = false;
-    loggedInContestant.autoMark = false;
-    console.log(code, loggedInContestant);
-  } catch (e: any) {
-    console.error(e);
-  }
-};
 
 const subscribeToContestants = (gameId: BingoGameRow["id"]) => {
   if (channels.contestants) return;
@@ -523,8 +485,8 @@ const handleSelfJoinCurrentGame = async () => {
           // sensible defaults; tweak to your UI
           username: profile.value?.username || profile.value?.email || "Player",
           numCards: loggedInContestant.numCards ?? 1,
-          freeSpace: !!loggedInContestant.freeSpace,
-          autoMark: true,
+          freeSpace: loggedInContestant.freeSpace,
+          autoMark: loggedInContestant.autoMark,
         },
       }
     );

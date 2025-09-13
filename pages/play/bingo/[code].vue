@@ -7,6 +7,7 @@ import type {
   BingoCard,
   BingoResultRow,
   CallBingoResponse,
+  ContestantType,
 } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { checkBingo } from "~/utils/bingo/checkBingo";
@@ -21,8 +22,6 @@ const { joinGame, getState, callBingo, narrowGame } = useBingo();
 const contestant = ref<ContestantType | null>(null);
 const cards = ref<BingoCard[]>([]);
 const draws = ref<number[]>([]);
-
-type ContestantType = Database["public"]["Tables"]["bingo_contestants"]["Row"];
 
 const currentGame = ref<BingoGameRow | null>(null);
 const gameLobby = computed(() => currentGame.value?.status === "lobby");
@@ -40,12 +39,14 @@ const isWinner = computed(
 
 const contestants = ref<ContestantType[]>([]);
 
+const autoMarkEnabled = computed(() => cards.value[0].auto_mark_enabled);
+const freeSpaceEneabled = computed(() => cards.value[0].free_space);
+console.log("automark enabled:", toRaw(autoMarkEnabled));
 const loading = ref(true);
 const error = ref<string | null>(null);
 const calling = ref(false);
 const message = ref("");
 const showBingoModal = ref(false);
-const autoMark = ref(false);
 
 const { $toast } = useNuxtApp();
 
@@ -101,6 +102,10 @@ onMounted(async () => {
     // assign server game state to local game state
     const state = await getState(gameId);
     console.log("gamestate from mount ", state);
+    // will just get the value of auto mark and free space from the first card
+
+    console.log("auto mark enabled", cards.value[0].auto_mark_enabled);
+    console.log("free space enabled", cards.value[0].free_space);
 
     // game state has 3 phases. lobby - pregame
 
@@ -232,21 +237,25 @@ onBeforeUnmount(() => {
 const lastSixDesc = computed(() => draws.value.slice(-6).reverse());
 
 // automark hook (ON = mark newest draw)
-watch(draws, (arr) => {
-  console.log("last six", lastSixDesc.value);
-  console.log("draws;", draws.value);
-  if (!autoMark.value || arr.length === 0) return;
-  const latest = arr[arr.length - 1];
-  for (const card of cards.value) {
-    for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 5; c++) {
-        if (card.grid.numbers[r][c] === latest) {
-          card.grid.marked[r][c] = true;
+watch(
+  () => draws.value.at(-1), // react to newest draw only
+  (latest) => {
+    if (latest == null) return;
+    if (!autoMarkEnabled.value) return;
+
+    console.log("[auto-mark] latest:", latest);
+
+    for (const card of cards.value) {
+      for (let r = 0; r < 5; r++) {
+        for (let c = 0; c < 5; c++) {
+          if (card.grid.numbers[r][c] === latest) {
+            card.grid.marked[r][c] = true;
+          }
         }
       }
     }
   }
-});
+);
 
 // ✅ Handle "Call Bingo!"
 const handleCallBingo = async (cardId: string) => {
@@ -323,11 +332,17 @@ const handleCallBingo = async (cardId: string) => {
       </div>
 
       <div class="flex justify-between mb-2">
-        <p class="text-sm text-gray-400">
-          You have {{ cards.length }} card<span v-if="cards.length !== 1"
-            >s</span
-          >.
-        </p>
+        <div class="flex flex-col">
+          <p class="text-sm text-gray-400">
+            {{ cards.length }} Card <span v-if="cards.length !== 1">s</span>
+            <span>
+              - Automark {{ autoMarkEnabled ? "Enabled" : "Disabled" }}</span
+            >
+          </p>
+          <p v-if="freeSpaceEneabled" class="text-sm text-gray-400">
+            ✨Free Space
+          </p>
+        </div>
 
         <p>Prize: {{ winnerPayout }} 💎</p>
       </div>
@@ -376,7 +391,12 @@ const handleCallBingo = async (cardId: string) => {
             'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
           }"
         >
-          <BingoCard :card="card" :draws="draws" />
+          <BingoCard
+            :autoMarkEnabled="autoMarkEnabled"
+            :game-ended="gameEnded"
+            :card="card"
+            :draws="draws"
+          />
 
           <UButton
             class="mt-2 w-full"
