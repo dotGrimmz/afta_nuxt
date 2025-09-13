@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
-
-type BingoGame = Database["public"]["Tables"]["bingo_games"]["Row"] & {
-  payout?: number;
-};
-type BingoCard = Database["public"]["Tables"]["bingo_cards"]["Row"];
-type WinnerCandidate = BingoCard & { payout?: number };
-type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
-
+import type {
+  BingoGameRow,
+  ContestantType,
+  BingoCard,
+  BingoDrawRow,
+  BingoCardRow,
+  BingoCardGrid,
+  GameStateResponse,
+} from "~/types/bingo";
 const props = defineProps<{
-  game: BingoGame;
+  game: BingoGameRow;
   draws: number[];
-  winners: WinnerCandidate[];
-  contestants?: BingoContestant[];
+  contestants?: ContestantType[];
   loading?: boolean;
 }>();
 
@@ -23,6 +23,7 @@ const emit = defineEmits<{
 
 // 👇 Track reactive status
 const currentStatus = ref(props.game.status);
+console.log("game", props.game);
 </script>
 
 <template>
@@ -84,20 +85,6 @@ const currentStatus = ref(props.game.status);
           <span class="text-xs text-gray-400">Code: {{ c.code }}</span>
         </div>
         <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div>
-      </div>
-    </div>
-
-    <!-- Confirmed winners -->
-    <div v-if="winners.length" class="space-y-2">
-      <h3 class="text-lg font-semibold">Confirmed Winners</h3>
-      <div
-        v-for="card in winners"
-        :key="card.id"
-        class="p-3 bg-green-700 rounded text-white space-y-1"
-      >
-        <div class="font-semibold">Contestant: {{ card.contestant_id }}</div>
-        <div class="text-sm text-gray-200">Card: {{ card.id.slice(0, 6) }}</div>
-        <div class="text-lg font-bold">Prize: {{ card.payout ?? 0 }} 💎</div>
       </div>
     </div>
   </div>

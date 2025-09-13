@@ -1,22 +1,32 @@
 import type { Database } from "~/types/supabase";
 
-type BingoGame = Database["public"]["Tables"]["bingo_games"]["Row"];
-type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
-type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
-type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"];
-type ContestantType =
-  Database["public"]["Tables"]["bingo_contestants"]["Row"][];
-import type { _BingoCardType } from "~/types/bingo";
+import type {
+  GameStateResponse,
+  ContestantType,
+  BingoCard,
+  BingoGameRow,
+  BingoDrawRow,
+  JoinGameResponse,
+  CallBingoResponse,
+  UseBingo,
+  BaseGameRow,
+  GameStatus,
+  ClientGameState,
+  IssueJoinCodeResponse,
+} from "~/types/bingo";
 
-export const useBingo = () => {
+export const useBingo = (): UseBingo => {
   const supabase = useSupabaseClient<Database>();
-
+  const narrowGame = (row: BaseGameRow): BingoGameRow => {
+    // compile-time narrowing; no runtime check per your preference
+    return { ...row, status: row.status as GameStatus } as BingoGameRow;
+  };
   // Hydrated list of games
   const {
     data: games,
     pending: loading,
     refresh,
-  } = useAsyncData("bingo-games", async () => {
+  } = useAsyncData<BingoGameRow[]>("bingo-games", async () => {
     const { data, error } = await supabase
       .from("bingo_games")
       .select("*")
@@ -27,20 +37,19 @@ export const useBingo = () => {
       throw error;
     }
 
-    return data ?? [];
+    return (data ?? []).map(narrowGame);
   });
 
   const creating = ref(false);
   const message = ref("");
 
-  const createGame = async (): Promise<BingoGame | undefined> => {
+  const createGame = async (): Promise<BingoGameRow | undefined> => {
     creating.value = true;
     try {
       const { data, error } = await supabase
         .from("bingo_games")
         .insert({
           status: "lobby",
-          min_players: 2,
         })
         .select()
         .single();
@@ -50,9 +59,12 @@ export const useBingo = () => {
       }
 
       if (data) {
+        const created = narrowGame(data);
         message.value = "Bingo game created!";
+
         await refresh();
-        return data as BingoGame;
+
+        return created as BingoGameRow;
       }
     } catch (err: any) {
       console.error(err);
@@ -74,11 +86,13 @@ export const useBingo = () => {
       });
 
       console.log("game from:", game);
+      const gameNarrow = narrowGame(game);
 
       // update local state with returned game
       games.value = (games.value ?? []).map((g) =>
-        g.id === game.id ? game : g
+        g.id === gameNarrow.id ? gameNarrow : g
       );
+
       await refresh();
     } catch (err: any) {
       console.error("Failed to start bingo game:", err);
@@ -88,13 +102,10 @@ export const useBingo = () => {
 
   const stopGame = async (
     gameId: string
-  ): Promise<
-    { game: BingoGame; winnerCandidates: _BingoCardType[] } | undefined
-  > => {
+  ): Promise<{ game: BingoGameRow } | undefined> => {
     try {
       const data = await $fetch<{
-        game: BingoGame;
-        winnerCandidates: _BingoCardType[];
+        game: BingoGameRow;
       }>(`/api/bingo/games/${gameId}/stop`, {
         method: "POST",
       });
@@ -110,11 +121,10 @@ export const useBingo = () => {
 
   const drawNumber = async (
     gameId: string
-  ): Promise<{ draw: BingoDraw; winners: _BingoCardType[] } | undefined> => {
+  ): Promise<{ draw: BingoDrawRow } | undefined> => {
     try {
       const data = await $fetch<{
-        draw: BingoDraw;
-        winners: _BingoCardType[];
+        draw: BingoDrawRow;
       }>(`/api/bingo/games/${gameId}/draw`, {
         method: "POST",
       });
@@ -142,78 +152,60 @@ export const useBingo = () => {
       throw err;
     }
   };
-
-  const joinGame = async (code: string) => {
+  const joinGame = async (
+    code: string
+  ): Promise<IssueJoinCodeResponse | undefined> => {
     try {
-      const { contestant, cards } = await $fetch(
+      const { contestant, cards } = await $fetch<JoinGameResponse>(
         `/api/bingo/contestants/${code}/join`
       );
-
-      return {
-        contestant: contestant as BingoContestant,
-        cards: (cards || []) as _BingoCardType[], // 👈 cast here once
-      };
-    } catch (err: any) {
-      console.error(err);
-      message.value = err.message;
-      return { contestant: null, cards: [] as _BingoCardType[] };
+      return { contestant, cards: cards, code } as IssueJoinCodeResponse;
+    } catch (e: any) {
+      message.value = e.message;
     }
   };
 
   /**
    * Fetch current game state (draws + winner candidates)
    */
-  const getState = async (
-    gameId: string
-  ): Promise<{
-    draws: number[];
-    winners: _BingoCardType[];
-    candidates: _BingoCardType[];
-    contestants: ContestantType[];
-    game?: any;
-  }> => {
-    try {
-      const data = await $fetch<{
-        draws: { number: number }[];
-        winnerCandidates: _BingoCardType[];
-        candidates: _BingoCardType[];
-        contestants: ContestantType[];
-      }>(`/api/bingo/games/${gameId}/state`);
-      console.log("data from api", data);
-      return {
-        game: data,
-        draws: data.draws.map((d) => d.number), // always new array
-        winners: [...data.winnerCandidates],
-        contestants: [...(data.contestants ?? [])],
-        candidates: [...(data.candidates ?? [])],
-      };
-    } catch (err: any) {
-      console.error(err);
-      message.value = err.message;
-      return { draws: [], winners: [], candidates: [], contestants: [] }; // 👈 backward compatible + safe
-    }
+  const getState = async (gameId: string): Promise<ClientGameState> => {
+    const data = await $fetch<GameStateResponse>(
+      `/api/bingo/games/${gameId}/state`
+    );
+    console.log("data from get state, should have winners array", data);
+    return {
+      game: narrowGame(data.game),
+      draws: data.draws.map((d: { number: any }) => d.number),
+      winners: data.winnerCandidates,
+      candidates: data.candidates,
+      contestants: data.contestants,
+    };
   };
 
+  //   const joinGame = async (
+  //   code: string
+  // ): Promise<IssueJoinCodeResponse | undefined> => {
   const issueJoinCode = async (
     gameId: string,
     username: string,
     numCards: number,
     freeSpace: boolean,
-    autoMark: boolean
-  ) => {
+    autoMark: boolean,
+    contestantId?: string | undefined
+  ): Promise<IssueJoinCodeResponse | undefined> => {
     try {
       const { contestant, code, cards } = await $fetch(
         `/api/bingo/games/${gameId}/add-contestant`,
         {
           method: "POST",
-          body: { username, numCards, freeSpace, autoMark },
+          body: { username, numCards, freeSpace, autoMark, contestantId },
         }
       );
 
+      //@ts-ignore
       return { contestant, code, cards };
     } catch (err: any) {
       console.error("Failed to issue join code:", err);
-      throw err;
     }
   };
 
@@ -245,15 +237,30 @@ export const useBingo = () => {
         body: { cardId, contestantId, username, payout },
       });
       console.log({ response });
-      return response;
+      return response as CallBingoResponse;
     } catch (err: any) {
       console.error("Failed to call bingo:", err);
       throw err;
     }
   };
 
+  const loadGame = async (): Promise<BingoGameRow | undefined> => {
+    try {
+      const { data } = await supabase
+        .from("bingo_games")
+        .select("*")
+        .in("status", ["lobby", "active"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<BaseGameRow>();
+      return data ? narrowGame(data) : undefined;
+    } catch (e: any) {
+      console.error({ e });
+      message.value = e.message;
+    }
+  };
+
   return {
-    games,
     loading,
     creating,
     message,
@@ -264,9 +271,12 @@ export const useBingo = () => {
     drawNumber,
     confirmWinner,
     joinGame,
-    getState,
     issueJoinCode,
     getContestants,
     callBingo,
-  };
+    narrowGame,
+    getState,
+
+    loadGame,
+  } satisfies UseBingo;
 };

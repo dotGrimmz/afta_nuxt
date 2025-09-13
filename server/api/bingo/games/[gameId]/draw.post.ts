@@ -2,7 +2,6 @@ import { drawNumber } from "~/utils/bingo/drawNumber";
 import type { Database } from "~/types/supabase";
 
 type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
-type BingoCard = Database["public"]["Tables"]["bingo_cards"]["Row"];
 
 export default defineEventHandler(async (event) => {
   const gameId = event.context.params?.gameId;
@@ -15,11 +14,10 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const { draw, winners } = await drawNumber(event, gameId);
+    const { draw } = await drawNumber(event, gameId);
 
     return {
       draw: draw as BingoDraw,
-      winners: winners as BingoCard[],
     };
   } catch (err: any) {
     throw createError({

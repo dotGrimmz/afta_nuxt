@@ -1,56 +1,64 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
-import BingoCard from "~/components/bingo/BingoCard.vue";
 import { useBingo } from "~/composables/useBingo";
-import { checkBingo } from "~/utils/bingo/checkBingo";
-import type { _BingoCardType } from "~/types/bingo";
+import type {
+  BingoGameRow,
+  BingoDrawRow,
+  BingoCard,
+  BingoResultRow,
+  CallBingoResponse,
+  ContestantType,
+} from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { checkBingo } from "~/utils/bingo/checkBingo";
 
-type BingoContestant = Database["public"]["Tables"]["bingo_contestants"]["Row"];
-type BingoDraw = Database["public"]["Tables"]["bingo_draws"]["Row"];
-type BingoResult = Database["public"]["Tables"]["bingo_results"]["Row"];
-type BingoGame = {
-  id: string;
-  created_at: string;
-  ended_at: string | null;
-  min_players: number;
-  status: string;
-  payout?: number;
-  winner_id?: string | null;
-  winner_username?: string | null;
-};
 const route = useRoute();
 const router = useRouter();
 
 const supabase = useSupabaseClient<Database>();
-const { joinGame, getState, callBingo } = useBingo();
 
-const contestant = ref<BingoContestant | null>(null);
-const cards = ref<_BingoCardType[]>([]);
+const { joinGame, getState, callBingo, narrowGame } = useBingo();
+
+const contestant = ref<ContestantType | null>(null);
+const cards = ref<BingoCard[]>([]);
 const draws = ref<number[]>([]);
-const winnerId = ref<string | null>(null);
-const winnerName = ref<string | null>(null);
-const winnerPayout = ref<number | null>(null);
-const gameEnded = ref(false);
-const gameLobby = ref(false);
-const contestants = ref<BingoContestant[]>([]);
-const isWinner = ref(false);
-const currentGame = ref<BingoGame>();
 
+const currentGame = ref<BingoGameRow | null>(null);
+const gameLobby = computed(() => currentGame.value?.status === "lobby");
+const gameEnded = computed(() => currentGame.value?.status === "ended");
+const winnerPayout = computed(() => currentGame.value?.payout ?? null);
+const winnerId = computed(() => currentGame.value?.winner_id ?? null);
+const winnerName = computed(() => currentGame.value?.winner_username ?? null);
+const isWinner = computed(
+  () =>
+    !!(
+      currentGame.value?.winner_id &&
+      currentGame.value?.winner_id === contestant.value?.id
+    )
+);
+
+const contestants = ref<ContestantType[]>([]);
+
+const autoMarkEnabled = computed(() => cards.value[0].auto_mark_enabled);
+const freeSpaceEneabled = computed(() => cards.value[0].free_space);
+console.log("automark enabled:", toRaw(autoMarkEnabled));
 const loading = ref(true);
 const error = ref<string | null>(null);
 const calling = ref(false);
 const message = ref("");
-const subscriptions: RealtimeChannel[] = [];
+const showBingoModal = ref(false);
+
 const { $toast } = useNuxtApp();
 
-const toastOpts = ref({
-  //@ts-ignore
-  position: "top-left",
-  timeout: 2000,
-  closeOnClick: true,
-  pauseOnHover: true,
-});
+const subscriptions: RealtimeChannel[] = [];
+const refreshGameRow = async (gameId: string) => {
+  const { data, error } = await supabase
+    .from("bingo_games")
+    .select("*")
+    .eq("id", gameId)
+    .single<BingoGameRow>();
+  if (!error && data) currentGame.value = data;
+};
 
 const showBingoToast = (payout: number | string | undefined) => {
   $toast.success(`BINGO 🎉 ${payout} 💎`, {
@@ -62,7 +70,77 @@ const showBingoToast = (payout: number | string | undefined) => {
   });
 };
 
-// ✅ Subscribe to realtime draws
+const enterAnotherCode = (event: MouseEvent) => {
+  event.preventDefault();
+  router.push("/play/bingo");
+};
+
+onMounted(async () => {
+  try {
+    const code = route.params.code as string;
+
+    //**
+    // when a contestant joins we fetch all their cards for the game id
+    // and we also get their game code and we get their contestant data
+    // but mainly we want the game_id so we can fetch that contestants game data
+    // */
+    const result = await joinGame(code);
+    if (!result || !result.contestant || result.cards.length === 0) {
+      error.value = "Invalid or expired join code.";
+      return;
+    }
+
+    contestant.value = result.contestant;
+    cards.value = result.cards;
+
+    const gameId = result.contestant.game_id;
+    if (!gameId) {
+      error.value = "No game id on for contestant!";
+      return;
+    }
+
+    // assign server game state to local game state
+    const state = await getState(gameId);
+    console.log("gamestate from mount ", state);
+    // will just get the value of auto mark and free space from the first card
+
+    console.log("auto mark enabled", cards.value[0].auto_mark_enabled);
+    console.log("free space enabled", cards.value[0].free_space);
+
+    // game state has 3 phases. lobby - pregame
+
+    // assign server state to local state - should set defaults
+    if (!state.game) {
+      console.error("unable to assign server state to local state. Debug!");
+      message.value = "unable to assign server state to local state. Debug!";
+      return;
+    }
+    currentGame.value = narrowGame(state.game); // ✅ narrow status here
+    // winnerPayout.value = state.game.payout ?? null;
+    console.log(
+      "server state assigned to current game in code.vue",
+      toRaw(currentGame.value)
+    );
+    // Lobby- pregame state
+
+    // Will this have the same reactive effect?
+    //const gameLobby = computed(() => currentGame.value?.status === "lobby");
+
+    // hydrate draws without replacing the array ref
+    draws.value.splice(0, draws.value.length, ...state.draws.map((d) => d)); // if state.draws is already number[]
+
+    // subscribe after hydration
+    subscribeToDraws(gameId);
+    subscribeToResults(gameId);
+    subscribeToGame(gameId);
+    subscribeToContestants(gameId);
+  } catch (err: any) {
+    error.value = err?.message || "Could not join this game.";
+  } finally {
+    loading.value = false;
+  }
+});
+
 const subscribeToDraws = (gameId: string) => {
   const channel = supabase
     .channel(`bingo_draws_${gameId}`)
@@ -75,7 +153,7 @@ const subscribeToDraws = (gameId: string) => {
         filter: `game_id=eq.${gameId}`,
       },
       (payload) => {
-        const newDraw = payload.new as BingoDraw;
+        const newDraw = payload.new as BingoDrawRow;
         if (!draws.value.includes(newDraw.number)) {
           draws.value.push(newDraw.number);
         }
@@ -85,7 +163,6 @@ const subscribeToDraws = (gameId: string) => {
   subscriptions.push(channel);
 };
 
-// ✅ Subscribe to confirmed winners
 const subscribeToResults = (gameId: string) => {
   const channel = supabase
     .channel(`bingo_results_${gameId}`)
@@ -98,22 +175,19 @@ const subscribeToResults = (gameId: string) => {
         filter: `game_id=eq.${gameId}`,
       },
       async (payload) => {
-        // in this logic we need to determine if it was an admin stop
-        // then display the corresponding toast message
-
-        const confirmed = payload.new as BingoGame;
-        console.log("Bingo Winner Info Payload", payload);
-        winnerId.value = confirmed?.winner_id || null;
-        winnerPayout.value = confirmed.payout ?? 0;
-        gameEnded.value = true; // game is over once result is inserted ✅
-        isWinner.value = confirmed.winner_id === contestant.value?.id;
+        const confirmed = payload.new as BingoResultRow;
+        console.log(
+          "results updated and this is the updated payload",
+          confirmed
+        );
+        await refreshGameRow(confirmed.game_id);
+        console.log(currentGame.value);
       }
     )
     .subscribe();
   subscriptions.push(channel);
 };
 
-// ✅ Subscribe to game status
 const subscribeToGame = (gameId: string) => {
   const channel = supabase
     .channel(`bingo_games_${gameId}`)
@@ -126,22 +200,9 @@ const subscribeToGame = (gameId: string) => {
         filter: `id=eq.${gameId}`,
       },
       (payload) => {
-        const updated = payload.new as BingoGame;
-        // when this updates we can set the payout,
-        // we can set the payout here ?
-        console.log("updated:", updated);
+        const updated = payload.new as BingoGameRow;
+        // Single source of truth:
         currentGame.value = updated;
-
-        if (updated.status === "ended") {
-          gameEnded.value = true;
-          //@ts-ignore
-          winnerId.value = updated.winner_id;
-
-          isWinner.value = updated.winner_id === contestant.value?.id;
-          // if (!winnerId.value) {
-          //   winnerName.value = updated?.winner_username; // admin stopped, no winner row
-          // }
-        }
       }
     )
     .subscribe();
@@ -160,14 +221,41 @@ const subscribeToContestants = (gameId: string) => {
         filter: `game_id=eq.${gameId}`,
       },
       (payload) => {
-        const newContestant =
-          payload.new as Database["public"]["Tables"]["bingo_contestants"]["Row"];
-        contestants.value = [...contestants.value, newContestant]; // 👈 update local list
+        const newContestant = payload.new as ContestantType;
+        contestants.value = [...contestants.value, newContestant];
       }
     )
     .subscribe();
   subscriptions.push(channel);
 };
+
+onBeforeUnmount(() => {
+  subscriptions.forEach((sub) => supabase.removeChannel(sub));
+  subscriptions.length = 0;
+});
+
+const lastSixDesc = computed(() => draws.value.slice(-6).reverse());
+
+// automark hook (ON = mark newest draw)
+watch(
+  () => draws.value.at(-1), // react to newest draw only
+  (latest) => {
+    if (latest == null) return;
+    if (!autoMarkEnabled.value) return;
+
+    console.log("[auto-mark] latest:", latest);
+
+    for (const card of cards.value) {
+      for (let r = 0; r < 5; r++) {
+        for (let c = 0; c < 5; c++) {
+          if (card.grid.numbers[r][c] === latest) {
+            card.grid.marked[r][c] = true;
+          }
+        }
+      }
+    }
+  }
+);
 
 // ✅ Handle "Call Bingo!"
 const handleCallBingo = async (cardId: string) => {
@@ -190,23 +278,23 @@ const handleCallBingo = async (cardId: string) => {
     }
 
     console.log("current game prior calling bingo:", currentGame.value);
-    const data = await callBingo(
+
+    if (!currentGame.value?.payout)
+      return (message.value = "Game Not Started!");
+    const data: CallBingoResponse = await callBingo(
       contestant.value.game_id,
       cardId,
       contestant.value.id,
       contestant.value.username,
-      currentGame.value?.payout
+      currentGame.value.payout
     );
 
     if (data) {
-      gameEnded.value = true;
-      isWinner.value = true;
-      //@ts-ignore
-      message.value = `Bingo! ${data.result.username} Won ${data.result.payout} 💎`;
-      //@ts-ignore
-      winnerName.value = data.result.username;
+      await refreshGameRow(data.game.id);
 
-      showBingoToast(currentGame.value?.payout);
+      message.value = `Bingo! ${data.result.username} Won ${data.result.payout} 💎`;
+
+      showBingoToast(currentGame.value.payout);
     }
   } catch (err: any) {
     console.error(err);
@@ -216,87 +304,19 @@ const handleCallBingo = async (cardId: string) => {
   }
 };
 
-onMounted(async () => {
-  try {
-    const code = route.params.code as string;
-    const result = await joinGame(code);
-
-    if (result) {
-      contestant.value = result.contestant;
-      cards.value = result.cards;
-
-      const gameId = result.cards[0]?.game_id;
-      if (gameId) {
-        const state = await getState(gameId);
-        winnerPayout.value = state.game.game.payout;
-        const gameState = { ...state.game.game };
-        // console.log("state from mount, need to set current", gameState);
-
-        currentGame.value = gameState;
-        console.log("current game raw", toRaw(currentGame));
-        if (state.game.game.status === "lobby") {
-          gameLobby.value = true;
+const restoreMarks = (): void => {
+  for (const card of cards.value) {
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const num = card.grid.numbers[r][c];
+        // if this number was drawn already, mark it
+        if (draws.value.includes(num)) {
+          card.grid.marked[r][c] = true;
         }
-
-        if (state.game.game.status === "ended") {
-          const game = state.game.game;
-          winnerName.value = game.winner_username;
-          winnerId.value = game.winner_id;
-          gameEnded.value = true;
-          isWinner.value = game.winner_id === contestant.value?.id;
-          winnerPayout.value = game.payout;
-        }
-
-        if (state) {
-          draws.value = state.draws;
-        }
-        subscribeToDraws(gameId);
-        subscribeToResults(gameId);
-        subscribeToGame(gameId);
-        subscribeToContestants(gameId);
       }
-    } else {
-      error.value = "Invalid or expired join code.";
     }
-  } catch (err: any) {
-    error.value = err?.message || "Could not join this game.";
-  } finally {
-    loading.value = false;
   }
-});
-
-const enterAnotherCode = (event: MouseEvent) => {
-  event.preventDefault();
-  router.push("/play/bingo");
 };
-
-console.log("game state in template", currentGame.value);
-
-watch([gameEnded, winnerId, currentGame], ([ended, winner, game]) => {
-  console.log("game state watcher", game);
-  if (ended) {
-    const contestantHasWon = contestant.value?.id === winner;
-
-    // if (!winner) {
-    //   //@ts-ignore
-    //   $toast.warning("Game Ended - Admin Stop", toastOpts.value);
-    // } else if (!contestantHasWon) {
-    //   //@ts-ignore
-    //   $toast.error("Game Ended - Try again!", toastOpts.value);
-    // } else {
-    //   //@ts-ignore
-    //   $toast.error(`💎 BINGO 💎`, toastOpts.value);
-    // }
-  }
-});
-
-onBeforeUnmount(() => {
-  subscriptions.forEach((sub) => {
-    supabase.removeChannel(sub);
-  });
-  subscriptions.length = 0; // clear refs
-});
-console.log("current Game", currentGame.value);
 </script>
 
 <template>
@@ -326,19 +346,57 @@ console.log("current Game", currentGame.value);
       </div>
 
       <div class="flex justify-between mb-2">
-        <p class="text-sm text-gray-400">
-          You have {{ cards.length }} card<span v-if="cards.length !== 1"
-            >s</span
-          >.
-        </p>
-        <p>
-          Lobby Status:
+        <div class="flex flex-col">
+          <p class="text-sm text-gray-400">
+            {{ cards.length }} Card <span v-if="cards.length !== 1">s</span>
+            <span>
+              - Automark {{ autoMarkEnabled ? "Enabled" : "Disabled" }}</span
+            >
+          </p>
+          <p v-if="freeSpaceEneabled" class="text-sm text-gray-400">
+            ✨Free Space
+          </p>
+        </div>
 
-          {{ currentGame?.status }}
-        </p>
-        <p>Prize: {{ currentGame?.payout }} 💎</p>
+        <p>Prize: {{ winnerPayout }} 💎</p>
       </div>
+      <!-- draws - I want to animate in and out each of these items --->
+      <div class="p-4">
+        <h2 class="text-xl font-bold mb-2">
+          {{
+            gameLobby ? "Waiting to Start" : gameEnded ? "Game Ended" : "Draws"
+          }}
+        </h2>
 
+        <div v-if="!gameEnded" class="flex flex-wrap justify-between">
+          <div
+            v-for="(num, idx) in lastSixDesc"
+            :key="`${num}-${idx}`"
+            class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full bg-blue-600 text-white font-bold text-base md:text-lg shadow-md select-none"
+            :class="{
+              'animate-pulse ring-2 ring-white/70 scale-105': idx === 0,
+            }"
+          >
+            {{ num }}
+          </div>
+          <!-- "All" button that toggles modal -->
+          <button
+            type="button"
+            class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full border border-blue-600 text-blue-600 font-semibold text-sm md:text-base hover:bg-blue-600 hover:text-white transition"
+            @click="showBingoModal = true"
+          >
+            All
+          </button>
+        </div>
+
+        <BingoModal
+          v-model="showBingoModal"
+          title="All Numbers Drawn"
+          :numbers="draws"
+          :gameEnded="gameEnded"
+          :restoreMarks="restoreMarks"
+        />
+      </div>
       <!-- Cards grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
         <div
@@ -349,7 +407,12 @@ console.log("current Game", currentGame.value);
             'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
           }"
         >
-          <BingoCard :card="card" :draws="draws" />
+          <BingoCard
+            :autoMarkEnabled="autoMarkEnabled"
+            :game-ended="gameEnded"
+            :card="card"
+            :draws="draws"
+          />
 
           <UButton
             class="mt-2 w-full"
@@ -377,7 +440,7 @@ console.log("current Game", currentGame.value);
         <template v-if="isWinner">
           🎉 Congratulations {{ winnerName }} — You Won!
           <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
-            Prize: {{ currentGame?.payout }} 💎
+            Prize: {{ winnerPayout }} 💎
           </div>
         </template>
         <template v-else>
@@ -393,7 +456,7 @@ console.log("current Game", currentGame.value);
             </UButton>
           </div>
           <div v-if="isWinner" class="mt-2 text-sm">
-            Prize: {{ currentGame?.payout }} 💎
+            Prize: {{ winnerPayout }} 💎
           </div>
         </template>
       </div>

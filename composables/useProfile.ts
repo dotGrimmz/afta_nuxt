@@ -10,11 +10,6 @@ export const useProfile = () => {
 
   const isAdmin = computed(() => profile.value?.role === "admin");
   const isUser = computed(() => profile.value?.role === "user");
-  console.log(
-    toRaw(profile.value),
-    toRaw(loading.value),
-    toRaw(isAdmin.value),
-    toRaw(isUser.value)
-  );
+
   return { profile, loading, isAdmin, isUser };
 };
