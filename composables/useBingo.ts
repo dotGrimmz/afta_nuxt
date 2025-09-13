@@ -13,6 +13,7 @@ import type {
   GameStatus,
   ClientGameState,
   IssueJoinCodeResponse,
+  BingoContestantRow,
 } from "~/types/bingo";
 
 export const useBingo = (): UseBingo => {
@@ -61,9 +62,7 @@ export const useBingo = (): UseBingo => {
       if (data) {
         const created = narrowGame(data);
         message.value = "Bingo game created!";
-
         await refresh();
-
         return created as BingoGameRow;
       }
     } catch (err: any) {
@@ -77,7 +76,7 @@ export const useBingo = (): UseBingo => {
   const startGame = async (
     gameId: string,
     payout: number | undefined | string
-  ): Promise<void> => {
+  ): Promise<BingoGameRow> => {
     console.log("payout in start game call function in composable", payout);
     try {
       const { game } = await $fetch(`/api/bingo/games/${gameId}/start`, {
@@ -87,13 +86,9 @@ export const useBingo = (): UseBingo => {
 
       console.log("game from:", game);
       const gameNarrow = narrowGame(game);
-
-      // update local state with returned game
-      games.value = (games.value ?? []).map((g) =>
-        g.id === gameNarrow.id ? gameNarrow : g
-      );
-
       await refresh();
+
+      return gameNarrow;
     } catch (err: any) {
       console.error("Failed to start bingo game:", err);
       message.value = err.message;
@@ -209,19 +204,19 @@ export const useBingo = (): UseBingo => {
     }
   };
 
-  const getContestants = async (gameId: string) => {
+  const getContestants = async (
+    gameId: string
+  ): Promise<BingoContestantRow[] | null> => {
     const { data, error } = await supabase
       .from("bingo_contestants")
-      .select("id, username, num_cards, code")
+      .select("*")
       .eq("game_id", gameId);
-
-    await refresh();
 
     if (error) {
       console.error("Failed to fetch contestants:", error.message);
     }
 
-    return data;
+    return data ?? [];
   };
 
   const callBingo = async (

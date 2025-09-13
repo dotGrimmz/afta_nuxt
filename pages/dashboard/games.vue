@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
-import { calculateCost } from "~/utils/bingo/pricing";
 import BaseModal from "~/components/BaseModal.vue";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useAutoDraw } from "~/composables/useAutoDraw";
+
 import type {
   BaseGameRow,
   BingoCard,
@@ -51,7 +52,6 @@ const {
   narrowGame,
 } = useBingo() as UseBingo;
 
-// const stateMap = ref<Record<string, DashboardGameState>>({});
 const currentGame = ref<DashboardGameState>({
   game: null,
   draws: [],
@@ -60,9 +60,18 @@ const currentGame = ref<DashboardGameState>({
   loading: false,
 });
 
-const currentCandidates = computed(() => currentGame.value.candidates);
+const game_id = computed(() => currentGame.value.game.id);
+const {
+  start,
+  stop: stopAutoDraw,
+  isRunning,
+} = useAutoDraw({
+  gameId: game_id,
+  drawFn: onDraw,
+  getDraws: () => currentGame.value.draws,
+});
 
-console.log("currentCandidates:", currentCandidates);
+const currentCandidates = computed(() => currentGame.value.candidates);
 
 const isLobby = computed(() => currentGame.value.game?.status === "lobby");
 const isActive = computed(() => currentGame.value.game?.status === "active");
@@ -70,7 +79,6 @@ const isEnded = computed(() => currentGame.value.game?.status === "ended");
 
 const handleCreateBingoGame = async () => {
   if (!currentGame.value) {
-    console.log("current game", currentGame.value);
     bingoMessage.value = "Bingo Game Exists";
     return;
   }
@@ -130,7 +138,7 @@ const open = async (
 };
 const handleIssueCode = async (gameId: string) => {
   try {
-    const { code } = (await issueJoinCode(
+    const { code, contestant } = (await issueJoinCode(
       gameId,
       newContestant.username,
       newContestant.numCards,
@@ -146,6 +154,8 @@ const handleIssueCode = async (gameId: string) => {
     newContestant.numCards = 1;
     newContestant.freeSpace = false;
     newContestant.autoMark = false;
+
+    // add newly added constant data to the current contestant list
   } catch (err) {
     console.error("Error issuing join code:", err);
   }
@@ -225,7 +235,6 @@ const hydrateMyPrefsFromGame = async () => {
   if (card) {
     loggedInContestant.autoMark = !!card.auto_mark_enabled;
     loggedInContestant.freeSpace = !!card.free_space;
-    // (optional) keep their join code around
     loggedInContestant.code = mineContestant.code;
   }
 };
@@ -286,9 +295,9 @@ const subscribeToResults = (gameId: BingoGameRow["id"]) => {
       },
       async (payload) => {
         const confirmed = payload?.new as BingoResultRow;
-
-        // if the new result has a winner name then we open the modal
-        if (confirmed.username && confirmed.contestant_id) {
+        stopAutoDraw();
+        // if thstopAutoDrawe new result has a winner name then we open the modal
+        if (confirmed.username && confirmed.contestant_id && isAdmin) {
           open(
             confirmed.username ?? confirmed.contestant_id,
             confirmed.contestant_id ?? confirmed.contestant_id,
@@ -296,6 +305,8 @@ const subscribeToResults = (gameId: BingoGameRow["id"]) => {
           );
         }
         // refresh gamestate here ?
+        // refreshBingo();
+        stopAutoDraw();
       }
     )
     .subscribe();
@@ -511,19 +522,23 @@ const handleSelfJoinCurrentGame = async () => {
   }
 };
 
-const onDraw = async (gameId: string) => {
+async function onDraw(gameId: string) {
   // try to apply the minimal change first
   const res = await drawNumber(gameId); // => { draw } | undefined
   if (res?.draw && !currentGame.value.draws.includes(res.draw.number)) {
     currentGame.value.draws.push(res.draw.number);
   } else {
     // fallback: full refresh
-    await refreshCurrentGame(gameId);
+    // await refreshCurrentGame(gameId);
   }
-};
+}
 
 const onStop = async (gameId: string) => {
+  stopAutoDraw();
   const res = await stopGame(gameId); // => { game } | undefined
+  const data = await $fetch<any>("/api/bingo/results/recent");
+
+  recentResults.value = data;
   if (res?.game) {
     currentGame.value.game = res.game; // status should be 'ended' now
   } else {
@@ -531,10 +546,103 @@ const onStop = async (gameId: string) => {
   }
 };
 
+const handleReloadGame = async () => {
+  currentGame.value.game = null;
+  currentGame.value.draws = [];
+  currentGame.value.candidates = [];
+  currentGame.value.contestants = [];
+  currentGame.value.loading = false;
+  const game = await loadBingoGame();
+  if (!game) return;
+
+  currentGame.value.game = game;
+  await hydrateGameState(game.id);
+  const data = await $fetch<any>("/api/bingo/results/recent");
+
+  recentResults.value = data;
+};
+
+const handleRemoveContestant = async (contestantId: string): Promise<void> => {
+  console.log("calling handle Remove contestant");
+  if (!isLobby) {
+    console.log("Game already started, cannot remove contestant.");
+    return;
+  }
+
+  if (!currentGame.value.game?.id) {
+    console.log("No current game id?");
+    return;
+  }
+  console.log("deleting cards");
+  try {
+    // Delete cards first
+    await supabase
+      .from("bingo_cards")
+      .delete()
+      .eq("contestant_id", contestantId)
+      .eq("game_id", currentGame.value.game?.id);
+    console.log("cards deleted. now deleting from contestant list");
+    // Delete contestant
+    await supabase
+      .from("bingo_contestants")
+      .delete()
+      .eq("id", contestantId)
+      .eq("game_id", currentGame.value.game?.id);
+    console.log("contestant deleted. now refetching contestant list");
+
+    // Refetch contestants list
+    const updatedContestants = await getContestants(currentGame.value.game?.id);
+    console.log("updated contestants", updatedContestants);
+    if (!updatedContestants) return;
+    currentGame.value.contestants = updatedContestants;
+
+    console.log("Contestant removed:", contestantId);
+  } catch (err) {
+    console.error("Error removing contestant:", err);
+  }
+};
+
 watch(
-  () => currentGame.value.game?.status,
-  (s) => console.log("[status]", s, "draws:", toRaw(currentGame.value.draws))
+  () => currentGame.value?.game?.status,
+  (newStatus, oldStatus) => {
+    if (newStatus === "ended" && oldStatus !== "ended") {
+      console.log("[autoDraw] Game ended → stopping auto draw");
+      stopAutoDraw();
+    }
+  }
 );
+
+const baseCardCost = ref(400); // default in diamonds / points / $
+const freeSpaceCost = ref(100);
+const autoMarkCost = ref(0);
+
+// computed → dynamic cost per card
+
+const calculateCost = (
+  numCards: number,
+  freeSpace: boolean,
+  autoMark: boolean
+) => {
+  // should take a number of cards from new contestant or logged in user
+
+  let solution = numCards * baseCardCost.value;
+  if (freeSpace) {
+    solution = solution + freeSpaceCost.value;
+  }
+  if (autoMark) {
+    solution = solution + autoMarkCost.value;
+  }
+
+  return solution;
+};
+
+const handleStartBingoGame = async (
+  gameId: string,
+  payout: number | undefined | string
+) => {
+  const activeGame = await startBingoGame(gameId, payout);
+  currentGame.value.status === activeGame.status;
+};
 </script>
 
 <template>
@@ -635,7 +743,43 @@ watch(
         >
           Create Game
         </UButton>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-gray-300 text-sm mb-1"
+              >Base Card Cost</label
+            >
+            <UInput
+              type="number"
+              v-model="baseCardCost"
+              min="0"
+              class="w-full"
+            />
+          </div>
 
+          <div>
+            <label class="block text-gray-300 text-sm mb-1"
+              >Free Space Cost</label
+            >
+            <UInput
+              type="number"
+              v-model="freeSpaceCost"
+              min="0"
+              class="w-full"
+            />
+          </div>
+
+          <div>
+            <label class="block text-gray-300 text-sm mb-1"
+              >Auto Mark Cost</label
+            >
+            <UInput
+              type="number"
+              v-model="autoMarkCost"
+              min="0"
+              class="w-full"
+            />
+          </div>
+        </div>
         <p v-if="bingoMessage" class="text-sm mt-2">{{ bingoMessage }}</p>
       </div>
 
@@ -655,11 +799,26 @@ watch(
         <div :key="currentGame.game.id" class="p-2 my-2 bg-gray-800 rounded">
           <!-- Game header -->
           <div class="flex justify-between items-center">
-            <div>
-              <p class="font-semibold">Bingo Game</p>
-              <p class="text-sm text-gray-400">
-                Status: {{ currentGame.game.status }}
-              </p>
+            <div class="w-full">
+              <div class="flex w-full items-center justify-between">
+                <p class="font-semibold">Current Game</p>
+
+                <p v-if="isActive" class="text-sm text-gray-400">
+                  💎 {{ currentGame.game.payout }}
+                </p>
+              </div>
+              <div class="flex w-full items-center justify-between">
+                <p class="text-sm text-gray-400">
+                  Status: {{ currentGame.game.status }}
+                </p>
+
+                <USwitch
+                  v-if="isActive"
+                  v-model="isRunning"
+                  label="Auto Draw"
+                  @update:model-value="(val) => (val ? start() : stop())"
+                />
+              </div>
             </div>
 
             <!-- Inline: Start & payout input -->
@@ -675,7 +834,7 @@ watch(
               <UButton
                 v-if="isLobby"
                 @click="
-                  startBingoGame(
+                  handleStartBingoGame(
                     currentGame.game.id,
                     currentGame.game.payout || 0
                   )
@@ -721,11 +880,12 @@ watch(
             </div>
 
             <p class="text-xs text-gray-400 mt-2">
-              Expected Cost:
+              Expected Cost - Working:
               {{
                 calculateCost(
                   newContestant.numCards || 0,
-                  newContestant.freeSpace || false
+                  newContestant.freeSpace || false,
+                  newContestant.autoMark
                 )
               }}
               diamonds
@@ -755,8 +915,11 @@ watch(
             :draws="currentGame.draws"
             :contestants="currentGame.contestants"
             :loading="currentGame.loading"
+            :autoDrawRunning="isRunning"
             @draw="onDraw"
+            @reloadGame="handleReloadGame"
             @stop="onStop"
+            @removeContestant="handleRemoveContestant"
           />
 
           <!-- Player control -->
@@ -809,22 +972,10 @@ watch(
                 />
                 <span>Auto Mark</span>
               </label>
-              <p class="text-xs text-gray-400">
-                Expected Cost:
-                {{
-                  calculateCost(
-                    loggedInContestant.numCards || 0,
-                    loggedInContestant.freeSpace || false
-                  )
-                }}
-                diamonds
-              </p>
             </div>
             <div v-if="findGameCode(currentGame.game.id)" class="flex">
               Bingo Code: {{ findGameCode(profile?.id) }}
             </div>
-
-            <!-- <div class="flex">Bingo Code: {{ findGameCode(game.id) }}</div> -->
           </div>
         </div>
       </div>

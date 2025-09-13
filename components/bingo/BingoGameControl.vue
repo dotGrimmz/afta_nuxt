@@ -1,24 +1,18 @@
 <script setup lang="ts">
-import type { Database } from "~/types/supabase";
-import type {
-  BingoGameRow,
-  ContestantType,
-  BingoCard,
-  BingoDrawRow,
-  BingoCardRow,
-  BingoCardGrid,
-  GameStateResponse,
-} from "~/types/bingo";
+import type { BingoGameRow, ContestantType } from "~/types/bingo";
 const props = defineProps<{
   game: BingoGameRow;
   draws: number[];
   contestants?: ContestantType[];
   loading?: boolean;
+  autoDrawRunning: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "draw", gameId: string): void;
   (e: "stop", gameId: string): void;
+  (e: "reloadGame"): void;
+  (e: "removeContestant", contestantId: ContestantType["id"]): void;
 }>();
 
 // 👇 Track reactive status
@@ -37,7 +31,7 @@ console.log("game", props.game);
     <!-- Admin buttons -->
     <div v-else class="flex gap-2 items-center">
       <UButton
-        :disabled="currentStatus !== 'active'"
+        :disabled="currentStatus !== 'active' || autoDrawRunning"
         @click="emit('draw', game.id)"
         size="sm"
         color="primary"
@@ -54,7 +48,13 @@ console.log("game", props.game);
       </UButton>
 
       <template v-if="currentStatus === 'ended'">
-        <span class="text-gray-400 text-sm">Game Ended</span>
+        <UButton
+          color="warning"
+          size="sm"
+          @click="emit('reloadGame')"
+          class="text-gray-400 text-sm"
+          >Game Ended - Refresh
+        </UButton>
       </template>
     </div>
 
@@ -84,7 +84,18 @@ console.log("game", props.game);
           <span class="font-semibold">{{ c.username }}</span>
           <span class="text-xs text-gray-400">Code: {{ c.code }}</span>
         </div>
-        <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div>
+        <div class="flex justify-between items-center">
+          <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div>
+
+          <UButton
+            @click="emit('removeContestant', c.id)"
+            v-if="currentStatus === 'lobby'"
+            size="sm"
+            color="error"
+          >
+            Remove Contestant
+          </UButton>
+        </div>
       </div>
     </div>
   </div>
