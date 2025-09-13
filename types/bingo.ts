@@ -33,6 +33,7 @@ export type BingoCard = Omit<BingoCardRow, "grid"> & { grid: BingoCardGrid };
 
 /** Singular contestant row (use BingoContestantRow[] for lists). */
 export type ContestantType = BingoContestantRow;
+// export type CandidateType = BingoCandidateRow;
 
 /** ── Realtime payload aliases (INSERT/UPDATE rows) ────────────────────────── */
 export type RTDrawInsert = BingoDrawRow;

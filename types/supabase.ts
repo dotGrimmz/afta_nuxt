@@ -66,6 +66,7 @@ export type Database = {
           id: string
           joined_at: string
           num_cards: number
+          user_id: string | null
           username: string
         }
         Insert: {
@@ -74,6 +75,7 @@ export type Database = {
           id?: string
           joined_at?: string
           num_cards?: number
+          user_id?: string | null
           username: string
         }
         Update: {
@@ -82,6 +84,7 @@ export type Database = {
           id?: string
           joined_at?: string
           num_cards?: number
+          user_id?: string | null
           username?: string
         }
         Relationships: [
@@ -132,47 +135,70 @@ export type Database = {
           ended_at: string | null
           id: string
           min_players: number
+          payout: number
           status: string
+          winner_id: string | null
+          winner_username: string | null
         }
         Insert: {
           created_at?: string
           ended_at?: string | null
           id?: string
           min_players?: number
+          payout?: number
           status?: string
+          winner_id?: string | null
+          winner_username?: string | null
         }
         Update: {
           created_at?: string
           ended_at?: string | null
           id?: string
           min_players?: number
+          payout?: number
           status?: string
+          winner_id?: string | null
+          winner_username?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bingo_games_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "bingo_contestants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bingo_results: {
         Row: {
-          card_id: string
-          contestant_id: string
+          card_id: string | null
+          contestant_id: string | null
+          created_at: string
           game_id: string
           id: string
           payout: number
+          username: string
           won_at: string
         }
         Insert: {
-          card_id: string
-          contestant_id: string
+          card_id?: string | null
+          contestant_id?: string | null
+          created_at?: string
           game_id: string
           id?: string
           payout?: number
+          username?: string
           won_at?: string
         }
         Update: {
-          card_id?: string
-          contestant_id?: string
+          card_id?: string | null
+          contestant_id?: string | null
+          created_at?: string
           game_id?: string
           id?: string
           payout?: number
+          username?: string
           won_at?: string
         }
         Relationships: [
@@ -193,7 +219,7 @@ export type Database = {
           {
             foreignKeyName: "bingo_results_game_id_fkey"
             columns: ["game_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "bingo_games"
             referencedColumns: ["id"]
           },

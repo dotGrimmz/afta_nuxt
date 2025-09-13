@@ -28,6 +28,7 @@ export default defineEventHandler(async (event) => {
     numCards: number;
     freeSpace?: boolean;
     autoMark?: boolean;
+    contestantId?: string;
   }>(event);
 
   if (!body?.username || !body?.numCards) {

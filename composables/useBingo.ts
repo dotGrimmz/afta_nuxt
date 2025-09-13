@@ -190,14 +190,15 @@ export const useBingo = (): UseBingo => {
     username: string,
     numCards: number,
     freeSpace: boolean,
-    autoMark: boolean
+    autoMark: boolean,
+    contestantId?: string | undefined
   ): Promise<IssueJoinCodeResponse | undefined> => {
     try {
       const { contestant, code, cards } = await $fetch(
         `/api/bingo/games/${gameId}/add-contestant`,
         {
           method: "POST",
-          body: { username, numCards, freeSpace, autoMark },
+          body: { username, numCards, freeSpace, autoMark, contestantId },
         }
       );
 
