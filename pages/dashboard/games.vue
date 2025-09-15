@@ -66,7 +66,7 @@ const {
   stop: stopAutoDraw,
   isRunning,
 } = useAutoDraw({
-  gameId: game_id.value,
+  gameId: game_id,
   drawFn: onDraw,
   getDraws: () => currentGame.value.draws,
 });
