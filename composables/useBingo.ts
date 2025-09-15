@@ -76,7 +76,7 @@ export const useBingo = (): UseBingo => {
   const startGame = async (
     gameId: string,
     payout: number | undefined | string
-  ): Promise<BingoGameRow> => {
+  ): Promise<BingoGameRow | undefined> => {
     console.log("payout in start game call function in composable", payout);
     try {
       const { game } = await $fetch(`/api/bingo/games/${gameId}/start`, {

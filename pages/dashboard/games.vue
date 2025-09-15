@@ -22,16 +22,16 @@ const { profile, isAdmin } = useProfile();
 const router = useRouter();
 
 // Trivia composable (unchanged)
-const {
-  games: triviaGames,
-  visibleGames: visibleTriviaGames,
-  loading: triviaLoading,
-  creating: triviaCreating,
-  message: triviaMessage,
-  createGame: createTriviaGame,
-  startGame: startTriviaGame,
-  joinGame: joinTriviaGame,
-} = useTrivia();
+// const {
+//   games: triviaGames,
+//   visibleGames: visibleTriviaGames,
+//   loading: triviaLoading,
+//   creating: triviaCreating,
+//   message: triviaMessage,
+//   createGame: createTriviaGame,
+//   startGame: startTriviaGame,
+//   joinGame: joinTriviaGame,
+// } = useTrivia();
 
 const newTriviaTitle = ref("");
 
@@ -60,13 +60,13 @@ const currentGame = ref<DashboardGameState>({
   loading: false,
 });
 
-const game_id = computed(() => currentGame.value.game.id);
+const game_id = computed(() => currentGame.value?.game.id);
 const {
   start,
   stop: stopAutoDraw,
   isRunning,
 } = useAutoDraw({
-  gameId: game_id,
+  gameId: game_id.value,
   drawFn: onDraw,
   getDraws: () => currentGame.value.draws,
 });
@@ -91,20 +91,22 @@ const handleCreateBingoGame = async () => {
     }
   } catch (e: any) {
     bingoMessage.value = e.message;
+  } finally {
+    bingoLoading.value = false;
   }
 }; // For issuing join codes
 const newContestant = reactive({
   username: "",
   numCards: 1,
-  freeSpace: false,
-  autoMark: false,
+  freeSpace: true,
+  autoMark: true,
 });
 
 const loggedInContestant = reactive({
   username: profile.value?.username,
   numCards: 1,
-  freeSpace: false,
-  autoMark: false,
+  freeSpace: true,
+  autoMark: true,
   code: "",
 });
 type RTESubs = {
@@ -115,7 +117,6 @@ const lastIssuedCode = ref<string | null>(null);
 const lastContestantUsername = ref<string | null>(null);
 const gameEnded = ref(false);
 const overlay = useOverlay();
-const subscriptions: RTESubs[] = [];
 const channels: Record<string, RealtimeChannel> = {};
 
 const modal = overlay.create(BaseModal);
@@ -148,12 +149,18 @@ const handleIssueCode = async (gameId: string) => {
 
     lastIssuedCode.value = code;
     lastContestantUsername.value = newContestant.username;
+    console.log("contestant added", contestant);
+    console.log(currentGame.value);
+
+    currentGame.value.contestants = (await getContestants(
+      gameId
+    )) as ContestantType[];
 
     // reset form
     newContestant.username = "";
     newContestant.numCards = 1;
-    newContestant.freeSpace = false;
-    newContestant.autoMark = false;
+    newContestant.freeSpace = true;
+    newContestant.autoMark = true;
 
     // add newly added constant data to the current contestant list
   } catch (err) {
@@ -400,13 +407,6 @@ onBeforeUnmount(() => {
   unsubscribeAll();
 });
 
-onBeforeUnmount(() => {
-  subscriptions.forEach((sub) => {
-    supabase.removeChannel(sub.channel);
-  });
-  subscriptions.length = 0; // clear refs
-});
-
 async function hydrateGameState(gameId: string) {
   currentGame.value.loading = true;
   try {
@@ -640,18 +640,26 @@ const handleStartBingoGame = async (
   gameId: string,
   payout: number | undefined | string
 ) => {
-  const activeGame = await startBingoGame(gameId, payout);
-  currentGame.value.status === activeGame.status;
+  await startBingoGame(gameId, payout);
+  const updatedState = await getState(gameId);
+  if (!updatedState.game) {
+    bingoMessage.value = "Error Loading game after Starting Bingo";
+    return;
+  }
+  currentGame.value = {
+    ...updatedState,
+    game: updatedState.game ?? undefined,
+    loading: false,
+  };
 };
 </script>
 
 <template>
   <main class="p-2 space-y-8">
     <!-- Trivia Games Section -->
-    <section>
+    <!-- <section>
       <h1 class="text-2xl font-bold mb-2">Trivia Games</h1>
 
-      <!-- Admin-only: Create Trivia Game -->
       <div v-if="isAdmin" class="bg-gray-800 p-4 rounded space-y-3">
         <label class="block">
           <span class="text-sm text-gray-300">Game Title</span>
@@ -676,10 +684,8 @@ const handleStartBingoGame = async (
         <p v-if="triviaMessage" class="text-sm mt-2">{{ triviaMessage }}</p>
       </div>
 
-      <!-- Loading -->
       <div v-if="triviaLoading">Loading games...</div>
 
-      <!-- No games -->
       <div v-else-if="visibleTriviaGames.length === 0" class="text-gray-400">
         <span v-if="isAdmin">
           No trivia games created yet. Create one to get started!
@@ -687,7 +693,6 @@ const handleStartBingoGame = async (
         <span v-else> No live trivia games available right now. </span>
       </div>
 
-      <!-- Games list -->
       <div v-else>
         <div
           v-for="game in visibleTriviaGames"
@@ -727,7 +732,7 @@ const handleStartBingoGame = async (
           </div>
         </div>
       </div>
-    </section>
+    </section> -->
 
     <!-- Bingo Games Section -->
     <section>
@@ -816,7 +821,9 @@ const handleStartBingoGame = async (
                   v-if="isActive"
                   v-model="isRunning"
                   label="Auto Draw"
-                  @update:model-value="(val) => (val ? start() : stop())"
+                  @update:model-value="
+                    (val) => (val ? start() : stopAutoDraw())
+                  "
                 />
               </div>
             </div>
@@ -832,7 +839,7 @@ const handleStartBingoGame = async (
               />
 
               <UButton
-                v-if="isLobby"
+                v-if="isLobby && currentGame.contestants.length > 1"
                 @click="
                   handleStartBingoGame(
                     currentGame.game.id,
