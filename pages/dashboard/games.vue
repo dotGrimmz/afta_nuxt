@@ -925,7 +925,7 @@ const handleStartBingoGame = async (
             :autoDrawRunning="isRunning"
             @draw="onDraw"
             @reloadGame="handleReloadGame"
-            @stop="onStop"
+            @stop="onStop(game_id)"
             @removeContestant="handleRemoveContestant"
           />
 
