@@ -11,6 +11,7 @@ import type {
 } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { checkBingo } from "~/utils/bingo/checkBingo";
+import { pl } from "@nuxt/ui/runtime/locale/index.js";
 
 const route = useRoute();
 const router = useRouter();
@@ -213,6 +214,25 @@ const subscribeToGame = (gameId: string) => {
   subscriptions.push(channel);
 };
 
+const joinAttendance = async () => {
+  const channel = supabase.channel(`lobby:${currentGame.value?.id}`, {
+    //@ts-ignore
+    config: { presence: true },
+  });
+
+  console.log("channel", channel);
+  console.log("contestant ", currentGame.value);
+  // we grab the username and the ready status. dont really need the ID? or do we.
+  // channel.subscribe(async (status) => {
+  //   if (status === "SUBSCRIBED") {
+  //     channel.track({
+  //       username: profile.value.username,
+  //       ready: false,
+  //     });
+  //   }
+  // });
+};
+
 const subscribeToContestants = (gameId: string) => {
   const channel = supabase
     .channel(`bingo_contestants_${gameId}`)
@@ -241,6 +261,7 @@ onBeforeUnmount(() => {
 const lastSixDesc = computed(() => draws.value.slice(-6).reverse());
 // const autoMarkOn = ref<boolean>(autoMarkEnabled.value ?? false);
 const autoMarkOn = ref(false);
+const ready = ref(false);
 
 watch(
   autoMarkEnabled,
@@ -249,6 +270,51 @@ watch(
   },
   { immediate: true }
 );
+
+let channel: RealtimeChannel | null = null;
+
+watch(
+  () => [contestant.value?.id, contestant.value?.username],
+  ([id, username]) => {
+    if (!id || !username) return; // not loaded yet
+    if (channel) return; // already set up
+    // if (!currentGame.value?.game?.id) return;
+
+    console.log("Setting up lobby channel for", username);
+
+    //@ts-ignore
+    channel = supabase.channel(`lobby:${currentGame.value?.game?.id}`, {
+      config: { presence: {} }, // safe, prevents TS error
+    });
+
+    channel
+      .on("presence", { event: "sync" }, () => {
+        console.log("Presence sync:", channel!.presenceState());
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          channel!.track({
+            user_id: id,
+            username,
+            ready: ready.value,
+          });
+        }
+      });
+  },
+  { immediate: true }
+);
+
+// update presence whenever ready changes
+watch(ready, (isReady) => {
+  if (channel && contestant.value?.id) {
+    channel.track({
+      user_id: contestant.value.id,
+      username: contestant.value.username,
+      ready: isReady,
+    });
+  }
+});
+
 // automark hook (ON = mark newest draw)
 watch([() => draws.value.at(-1), autoMarkOn], ([latest, enabled]) => {
   if (!enabled || latest == null) return;
@@ -326,6 +392,14 @@ const restoreMarks = (): void => {
     }
   }
 };
+
+onUnmounted(() => {
+  if (channel) {
+    console.log("Cleaning up channel…");
+    channel.unsubscribe();
+    channel = null;
+  }
+});
 </script>
 
 <template>
@@ -358,15 +432,14 @@ const restoreMarks = (): void => {
         <div class="flex flex-col">
           <p class="text-sm text-gray-400">
             {{ cards.length }} Card <span v-if="cards.length !== 1">s</span>
+            <span v-if="freeSpaceEneabled">✨Free Space</span>
           </p>
-          <p v-if="freeSpaceEneabled" class="text-sm text-gray-400">
-            ✨Free Space
-          </p>
+          <USwitch v-model="autoMarkOn" label="Toggle Automark" />
         </div>
 
-        <div class="flex flex-col">
+        <div class="flex flex-col items-end">
           <p>Prize: {{ winnerPayout }} 💎</p>
-          <USwitch v-model="autoMarkOn" label="Toggle Automark" />
+          <USwitch v-if="gameLobby" v-model="ready" label="Ready to Play" />
         </div>
       </div>
       <!-- draws - I want to animate in and out each of these items --->
