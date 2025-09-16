@@ -918,7 +918,8 @@ const handleStartBingoGame = async (
           things arent being updated  -->
           <BingoGameControl
             v-if="isAdmin && currentGame.game"
-            :game="currentGame.game"
+            :gameStatus="currentGame.game.status"
+            :gameId="game_id"
             :draws="currentGame.draws"
             :contestants="currentGame.contestants"
             :loading="currentGame.loading"
@@ -939,7 +940,8 @@ const handleStartBingoGame = async (
                 {{
                   calculateCost(
                     loggedInContestant.numCards || 0,
-                    loggedInContestant.freeSpace || false
+                    loggedInContestant.freeSpace,
+                    loggedInContestant.autoMark
                   )
                 }}
                 diamonds

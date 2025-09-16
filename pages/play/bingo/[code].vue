@@ -39,9 +39,13 @@ const isWinner = computed(
 
 const contestants = ref<ContestantType[]>([]);
 
-const autoMarkEnabled = computed(() => cards.value[0].auto_mark_enabled);
+const autoMarkEnabled = computed(() => !!cards.value[0]?.auto_mark_enabled);
 const freeSpaceEneabled = computed(() => cards.value[0].free_space);
 console.log("automark enabled:", toRaw(autoMarkEnabled));
+
+// the point of this is if the user has auto mark enabled from the cards object
+// if autoMarkenabled is true, we give the option to toggle is via a swtich
+// locally
 const loading = ref(true);
 const error = ref<string | null>(null);
 const calling = ref(false);
@@ -235,27 +239,32 @@ onBeforeUnmount(() => {
 });
 
 const lastSixDesc = computed(() => draws.value.slice(-6).reverse());
+// const autoMarkOn = ref<boolean>(autoMarkEnabled.value ?? false);
+const autoMarkOn = ref(false);
 
-// automark hook (ON = mark newest draw)
 watch(
-  () => draws.value.at(-1), // react to newest draw only
-  (latest) => {
-    if (latest == null) return;
-    if (!autoMarkEnabled.value) return;
+  autoMarkEnabled,
+  (enabled) => {
+    autoMarkOn.value = enabled;
+  },
+  { immediate: true }
+);
+// automark hook (ON = mark newest draw)
+watch([() => draws.value.at(-1), autoMarkOn], ([latest, enabled]) => {
+  if (!enabled || latest == null) return;
 
-    console.log("[auto-mark] latest:", latest);
+  console.log("[auto-mark] latest:", latest);
 
-    for (const card of cards.value) {
-      for (let r = 0; r < 5; r++) {
-        for (let c = 0; c < 5; c++) {
-          if (card.grid.numbers[r][c] === latest) {
-            card.grid.marked[r][c] = true;
-          }
+  for (const card of cards.value) {
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        if (card.grid.numbers[r][c] === latest) {
+          card.grid.marked[r][c] = true;
         }
       }
     }
   }
-);
+});
 
 // ✅ Handle "Call Bingo!"
 const handleCallBingo = async (cardId: string) => {
@@ -349,16 +358,16 @@ const restoreMarks = (): void => {
         <div class="flex flex-col">
           <p class="text-sm text-gray-400">
             {{ cards.length }} Card <span v-if="cards.length !== 1">s</span>
-            <span>
-              - Automark {{ autoMarkEnabled ? "Enabled" : "Disabled" }}</span
-            >
           </p>
           <p v-if="freeSpaceEneabled" class="text-sm text-gray-400">
             ✨Free Space
           </p>
         </div>
 
-        <p>Prize: {{ winnerPayout }} 💎</p>
+        <div class="flex flex-col">
+          <p>Prize: {{ winnerPayout }} 💎</p>
+          <USwitch v-model="autoMarkOn" label="Toggle Automark" />
+        </div>
       </div>
       <!-- draws - I want to animate in and out each of these items --->
       <div class="p-4">

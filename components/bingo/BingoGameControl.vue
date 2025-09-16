@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { BingoGameRow, ContestantType } from "~/types/bingo";
 const props = defineProps<{
-  game: BingoGameRow;
+  gameStatus: BingoGameRow["status"];
+  gameId: BingoGameRow["id"];
   draws: number[];
   contestants?: ContestantType[];
   loading?: boolean;
@@ -16,8 +17,7 @@ const emit = defineEmits<{
 }>();
 
 // 👇 Track reactive status
-const currentStatus = ref(props.game.status);
-console.log("game", props.game);
+console.log("current status ", props.gameStatus);
 </script>
 
 <template>
@@ -31,23 +31,23 @@ console.log("game", props.game);
     <!-- Admin buttons -->
     <div v-else class="flex gap-2 items-center">
       <UButton
-        :disabled="currentStatus !== 'active' || autoDrawRunning"
-        @click="emit('draw', game.id)"
+        :disabled="props.gameStatus !== 'active' || props.autoDrawRunning"
+        @click="emit('draw', props.gameId)"
         size="sm"
         color="primary"
       >
         Draw Number
       </UButton>
       <UButton
-        :disabled="currentStatus !== 'active'"
-        @click="emit('stop', game.id)"
+        :disabled="props.gameStatus !== 'active'"
+        @click="emit('stop', gameStatus)"
         size="sm"
         color="error"
       >
         Stop Game
       </UButton>
 
-      <template v-if="currentStatus === 'ended'">
+      <template v-if="gameStatus === 'ended'">
         <UButton
           color="warning"
           size="sm"
@@ -89,7 +89,7 @@ console.log("game", props.game);
 
           <UButton
             @click="emit('removeContestant', c.id)"
-            v-if="currentStatus === 'lobby'"
+            v-if="gameStatus === 'lobby'"
             size="sm"
             color="error"
           >
