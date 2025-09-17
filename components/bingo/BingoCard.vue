@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import BingoTile from "~/components/bingo/BingoTile.vue";
 import type { Database } from "~/types/supabase";
 
 type BingoCard = Database["public"]["Tables"]["bingo_cards"]["Row"];
+type Grid = { numbers: number[][]; marked: boolean[][] };
 
 const props = defineProps<{
   card: BingoCard;
@@ -10,41 +12,77 @@ const props = defineProps<{
   autoMarkEnabled: boolean;
 }>();
 
-type Grid = { numbers: number[][]; marked: boolean[][] };
-const grid = computed(() => props.card.grid as Grid);
+const toNum = (v: unknown): number =>
+  typeof v === "number" ? v : Number.parseInt(String(v), 10);
+const grid = computed(
+  () => props.card.grid as { numbers: number[][]; marked: boolean[][] }
+);
 
-// ✅ Mark a tile manually (only if game not ended, number was drawn, and automark is OFF)
+const numbers = computed<number[][]>(() =>
+  (grid.value.numbers ?? []).map((row) => row.map(toNum))
+);
+
+const pulseMap = computed<boolean[][]>(() =>
+  numbers.value.map((row, r) =>
+    row.map((n, c) => {
+      if (props.gameEnded) return false;
+      if (props.autoMarkEnabled) return false; // pulses only when manual
+      if (isMarked(r, c)) return false;
+      if (n === 0) return false; // free never pulses
+      return drawsSet.value.has(n); // drawn but unpressed
+    })
+  )
+);
+
+const drawsSet = computed(() => new Set(props.draws.map(Number)));
+
+const isFree = (r: number, c: number) => grid.value.numbers[r][c] === 0;
+const isMarked = (r: number, c: number) => grid.value.marked[r][c] === true;
+
+// Mark once (no toggle)
 const markTile = (row: number, col: number): void => {
   if (props.gameEnded || props.autoMarkEnabled) return;
+  if (isMarked(row, col) || isFree(row, col)) return;
 
-  const num = grid.value.numbers[row][col];
-  if (props.draws.includes(num)) {
+  const n = numbers.value[row][col]; // 🔑 normalized
+  if (drawsSet.value.has(n)) {
     grid.value.marked[row][col] = true;
   }
 };
 
-// ✅ A cell is marked only if `grid.marked` says so
-const isMarked = (row: number, col: number): boolean => {
-  return grid.value.marked[row][col];
-};
+watch(
+  () => props.draws.at(-1),
+  (d) => {
+    if (d == null) return;
+    const last = toNum(d);
+    let hit = false;
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        if (!isMarked(r, c) && numbers.value[r][c] === last) {
+          hit = true;
+          break;
+        }
+      }
+    }
+    console.log("[pulse check] latest:", last, "hasMatch:", hit);
+  }
+);
 </script>
 
 <template>
-  <div class="bg-gray-800 rounded-lg overflow-hidden border border-gray-600">
-    <div class="grid grid-cols-5 divide-x divide-y divide-gray-700">
-      <template v-for="(row, r) in grid.numbers" :key="r">
-        <div
-          v-for="(num, c) in row"
-          :key="c"
-          class="flex items-center justify-center aspect-square text-lg font-bold transition-colors duration-300 cursor-pointer sm:text-xl md:text-2xl border border-gray-700"
-          :class="isMarked(r, c) ? 'bg-green-600 text-white' : 'text-gray-200'"
-          @click="markTile(r, c)"
-        >
-          <span v-if="num === 0">★</span>
-          <span v-else>{{ num }}</span>
-          <small class="absolute bottom-1 right-1 text-[10px] text-gray-400">
-            {{ isMarked(r, c) ? "✓" : "" }}
-          </small>
+  <div
+    class="rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur p-2 sm:p-3 md:p-4"
+  >
+    <div class="grid grid-cols-5 gap-1 sm:gap-1.5 md:gap-2">
+      <template v-for="(row, r) in numbers" :key="`r-${r}`">
+        <div v-for="(num, c) in row" :key="`c-${r}-${c}`" class="p-1">
+          <BingoTile
+            :value="num"
+            :marked="isMarked(r, c)"
+            :should-pulse="pulseMap[r][c]"
+            :is-free="isFree(r, c)"
+            @mark="markTile(r, c)"
+          />
         </div>
       </template>
     </div>

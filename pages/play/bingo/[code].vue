@@ -10,6 +10,7 @@ import type {
   ContestantType,
 } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { checkBingoClient } from "~/utils/bingo/checkBingoClient";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { WatchStopHandle } from "vue";
 
@@ -146,7 +147,6 @@ onMounted(async () => {
     loading.value = false;
   }
 });
-
 const subscribeToDraws = (gameId: string) => {
   const channel = supabase
     .channel(`bingo_draws_${gameId}`)
@@ -353,7 +353,7 @@ const handleCallBingo = async (cardId: string) => {
     const card = cards.value.find((c) => c.id === cardId);
     if (!card || !contestant.value) return;
 
-    const hasBingo = checkBingo({ grid: card.grid, draws: draws.value });
+    const hasBingo = checkBingoClient(card.grid as any, draws.value);
     if (!hasBingo) {
       $toast.error("No bingo yet — keep playing!", {
         //@ts-ignore
@@ -452,14 +452,18 @@ onUnmounted(() => {
 
         <div class="flex flex-col items-end">
           <p>Prize: {{ winnerPayout }} 💎</p>
-          <USwitch v-if="gameLobby" v-model="ready" label="Ready not Play" />
+          <USwitch v-model="ready" label="Ready Play" />
         </div>
       </div>
       <!-- draws - I want to animate in and out each of these items --->
       <div class="p-4">
         <h2 class="text-xl font-bold mb-2">
           {{
-            gameLobby ? "Waiting to Start" : gameEnded ? "Game Ended" : "Draws"
+            currentGame?.status === "lobby"
+              ? "Waiting to Start"
+              : gameEnded
+              ? "Game Ended"
+              : "Draws"
           }}
         </h2>
 
@@ -502,13 +506,18 @@ onUnmounted(() => {
             'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
           }"
         >
-          <BingoCard
+          <!-- <BingoCard
             :autoMarkEnabled="autoMarkEnabled"
             :game-ended="gameEnded"
             :card="card"
             :draws="draws"
+          /> -->
+          <BingoCard
+            :card="card"
+            :draws="draws"
+            :game-ended="gameEnded"
+            :auto-mark-enabled="autoMarkOn"
           />
-
           <UButton
             class="mt-2 w-full"
             color="primary"
