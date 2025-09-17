@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const router = useRouter();
-const code = ref("");
+const code = ref("BINGO-");
 const error = ref("");
 
 const join = () => {
