@@ -11,7 +11,7 @@ import type {
 } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { checkBingo } from "~/utils/bingo/checkBingo";
-import { pl } from "@nuxt/ui/runtime/locale/index.js";
+import type { WatchStopHandle } from "vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -30,6 +30,7 @@ const gameEnded = computed(() => currentGame.value?.status === "ended");
 const winnerPayout = computed(() => currentGame.value?.payout ?? null);
 const winnerId = computed(() => currentGame.value?.winner_id ?? null);
 const winnerName = computed(() => currentGame.value?.winner_username ?? null);
+const gameId = computed(() => currentGame.value?.id ?? null);
 const isWinner = computed(
   () =>
     !!(
@@ -214,25 +215,6 @@ const subscribeToGame = (gameId: string) => {
   subscriptions.push(channel);
 };
 
-const joinAttendance = async () => {
-  const channel = supabase.channel(`lobby:${currentGame.value?.id}`, {
-    //@ts-ignore
-    config: { presence: true },
-  });
-
-  console.log("channel", channel);
-  console.log("contestant ", currentGame.value);
-  // we grab the username and the ready status. dont really need the ID? or do we.
-  // channel.subscribe(async (status) => {
-  //   if (status === "SUBSCRIBED") {
-  //     channel.track({
-  //       username: profile.value.username,
-  //       ready: false,
-  //     });
-  //   }
-  // });
-};
-
 const subscribeToContestants = (gameId: string) => {
   const channel = supabase
     .channel(`bingo_contestants_${gameId}`)
@@ -272,40 +254,71 @@ watch(
 );
 
 let channel: RealtimeChannel | null = null;
+let stopReadyWatch: WatchStopHandle | null = null;
 
-watch(
-  () => [contestant.value?.id, contestant.value?.username],
-  ([id, username]) => {
-    if (!id || !username) return; // not loaded yet
-    if (channel) return; // already set up
-    // if (!currentGame.value?.game?.id) return;
+const setUpLobbyChannel = (
+  id: string,
+  username: string,
+  gameId: string
+): void => {
+  console.log("set up lobby channel running");
+  if (channel) return; // already connected
 
-    console.log("Setting up lobby channel for", username);
+  channel = supabase.channel(`lobby:${gameId}`, { config: { presence: {} } });
 
-    //@ts-ignore
-    channel = supabase.channel(`lobby:${currentGame.value?.game?.id}`, {
-      config: { presence: {} }, // safe, prevents TS error
+  channel
+    .on("presence", { event: "sync" }, () => {
+      console.log("[SYNC] presence:", channel!.presenceState());
+    })
+    .on("presence", { event: "join" }, ({ newPresences }) => {
+      newPresences.forEach((p: any) =>
+        console.log(`[JOIN/UPDATE] ${p.username} ready=${p.ready}`)
+      );
+    })
+    .on("presence", { event: "leave" }, ({ leftPresences }) => {
+      leftPresences.forEach((p: any) =>
+        console.log(`[LEAVE] ${p.username} left`)
+      );
+    })
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        channel!.track({ user_id: id, username, ready: ready.value });
+      }
     });
 
-    channel
-      .on("presence", { event: "sync" }, () => {
-        console.log("Presence sync:", channel!.presenceState());
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          channel!.track({
-            user_id: id,
-            username,
-            ready: ready.value,
-          });
-        }
-      });
+  // re-track when the local toggle changes
+  stopReadyWatch = watch(ready, (isReady) => {
+    channel?.track({ user_id: id, username, ready: isReady });
+    console.log(`[TOGGLE] ${username} ready=${isReady}`);
+  });
+};
+
+// Wait for hydration (id, username, gameId) then setup once
+watch(
+  () =>
+    [
+      contestant.value?.id,
+      contestant.value?.username,
+      currentGame.value?.id,
+    ] as const,
+  ([id, username, gameId]) => {
+    if (id && username && gameId) {
+      console.log("set up lobbyy channel running");
+      setUpLobbyChannel(id, username, gameId);
+    }
   },
   { immediate: true }
 );
 
+onUnmounted(() => {
+  stopReadyWatch?.();
+  channel?.unsubscribe();
+  channel = null;
+});
+
 // update presence whenever ready changes
 watch(ready, (isReady) => {
+  console.log("is ready", ready);
   if (channel && contestant.value?.id) {
     channel.track({
       user_id: contestant.value.id,

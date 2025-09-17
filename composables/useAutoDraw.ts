@@ -2,7 +2,7 @@
 import { ref, onUnmounted } from "vue";
 
 type AutoDrawOptions = {
-  gameId: string;
+  gameId: string | any;
   drawFn: (gameId: string) => Promise<void> | void; // don't expect return anymore
   getDraws: () => number[];
 };

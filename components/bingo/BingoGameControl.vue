@@ -7,6 +7,7 @@ const props = defineProps<{
   contestants?: ContestantType[];
   loading?: boolean;
   autoDrawRunning: boolean;
+  readyIds?: ContestantType["id"][];
 }>();
 
 const emit = defineEmits<{
@@ -18,6 +19,12 @@ const emit = defineEmits<{
 
 // 👇 Track reactive status
 console.log("current status ", props.gameStatus);
+const readySet = computed<Set<string>>(() => new Set(props.readyIds ?? []));
+
+const isReady = (c: ContestantType): boolean => {
+  const key = (c as any).user_id ?? c.id;
+  return key ? readySet.value.has(String(key)) : false;
+};
 </script>
 
 <template>
@@ -79,6 +86,9 @@ console.log("current status ", props.gameStatus);
         v-for="c in contestants"
         :key="c.id"
         class="p-2 bg-gray-800 rounded space-y-1"
+        :class="
+          isReady(c) ? 'border-4 border-green-500' : 'border border-gray-700'
+        "
       >
         <div class="flex justify-between items-center">
           <span class="font-semibold">{{ c.username }}</span>
