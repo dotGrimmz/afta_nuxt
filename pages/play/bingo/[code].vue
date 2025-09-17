@@ -452,7 +452,7 @@ onUnmounted(() => {
 
         <div class="flex flex-col items-end">
           <p>Prize: {{ winnerPayout }} 💎</p>
-          <USwitch v-if="gameLobby" v-model="ready" label="Ready to Play" />
+          <USwitch v-if="gameLobby" v-model="ready" label="Ready not Play" />
         </div>
       </div>
       <!-- draws - I want to animate in and out each of these items --->
