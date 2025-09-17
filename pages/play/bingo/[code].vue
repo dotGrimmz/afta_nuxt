@@ -10,7 +10,9 @@ import type {
   ContestantType,
 } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { checkBingoClient } from "~/utils/bingo/checkBingoClient";
 import { checkBingo } from "~/utils/bingo/checkBingo";
+import type { WatchStopHandle } from "vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -29,6 +31,7 @@ const gameEnded = computed(() => currentGame.value?.status === "ended");
 const winnerPayout = computed(() => currentGame.value?.payout ?? null);
 const winnerId = computed(() => currentGame.value?.winner_id ?? null);
 const winnerName = computed(() => currentGame.value?.winner_username ?? null);
+const gameId = computed(() => currentGame.value?.id ?? null);
 const isWinner = computed(
   () =>
     !!(
@@ -39,9 +42,13 @@ const isWinner = computed(
 
 const contestants = ref<ContestantType[]>([]);
 
-const autoMarkEnabled = computed(() => cards.value[0].auto_mark_enabled);
+const autoMarkEnabled = computed(() => !!cards.value[0]?.auto_mark_enabled);
 const freeSpaceEneabled = computed(() => cards.value[0].free_space);
 console.log("automark enabled:", toRaw(autoMarkEnabled));
+
+// the point of this is if the user has auto mark enabled from the cards object
+// if autoMarkenabled is true, we give the option to toggle is via a swtich
+// locally
 const loading = ref(true);
 const error = ref<string | null>(null);
 const calling = ref(false);
@@ -140,7 +147,6 @@ onMounted(async () => {
     loading.value = false;
   }
 });
-
 const subscribeToDraws = (gameId: string) => {
   const channel = supabase
     .channel(`bingo_draws_${gameId}`)
@@ -235,27 +241,109 @@ onBeforeUnmount(() => {
 });
 
 const lastSixDesc = computed(() => draws.value.slice(-6).reverse());
+// const autoMarkOn = ref<boolean>(autoMarkEnabled.value ?? false);
+const autoMarkOn = ref(false);
+const ready = ref(false);
+
+watch(
+  autoMarkEnabled,
+  (enabled) => {
+    autoMarkOn.value = enabled;
+  },
+  { immediate: true }
+);
+
+let channel: RealtimeChannel | null = null;
+let stopReadyWatch: WatchStopHandle | null = null;
+
+const setUpLobbyChannel = (
+  id: string,
+  username: string,
+  gameId: string
+): void => {
+  console.log("set up lobby channel running");
+  if (channel) return; // already connected
+
+  channel = supabase.channel(`lobby:${gameId}`, { config: { presence: {} } });
+
+  channel
+    .on("presence", { event: "sync" }, () => {
+      console.log("[SYNC] presence:", channel!.presenceState());
+    })
+    .on("presence", { event: "join" }, ({ newPresences }) => {
+      newPresences.forEach((p: any) =>
+        console.log(`[JOIN/UPDATE] ${p.username} ready=${p.ready}`)
+      );
+    })
+    .on("presence", { event: "leave" }, ({ leftPresences }) => {
+      leftPresences.forEach((p: any) =>
+        console.log(`[LEAVE] ${p.username} left`)
+      );
+    })
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        channel!.track({ user_id: id, username, ready: ready.value });
+      }
+    });
+
+  // re-track when the local toggle changes
+  stopReadyWatch = watch(ready, (isReady) => {
+    channel?.track({ user_id: id, username, ready: isReady });
+    console.log(`[TOGGLE] ${username} ready=${isReady}`);
+  });
+};
+
+// Wait for hydration (id, username, gameId) then setup once
+watch(
+  () =>
+    [
+      contestant.value?.id,
+      contestant.value?.username,
+      currentGame.value?.id,
+    ] as const,
+  ([id, username, gameId]) => {
+    if (id && username && gameId) {
+      console.log("set up lobbyy channel running");
+      setUpLobbyChannel(id, username, gameId);
+    }
+  },
+  { immediate: true }
+);
+
+onUnmounted(() => {
+  stopReadyWatch?.();
+  channel?.unsubscribe();
+  channel = null;
+});
+
+// update presence whenever ready changes
+watch(ready, (isReady) => {
+  console.log("is ready", ready);
+  if (channel && contestant.value?.id) {
+    channel.track({
+      user_id: contestant.value.id,
+      username: contestant.value.username,
+      ready: isReady,
+    });
+  }
+});
 
 // automark hook (ON = mark newest draw)
-watch(
-  () => draws.value.at(-1), // react to newest draw only
-  (latest) => {
-    if (latest == null) return;
-    if (!autoMarkEnabled.value) return;
+watch([() => draws.value.at(-1), autoMarkOn], ([latest, enabled]) => {
+  if (!enabled || latest == null) return;
 
-    console.log("[auto-mark] latest:", latest);
+  console.log("[auto-mark] latest:", latest);
 
-    for (const card of cards.value) {
-      for (let r = 0; r < 5; r++) {
-        for (let c = 0; c < 5; c++) {
-          if (card.grid.numbers[r][c] === latest) {
-            card.grid.marked[r][c] = true;
-          }
+  for (const card of cards.value) {
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        if (card.grid.numbers[r][c] === latest) {
+          card.grid.marked[r][c] = true;
         }
       }
     }
   }
-);
+});
 
 // ✅ Handle "Call Bingo!"
 const handleCallBingo = async (cardId: string) => {
@@ -265,7 +353,7 @@ const handleCallBingo = async (cardId: string) => {
     const card = cards.value.find((c) => c.id === cardId);
     if (!card || !contestant.value) return;
 
-    const hasBingo = checkBingo({ grid: card.grid, draws: draws.value });
+    const hasBingo = checkBingoClient(card.grid as any, draws.value);
     if (!hasBingo) {
       $toast.error("No bingo yet — keep playing!", {
         //@ts-ignore
@@ -317,6 +405,14 @@ const restoreMarks = (): void => {
     }
   }
 };
+
+onUnmounted(() => {
+  if (channel) {
+    console.log("Cleaning up channel…");
+    channel.unsubscribe();
+    channel = null;
+  }
+});
 </script>
 
 <template>
@@ -349,22 +445,25 @@ const restoreMarks = (): void => {
         <div class="flex flex-col">
           <p class="text-sm text-gray-400">
             {{ cards.length }} Card <span v-if="cards.length !== 1">s</span>
-            <span>
-              - Automark {{ autoMarkEnabled ? "Enabled" : "Disabled" }}</span
-            >
+            <span v-if="freeSpaceEneabled">✨Free Space</span>
           </p>
-          <p v-if="freeSpaceEneabled" class="text-sm text-gray-400">
-            ✨Free Space
-          </p>
+          <USwitch v-model="autoMarkOn" label="Toggle Automark" />
         </div>
 
-        <p>Prize: {{ winnerPayout }} 💎</p>
+        <div class="flex flex-col items-end">
+          <p>Prize: {{ winnerPayout }} 💎</p>
+          <USwitch v-model="ready" label="Ready Play" />
+        </div>
       </div>
       <!-- draws - I want to animate in and out each of these items --->
       <div class="p-4">
         <h2 class="text-xl font-bold mb-2">
           {{
-            gameLobby ? "Waiting to Start" : gameEnded ? "Game Ended" : "Draws"
+            currentGame?.status === "lobby"
+              ? "Waiting to Start"
+              : gameEnded
+              ? "Game Ended"
+              : "Draws"
           }}
         </h2>
 
@@ -407,13 +506,18 @@ const restoreMarks = (): void => {
             'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
           }"
         >
-          <BingoCard
+          <!-- <BingoCard
             :autoMarkEnabled="autoMarkEnabled"
             :game-ended="gameEnded"
             :card="card"
             :draws="draws"
+          /> -->
+          <BingoCard
+            :card="card"
+            :draws="draws"
+            :game-ended="gameEnded"
+            :auto-mark-enabled="autoMarkOn"
           />
-
           <UButton
             class="mt-2 w-full"
             color="primary"

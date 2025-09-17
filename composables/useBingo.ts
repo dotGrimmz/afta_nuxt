@@ -261,6 +261,7 @@ export const useBingo = (): UseBingo => {
     message,
     refresh,
     createGame,
+    //@ts-ignore
     startGame,
     stopGame,
     drawNumber,

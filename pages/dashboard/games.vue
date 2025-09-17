@@ -60,6 +60,7 @@ const currentGame = ref<DashboardGameState>({
   loading: false,
 });
 
+//@ts-ignore
 const game_id = computed(() => currentGame.value?.game.id);
 const {
   start,
@@ -70,8 +71,6 @@ const {
   drawFn: onDraw,
   getDraws: () => currentGame.value.draws,
 });
-
-const currentCandidates = computed(() => currentGame.value.candidates);
 
 const isLobby = computed(() => currentGame.value.game?.status === "lobby");
 const isActive = computed(() => currentGame.value.game?.status === "active");
@@ -149,8 +148,6 @@ const handleIssueCode = async (gameId: string) => {
 
     lastIssuedCode.value = code;
     lastContestantUsername.value = newContestant.username;
-    console.log("contestant added", contestant);
-    console.log(currentGame.value);
 
     currentGame.value.contestants = (await getContestants(
       gameId
@@ -179,9 +176,6 @@ const findGameCode = (
   const playerExistsInGame = currentGame.value.contestants.find(
     (contestant) => contestant.user_id === profile.value?.id
   );
-  console.log("player that exists", playerExistsInGame);
-  console.log("candidates", currentGame.value.candidates);
-  console.log("logged in user", toRaw(loggedInContestant));
 
   // const contestants = stateMap.value?.[gameId]?.contestants;
   // if (!contestants || !Array.isArray(contestants)) return null;
@@ -190,15 +184,7 @@ const findGameCode = (
     return playerExistsInGame.code;
   }
 };
-watch(
-  () => currentGame.value.candidates,
-  (arr) =>
-    console.log(
-      "[candidates]",
-      arr.map((c) => c.id)
-    ),
-  { deep: true, immediate: true }
-);
+
 const mySelectedContestantCard = ref<ContestantType | null>(null);
 
 const hydrateMyPrefsFromGame = async () => {
@@ -401,6 +387,7 @@ onMounted(async () => {
   subscribeToDraws(game.id);
   subscribeToContestants(game.id);
   subscribeToResults(game.id);
+  setupLobbyChannel(game.id);
 });
 
 onBeforeUnmount(() => {
@@ -652,6 +639,76 @@ const handleStartBingoGame = async (
     loading: false,
   };
 };
+
+const players = ref<any[]>([]);
+const allReady = ref(false);
+let channel: RealtimeChannel | null = null;
+
+const setupLobbyChannel = (gameId: string) => {
+  if (channel) {
+    channel.unsubscribe();
+    channel = null;
+  }
+
+  channel = supabase.channel(`lobby:${gameId}`, { config: { presence: {} } });
+
+  // keep last presence snapshot
+  let prev = new Map<string, { username: string; ready: boolean }>();
+
+  channel
+    .on("presence", { event: "sync" }, () => {
+      const state = channel!.presenceState();
+      // flatten and build current map
+      const curr = new Map<string, { username: string; ready: boolean }>();
+      //@ts-ignore
+      const flat = Object.values(state).flat() as Array<{
+        user_id: string;
+        username: string;
+        ready: boolean;
+      }>;
+      flat.forEach((p) =>
+        curr.set(p.user_id, { username: p.username, ready: !!p.ready })
+      );
+
+      // joins + toggles
+      for (const [id, now] of curr) {
+        const before = prev.get(id);
+        if (!before) {
+          console.log(`[JOIN] ${now.username} ready=${now.ready}`);
+        } else if (before.ready !== now.ready) {
+          console.log(
+            `[TOGGLE] ${now.username} ${before.ready} -> ${now.ready}`
+          );
+        }
+      }
+
+      // real leaves
+      for (const [id, before] of prev) {
+        if (!curr.has(id)) {
+          console.log(`[LEAVE] ${before.username} left`);
+        }
+      }
+
+      // update your UI state
+      players.value = flat;
+      allReady.value =
+        players.value.length > 0 &&
+        players.value.every((p) => p.ready === true);
+
+      // save snapshot
+      prev = curr;
+    })
+    .subscribe();
+};
+
+const getReadyIds = () => {
+  const readyPlayers = players.value
+    .filter((p) => p.ready === true)
+    .map((p) => String(p.user_id));
+  return readyPlayers;
+};
+
+console.log("all ready", allReady);
 </script>
 
 <template>
@@ -848,6 +905,11 @@ const handleStartBingoGame = async (
                 "
                 size="sm"
                 color="primary"
+                :class="
+                  allReady
+                    ? 'ring-4 ring-green-500 animate-pulse shadow-lg shadow-green-500/30'
+                    : ''
+                "
               >
                 Start
               </UButton>
@@ -918,11 +980,13 @@ const handleStartBingoGame = async (
           things arent being updated  -->
           <BingoGameControl
             v-if="isAdmin && currentGame.game"
-            :game="currentGame.game"
+            :gameStatus="currentGame.game.status"
+            :gameId="game_id"
             :draws="currentGame.draws"
             :contestants="currentGame.contestants"
             :loading="currentGame.loading"
             :autoDrawRunning="isRunning"
+            :ready-ids="getReadyIds()"
             @draw="onDraw"
             @reloadGame="handleReloadGame"
             @stop="onStop(game_id)"
@@ -939,7 +1003,8 @@ const handleStartBingoGame = async (
                 {{
                   calculateCost(
                     loggedInContestant.numCards || 0,
-                    loggedInContestant.freeSpace || false
+                    loggedInContestant.freeSpace,
+                    loggedInContestant.autoMark
                   )
                 }}
                 diamonds

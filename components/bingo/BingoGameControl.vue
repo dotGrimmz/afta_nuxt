@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { BingoGameRow, ContestantType } from "~/types/bingo";
 const props = defineProps<{
-  game: BingoGameRow;
+  gameStatus: BingoGameRow["status"];
+  gameId: BingoGameRow["id"];
   draws: number[];
   contestants?: ContestantType[];
   loading?: boolean;
   autoDrawRunning: boolean;
+  readyIds?: ContestantType["id"][];
 }>();
 
 const emit = defineEmits<{
@@ -16,8 +18,13 @@ const emit = defineEmits<{
 }>();
 
 // 👇 Track reactive status
-const currentStatus = ref(props.game.status);
-console.log("game", props.game);
+console.log("current status ", props.gameStatus);
+const readySet = computed<Set<string>>(() => new Set(props.readyIds ?? []));
+
+const isReady = (c: ContestantType): boolean => {
+  const key = (c as any).user_id ?? c.id;
+  return key ? readySet.value.has(String(key)) : false;
+};
 </script>
 
 <template>
@@ -31,23 +38,23 @@ console.log("game", props.game);
     <!-- Admin buttons -->
     <div v-else class="flex gap-2 items-center">
       <UButton
-        :disabled="currentStatus !== 'active' || autoDrawRunning"
-        @click="emit('draw', game.id)"
+        :disabled="props.gameStatus !== 'active' || props.autoDrawRunning"
+        @click="emit('draw', props.gameId)"
         size="sm"
         color="primary"
       >
         Draw Number
       </UButton>
       <UButton
-        :disabled="currentStatus !== 'active'"
-        @click="emit('stop', game.id)"
+        :disabled="props.gameStatus !== 'active'"
+        @click="emit('stop', gameStatus)"
         size="sm"
         color="error"
       >
         Stop Game
       </UButton>
 
-      <template v-if="currentStatus === 'ended'">
+      <template v-if="gameStatus === 'ended'">
         <UButton
           color="warning"
           size="sm"
@@ -79,6 +86,9 @@ console.log("game", props.game);
         v-for="c in contestants"
         :key="c.id"
         class="p-2 bg-gray-800 rounded space-y-1"
+        :class="
+          isReady(c) ? 'border-4 border-green-500' : 'border border-gray-700'
+        "
       >
         <div class="flex justify-between items-center">
           <span class="font-semibold">{{ c.username }}</span>
@@ -89,7 +99,7 @@ console.log("game", props.game);
 
           <UButton
             @click="emit('removeContestant', c.id)"
-            v-if="currentStatus === 'lobby'"
+            v-if="gameStatus === 'lobby'"
             size="sm"
             color="error"
           >
