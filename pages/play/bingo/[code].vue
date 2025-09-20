@@ -13,6 +13,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { checkBingoClient } from "~/utils/bingo/checkBingoClient";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { WatchStopHandle } from "vue";
+import { useBingoStorage } from "~/composables/useBingoStorage";
 
 const route = useRoute();
 const router = useRouter();
@@ -39,12 +40,11 @@ const isWinner = computed(
       currentGame.value?.winner_id === contestant.value?.id
     )
 );
-
+const { ready, autoMark, restoreCardGrid, persistCardGrid } = useBingoStorage();
 const contestants = ref<ContestantType[]>([]);
 
 const autoMarkEnabled = computed(() => !!cards.value[0]?.auto_mark_enabled);
 const freeSpaceEneabled = computed(() => cards.value[0].free_space);
-console.log("automark enabled:", toRaw(autoMarkEnabled));
 
 // the point of this is if the user has auto mark enabled from the cards object
 // if autoMarkenabled is true, we give the option to toggle is via a swtich
@@ -54,6 +54,7 @@ const error = ref<string | null>(null);
 const calling = ref(false);
 const message = ref("");
 const showBingoModal = ref(false);
+const showAnimation = ref(false);
 
 const { $toast } = useNuxtApp();
 
@@ -65,16 +66,6 @@ const refreshGameRow = async (gameId: string) => {
     .eq("id", gameId)
     .single<BingoGameRow>();
   if (!error && data) currentGame.value = data;
-};
-
-const showBingoToast = (payout: number | string | undefined) => {
-  $toast.success(`BINGO 🎉 ${payout} 💎`, {
-    //@ts-ignore
-    position: "top-left",
-    timeout: 2000,
-    closeOnClick: true,
-    pauseOnHover: true,
-  });
 };
 
 const enterAnotherCode = (event: MouseEvent) => {
@@ -99,7 +90,12 @@ onMounted(async () => {
 
     contestant.value = result.contestant;
     cards.value = result.cards;
-
+    for (const card of cards.value) {
+      restoreCardGrid(card, draws.value);
+    }
+    // hydrate auto mark from local storage, fallback to server
+    // autoMarkOn.value =
+    //   autoMark.value || cards.value[0]?.auto_mark_enabled || false;
     const gameId = result.contestant.game_id;
     if (!gameId) {
       error.value = "No game id on for contestant!";
@@ -242,8 +238,7 @@ onBeforeUnmount(() => {
 
 const lastSixDesc = computed(() => draws.value.slice(-6).reverse());
 // const autoMarkOn = ref<boolean>(autoMarkEnabled.value ?? false);
-const autoMarkOn = ref(false);
-const ready = ref(false);
+const autoMarkOn = ref(autoMarkEnabled.value ?? false);
 
 watch(
   autoMarkEnabled,
@@ -252,6 +247,10 @@ watch(
   },
   { immediate: true }
 );
+
+watch(autoMarkOn, (val) => {
+  autoMark.value = val; // keep composable in sync
+});
 
 let channel: RealtimeChannel | null = null;
 let stopReadyWatch: WatchStopHandle | null = null;
@@ -339,6 +338,7 @@ watch([() => draws.value.at(-1), autoMarkOn], ([latest, enabled]) => {
       for (let c = 0; c < 5; c++) {
         if (card.grid.numbers[r][c] === latest) {
           card.grid.marked[r][c] = true;
+          persistCardGrid(card);
         }
       }
     }
@@ -379,10 +379,10 @@ const handleCallBingo = async (cardId: string) => {
 
     if (data) {
       await refreshGameRow(data.game.id);
-
+      showAnimation.value = true;
       message.value = `Bingo! ${data.result.username} Won ${data.result.payout} 💎`;
 
-      showBingoToast(currentGame.value.payout);
+      // showBingoToast(currentGame.value.payout);
     }
   } catch (err: any) {
     console.error(err);
@@ -403,6 +403,7 @@ const restoreMarks = (): void => {
         }
       }
     }
+    persistCardGrid(card);
   }
 };
 
@@ -417,155 +418,161 @@ onUnmounted(() => {
 
 <template>
   <main class="p-4 space-y-6">
-    <div v-if="loading" class="text-gray-400">Loading your cards...</div>
+    <!-- Jet (only rendered when animation starts) -->
+    <section class="relative w-full h-screen">
+      <BingoWin :visible="showAnimation" />
 
-    <div
-      v-else-if="error"
-      class="p-3 rounded bg-red-700 text-white text-center"
-    >
-      {{ error }}
-    </div>
+      <div v-if="loading" class="text-gray-400">Loading your cards...</div>
 
-    <div v-else>
-      <div class="flex justify-between">
-        <h1 class="text-2xl font-bold">
-          Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
-        </h1>
-        <div class="flex">
-          <UButton
-            label="Home"
-            size="sm"
-            variant="link"
-            href="/dashboard/games"
+      <div
+        v-else-if="error"
+        class="p-3 rounded bg-red-700 text-white text-center"
+      >
+        {{ error }}
+      </div>
+
+      <div v-else>
+        <div class="flex justify-between">
+          <h1 class="text-2xl font-bold">
+            Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
+          </h1>
+          <div class="flex">
+            <UButton
+              label="Home"
+              size="sm"
+              variant="link"
+              href="/dashboard/games"
+            />
+          </div>
+        </div>
+
+        <div class="flex justify-between mb-2">
+          <div class="flex flex-col">
+            <p class="text-sm text-gray-400">
+              {{ cards.length }} Card <span v-if="cards.length !== 1">s</span>
+              <span v-if="freeSpaceEneabled">✨Free Space</span>
+            </p>
+            <USwitch v-model="autoMarkOn" label="Toggle Automark" />
+          </div>
+
+          <div class="flex flex-col items-end">
+            <p>Prize: {{ winnerPayout }} 💎</p>
+            <USwitch v-model="ready" label="Ready Play" />
+          </div>
+        </div>
+        <!-- draws - I want to animate in and out each of these items --->
+        <div class="p-4">
+          <h2 class="text-xl font-bold mb-2">
+            {{
+              currentGame?.status === "lobby"
+                ? "Waiting to Start"
+                : gameEnded
+                ? "Game Ended"
+                : "Draws"
+            }}
+          </h2>
+
+          <div v-if="!gameEnded" class="flex flex-wrap justify-between">
+            <div
+              v-for="(num, idx) in lastSixDesc"
+              :key="`${num}-${idx}`"
+              class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full bg-blue-600 text-white font-bold text-base md:text-lg shadow-md select-none"
+              :class="{
+                'animate-pulse ring-2 ring-white/70 scale-105': idx === 0,
+              }"
+            >
+              {{ num }}
+            </div>
+            <!-- "All" button that toggles modal -->
+            <button
+              type="button"
+              class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full border border-blue-600 text-blue-600 font-semibold text-sm md:text-base hover:bg-blue-600 hover:text-white transition"
+              @click="showBingoModal = true"
+            >
+              All
+            </button>
+          </div>
+
+          <BingoModal
+            v-model="showBingoModal"
+            title="All Numbers Drawn"
+            :numbers="draws"
+            :gameEnded="gameEnded"
+            :restoreMarks="restoreMarks"
           />
         </div>
-      </div>
-
-      <div class="flex justify-between mb-2">
-        <div class="flex flex-col">
-          <p class="text-sm text-gray-400">
-            {{ cards.length }} Card <span v-if="cards.length !== 1">s</span>
-            <span v-if="freeSpaceEneabled">✨Free Space</span>
-          </p>
-          <USwitch v-model="autoMarkOn" label="Toggle Automark" />
-        </div>
-
-        <div class="flex flex-col items-end">
-          <p>Prize: {{ winnerPayout }} 💎</p>
-          <USwitch v-model="ready" label="Ready Play" />
-        </div>
-      </div>
-      <!-- draws - I want to animate in and out each of these items --->
-      <div class="p-4">
-        <h2 class="text-xl font-bold mb-2">
-          {{
-            currentGame?.status === "lobby"
-              ? "Waiting to Start"
-              : gameEnded
-              ? "Game Ended"
-              : "Draws"
-          }}
-        </h2>
-
-        <div v-if="!gameEnded" class="flex flex-wrap justify-between">
+        <!-- Cards grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
           <div
-            v-for="(num, idx) in lastSixDesc"
-            :key="`${num}-${idx}`"
-            class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full bg-blue-600 text-white font-bold text-base md:text-lg shadow-md select-none"
+            v-for="card in cards"
+            :key="card.id"
+            class="bg-gray-800 p-4 rounded relative"
             :class="{
-              'animate-pulse ring-2 ring-white/70 scale-105': idx === 0,
+              'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
             }"
           >
-            {{ num }}
-          </div>
-          <!-- "All" button that toggles modal -->
-          <button
-            type="button"
-            class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full border border-blue-600 text-blue-600 font-semibold text-sm md:text-base hover:bg-blue-600 hover:text-white transition"
-            @click="showBingoModal = true"
-          >
-            All
-          </button>
-        </div>
-
-        <BingoModal
-          v-model="showBingoModal"
-          title="All Numbers Drawn"
-          :numbers="draws"
-          :gameEnded="gameEnded"
-          :restoreMarks="restoreMarks"
-        />
-      </div>
-      <!-- Cards grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
-        <div
-          v-for="card in cards"
-          :key="card.id"
-          class="bg-gray-800 p-4 rounded relative"
-          :class="{
-            'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
-          }"
-        >
-          <!-- <BingoCard
+            <!-- <BingoCard
             :autoMarkEnabled="autoMarkEnabled"
             :game-ended="gameEnded"
             :card="card"
             :draws="draws"
           /> -->
-          <BingoCard
-            :card="card"
-            :draws="draws"
-            :game-ended="gameEnded"
-            :auto-mark-enabled="autoMarkOn"
-          />
-          <UButton
-            class="mt-2 w-full"
-            color="primary"
-            size="sm"
-            :loading="calling"
-            :disabled="gameEnded"
-            @click="handleCallBingo(card.id)"
-          >
-            {{ gameEnded ? "Game Ended" : "Call Bingo" }}
-          </UButton>
-        </div>
-      </div>
-
-      <!-- Winner / Game Over -->
-      <div
-        v-if="gameEnded"
-        class="p-4 rounded text-center mt-6"
-        :class="
-          winnerId === contestant?.id
-            ? 'bg-green-700 text-white'
-            : 'bg-red-700 text-white'
-        "
-      >
-        <template v-if="isWinner">
-          🎉 Congratulations {{ winnerName }} — You Won!
-          <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
-            Prize: {{ winnerPayout }} 💎
-          </div>
-        </template>
-        <template v-else>
-          <div class="flex flex-col gap-2">
-            <span>❌ Game Over — Give it another shot!.</span>
-
+            <BingoCard
+              ref="bingoCardEl"
+              :card="card"
+              :draws="draws"
+              :game-ended="gameEnded"
+              :auto-mark-enabled="autoMarkOn"
+            />
             <UButton
-              @click="enterAnotherCode"
-              size="sm"
-              class="text-center"
+              class="mt-2 w-full"
               color="primary"
-              >Enter Another Code
+              size="sm"
+              :loading="calling"
+              :disabled="gameEnded"
+              @click="handleCallBingo(card.id)"
+            >
+              {{ gameEnded ? "Game Ended" : "Call Bingo" }}
             </UButton>
           </div>
-          <div v-if="isWinner" class="mt-2 text-sm">
-            Prize: {{ winnerPayout }} 💎
-          </div>
-        </template>
-      </div>
+        </div>
 
-      <p v-if="message" class="text-xs text-green-400 mt-2">{{ message }}</p>
-    </div>
+        <!-- Winner / Game Over -->
+        <div
+          v-if="gameEnded"
+          class="p-4 rounded text-center mt-6"
+          :class="
+            winnerId === contestant?.id
+              ? 'bg-green-700 text-white'
+              : 'bg-red-700 text-white'
+          "
+        >
+          <template v-if="isWinner">
+            🎉 Congratulations {{ winnerName }} — You Won!
+            <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
+              Prize: {{ winnerPayout }} 💎
+            </div>
+          </template>
+          <template v-else>
+            <div class="flex flex-col gap-2">
+              <span>❌ Game Over — Give it another shot!.</span>
+
+              <UButton
+                @click="enterAnotherCode"
+                size="sm"
+                class="text-center"
+                color="primary"
+                >Enter Another Code
+              </UButton>
+            </div>
+            <div v-if="isWinner" class="mt-2 text-sm">
+              Prize: {{ winnerPayout }} 💎
+            </div>
+          </template>
+        </div>
+
+        <p v-if="message" class="text-xs text-green-400 mt-2">{{ message }}</p>
+      </div>
+    </section>
   </main>
 </template>

@@ -879,7 +879,7 @@ console.log("all ready", allReady);
                   v-model="isRunning"
                   label="Auto Draw"
                   @update:model-value="
-                    (val) => (val ? start() : stopAutoDraw())
+                    (val: boolean) => (val ? start() : stopAutoDraw())
                   "
                 />
               </div>
