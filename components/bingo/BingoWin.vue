@@ -9,7 +9,7 @@
     <!-- BINGO text split into spans -->
     <div
       ref="bingoText"
-      class="relative z-30 flex gap-6 text-[15vw] font-black uppercase tracking-widest text-yellow-300 drop-shadow-[0_0_40px_rgba(0,0,0,0.9)]"
+      class="relative z-30 flex gap-6 text-[18vw] font-black uppercase tracking-widest text-yellow-300 drop-shadow-[0_0_15px_rgba(255,215,0,0.9)] [-webkit-text-stroke:4px_black]"
     >
       <span>B</span>
       <span>I</span>
@@ -23,17 +23,28 @@
       ref="diamondLayer"
       class="absolute inset-0 pointer-events-none z-20"
     ></div>
+    <!-- Continue button -->
+    <button
+      ref="continueBtn"
+      @click="handleReturn"
+      class="absolute bottom-8 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg opacity-0 z-50"
+    >
+      Continue
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from "vue";
 import { gsap } from "gsap";
+const { profile } = useProfile();
+const router = useRouter();
 
 const props = defineProps<{ visible: boolean }>();
 
 const bingoText = ref<HTMLElement | null>(null);
 const diamondLayer = ref<HTMLElement | null>(null);
+const continueBtn = ref<HTMLElement | null>(null);
 
 watch(
   () => props.visible,
@@ -66,6 +77,15 @@ const animateWin = () => {
   // Diamonds rain
   for (let i = 0; i < 40; i++) {
     spawnDiamond();
+  }
+
+  if (continueBtn.value) {
+    gsap.to(continueBtn.value, {
+      opacity: 1,
+      duration: 1,
+      delay: 3,
+      ease: "power2.out",
+    });
   }
 };
 
@@ -153,7 +173,7 @@ const spawnDiamond = () => {
   const diamond = document.createElement("div");
   diamond.innerHTML = "💎"; // replace with SVG later
   diamond.className = "absolute text-5xl";
-  diamond.style.left = `${Math.random() * 90 + 5}%`; // random horizontal
+  diamond.style.left = `${Math.random() * 100}%`; // random horizontal
   diamond.style.zIndex = String(Math.floor(Math.random() * 30) + 10);
   diamond.style.transform = `scale(${gsap.utils.random(0.9, 1.1)})`;
   diamondLayer.value.appendChild(diamond);
@@ -181,5 +201,14 @@ const spawnDiamond = () => {
       },
     }
   );
+};
+
+// Button redirect
+const handleReturn = () => {
+  if (profile.value) {
+    router.push("/dashboard/games");
+  } else {
+    router.push("/bingo/play");
+  }
 };
 </script>

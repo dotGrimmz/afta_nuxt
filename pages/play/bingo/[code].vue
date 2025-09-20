@@ -45,7 +45,6 @@ const contestants = ref<ContestantType[]>([]);
 
 const autoMarkEnabled = computed(() => !!cards.value[0]?.auto_mark_enabled);
 const freeSpaceEneabled = computed(() => cards.value[0].free_space);
-console.log("automark enabled:", toRaw(autoMarkEnabled));
 
 // the point of this is if the user has auto mark enabled from the cards object
 // if autoMarkenabled is true, we give the option to toggle is via a swtich
@@ -55,6 +54,7 @@ const error = ref<string | null>(null);
 const calling = ref(false);
 const message = ref("");
 const showBingoModal = ref(false);
+const showAnimation = ref(false);
 
 const { $toast } = useNuxtApp();
 
@@ -380,10 +380,10 @@ const handleCallBingo = async (cardId: string) => {
 
     if (data) {
       await refreshGameRow(data.game.id);
-
+      showAnimation.value = true;
       message.value = `Bingo! ${data.result.username} Won ${data.result.payout} 💎`;
 
-      showBingoToast(currentGame.value.payout);
+      // showBingoToast(currentGame.value.payout);
     }
   } catch (err: any) {
     console.error(err);
@@ -414,54 +414,6 @@ onUnmounted(() => {
     channel = null;
   }
 });
-
-const jet = ref<HTMLElement | null>(null);
-const bingoText = ref<HTMLElement | null>(null);
-const showAnimation = ref(false);
-const flipped = ref(false); // false = normal, true = mirrored
-
-const startAnimation = async () => {
-  showAnimation.value = true;
-  console.log(profile);
-  // await nextTick();
-
-  // if (!jet.value || !bingoText.value) return;
-  // const w = window.innerWidth;
-  // const h = window.innerHeight;
-
-  // // Horizontal pass positions
-  // const startX = -200; // off left edge
-  // const startY = h / 6; // middle of screen
-  // const endX = w + 200; // off right edge
-  // flipped.value = false;
-
-  // const tl = gsap.timeline({
-  //   onComplete: () => {
-  //     // Jet unmounts after animation
-  //     showAnimation.value = false;
-  //   },
-  // });
-
-  // Horizontal pass
-  // tl.fromTo(
-  //   jet.value,
-  //   { scaleX: -1, x: startX + 150, y: startY - 90, rotate: -50 }, // flipped
-  //   { x: endX, y: startY + -300, duration: 2.5, ease: "power2.inOut" }
-  // );
-
-  // tl.fromTo(
-  //   jet.value,
-  //   { scaleX: -1, x: startX, y: startY, rotate: -18 }, // flipped
-  //   { x: endX, y: startY, duration: 2.5, ease: "power2.inOut" }
-  // );
-
-  // Fade in BINGO text after jet exits
-  // tl.to(
-  //   bingoText.value,
-  //   { opacity: 1, duration: 1, ease: "power1.out" },
-  //   "-=0.5" // start just before jet fully leaves
-  // );
-};
 </script>
 
 <template>
@@ -501,15 +453,6 @@ const startAnimation = async () => {
               <span v-if="freeSpaceEneabled">✨Free Space</span>
             </p>
             <USwitch v-model="autoMarkOn" label="Toggle Automark" />
-            <section>
-              <!-- Trigger button -->
-              <button
-                @click="startAnimation"
-                class="absolute top-4 left-4 z-50 px-4 py-2 bg-blue-500 text-white rounded shadow"
-              >
-                Trigger Jet Animation
-              </button>
-            </section>
           </div>
 
           <div class="flex flex-col items-end">
