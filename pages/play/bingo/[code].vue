@@ -13,6 +13,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { checkBingoClient } from "~/utils/bingo/checkBingoClient";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { WatchStopHandle } from "vue";
+const { profile } = useProfile();
 
 const route = useRoute();
 const router = useRouter();
@@ -413,159 +414,222 @@ onUnmounted(() => {
     channel = null;
   }
 });
+
+const jet = ref<HTMLElement | null>(null);
+const bingoText = ref<HTMLElement | null>(null);
+const showAnimation = ref(false);
+const flipped = ref(false); // false = normal, true = mirrored
+
+const startAnimation = async () => {
+  showAnimation.value = true;
+  console.log(profile);
+  // await nextTick();
+
+  // if (!jet.value || !bingoText.value) return;
+  // const w = window.innerWidth;
+  // const h = window.innerHeight;
+
+  // // Horizontal pass positions
+  // const startX = -200; // off left edge
+  // const startY = h / 6; // middle of screen
+  // const endX = w + 200; // off right edge
+  // flipped.value = false;
+
+  // const tl = gsap.timeline({
+  //   onComplete: () => {
+  //     // Jet unmounts after animation
+  //     showAnimation.value = false;
+  //   },
+  // });
+
+  // Horizontal pass
+  // tl.fromTo(
+  //   jet.value,
+  //   { scaleX: -1, x: startX + 150, y: startY - 90, rotate: -50 }, // flipped
+  //   { x: endX, y: startY + -300, duration: 2.5, ease: "power2.inOut" }
+  // );
+
+  // tl.fromTo(
+  //   jet.value,
+  //   { scaleX: -1, x: startX, y: startY, rotate: -18 }, // flipped
+  //   { x: endX, y: startY, duration: 2.5, ease: "power2.inOut" }
+  // );
+
+  // Fade in BINGO text after jet exits
+  // tl.to(
+  //   bingoText.value,
+  //   { opacity: 1, duration: 1, ease: "power1.out" },
+  //   "-=0.5" // start just before jet fully leaves
+  // );
+};
 </script>
 
 <template>
   <main class="p-4 space-y-6">
-    <div v-if="loading" class="text-gray-400">Loading your cards...</div>
+    <!-- Jet (only rendered when animation starts) -->
+    <section class="relative w-full h-screen">
+      <BingoWin :visible="showAnimation" />
 
-    <div
-      v-else-if="error"
-      class="p-3 rounded bg-red-700 text-white text-center"
-    >
-      {{ error }}
-    </div>
+      <div v-if="loading" class="text-gray-400">Loading your cards...</div>
 
-    <div v-else>
-      <div class="flex justify-between">
-        <h1 class="text-2xl font-bold">
-          Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
-        </h1>
-        <div class="flex">
-          <UButton
-            label="Home"
-            size="sm"
-            variant="link"
-            href="/dashboard/games"
+      <div
+        v-else-if="error"
+        class="p-3 rounded bg-red-700 text-white text-center"
+      >
+        {{ error }}
+      </div>
+
+      <div v-else>
+        <div class="flex justify-between">
+          <h1 class="text-2xl font-bold">
+            Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
+          </h1>
+          <div class="flex">
+            <UButton
+              label="Home"
+              size="sm"
+              variant="link"
+              href="/dashboard/games"
+            />
+          </div>
+        </div>
+
+        <div class="flex justify-between mb-2">
+          <div class="flex flex-col">
+            <p class="text-sm text-gray-400">
+              {{ cards.length }} Card <span v-if="cards.length !== 1">s</span>
+              <span v-if="freeSpaceEneabled">✨Free Space</span>
+            </p>
+            <USwitch v-model="autoMarkOn" label="Toggle Automark" />
+            <section>
+              <!-- Trigger button -->
+              <button
+                @click="startAnimation"
+                class="absolute top-4 left-4 z-50 px-4 py-2 bg-blue-500 text-white rounded shadow"
+              >
+                Trigger Jet Animation
+              </button>
+            </section>
+          </div>
+
+          <div class="flex flex-col items-end">
+            <p>Prize: {{ winnerPayout }} 💎</p>
+            <USwitch v-model="ready" label="Ready Play" />
+          </div>
+        </div>
+        <!-- draws - I want to animate in and out each of these items --->
+        <div class="p-4">
+          <h2 class="text-xl font-bold mb-2">
+            {{
+              currentGame?.status === "lobby"
+                ? "Waiting to Start"
+                : gameEnded
+                ? "Game Ended"
+                : "Draws"
+            }}
+          </h2>
+
+          <div v-if="!gameEnded" class="flex flex-wrap justify-between">
+            <div
+              v-for="(num, idx) in lastSixDesc"
+              :key="`${num}-${idx}`"
+              class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full bg-blue-600 text-white font-bold text-base md:text-lg shadow-md select-none"
+              :class="{
+                'animate-pulse ring-2 ring-white/70 scale-105': idx === 0,
+              }"
+            >
+              {{ num }}
+            </div>
+            <!-- "All" button that toggles modal -->
+            <button
+              type="button"
+              class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full border border-blue-600 text-blue-600 font-semibold text-sm md:text-base hover:bg-blue-600 hover:text-white transition"
+              @click="showBingoModal = true"
+            >
+              All
+            </button>
+          </div>
+
+          <BingoModal
+            v-model="showBingoModal"
+            title="All Numbers Drawn"
+            :numbers="draws"
+            :gameEnded="gameEnded"
+            :restoreMarks="restoreMarks"
           />
         </div>
-      </div>
-
-      <div class="flex justify-between mb-2">
-        <div class="flex flex-col">
-          <p class="text-sm text-gray-400">
-            {{ cards.length }} Card <span v-if="cards.length !== 1">s</span>
-            <span v-if="freeSpaceEneabled">✨Free Space</span>
-          </p>
-          <USwitch v-model="autoMarkOn" label="Toggle Automark" />
-        </div>
-
-        <div class="flex flex-col items-end">
-          <p>Prize: {{ winnerPayout }} 💎</p>
-          <USwitch v-model="ready" label="Ready Play" />
-        </div>
-      </div>
-      <!-- draws - I want to animate in and out each of these items --->
-      <div class="p-4">
-        <h2 class="text-xl font-bold mb-2">
-          {{
-            currentGame?.status === "lobby"
-              ? "Waiting to Start"
-              : gameEnded
-              ? "Game Ended"
-              : "Draws"
-          }}
-        </h2>
-
-        <div v-if="!gameEnded" class="flex flex-wrap justify-between">
+        <!-- Cards grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
           <div
-            v-for="(num, idx) in lastSixDesc"
-            :key="`${num}-${idx}`"
-            class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full bg-blue-600 text-white font-bold text-base md:text-lg shadow-md select-none"
+            v-for="card in cards"
+            :key="card.id"
+            class="bg-gray-800 p-4 rounded relative"
             :class="{
-              'animate-pulse ring-2 ring-white/70 scale-105': idx === 0,
+              'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
             }"
           >
-            {{ num }}
-          </div>
-          <!-- "All" button that toggles modal -->
-          <button
-            type="button"
-            class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full border border-blue-600 text-blue-600 font-semibold text-sm md:text-base hover:bg-blue-600 hover:text-white transition"
-            @click="showBingoModal = true"
-          >
-            All
-          </button>
-        </div>
-
-        <BingoModal
-          v-model="showBingoModal"
-          title="All Numbers Drawn"
-          :numbers="draws"
-          :gameEnded="gameEnded"
-          :restoreMarks="restoreMarks"
-        />
-      </div>
-      <!-- Cards grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
-        <div
-          v-for="card in cards"
-          :key="card.id"
-          class="bg-gray-800 p-4 rounded relative"
-          :class="{
-            'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
-          }"
-        >
-          <!-- <BingoCard
+            <!-- <BingoCard
             :autoMarkEnabled="autoMarkEnabled"
             :game-ended="gameEnded"
             :card="card"
             :draws="draws"
           /> -->
-          <BingoCard
-            :card="card"
-            :draws="draws"
-            :game-ended="gameEnded"
-            :auto-mark-enabled="autoMarkOn"
-          />
-          <UButton
-            class="mt-2 w-full"
-            color="primary"
-            size="sm"
-            :loading="calling"
-            :disabled="gameEnded"
-            @click="handleCallBingo(card.id)"
-          >
-            {{ gameEnded ? "Game Ended" : "Call Bingo" }}
-          </UButton>
-        </div>
-      </div>
-
-      <!-- Winner / Game Over -->
-      <div
-        v-if="gameEnded"
-        class="p-4 rounded text-center mt-6"
-        :class="
-          winnerId === contestant?.id
-            ? 'bg-green-700 text-white'
-            : 'bg-red-700 text-white'
-        "
-      >
-        <template v-if="isWinner">
-          🎉 Congratulations {{ winnerName }} — You Won!
-          <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
-            Prize: {{ winnerPayout }} 💎
-          </div>
-        </template>
-        <template v-else>
-          <div class="flex flex-col gap-2">
-            <span>❌ Game Over — Give it another shot!.</span>
-
+            <BingoCard
+              ref="bingoCardEl"
+              :card="card"
+              :draws="draws"
+              :game-ended="gameEnded"
+              :auto-mark-enabled="autoMarkOn"
+            />
             <UButton
-              @click="enterAnotherCode"
-              size="sm"
-              class="text-center"
+              class="mt-2 w-full"
               color="primary"
-              >Enter Another Code
+              size="sm"
+              :loading="calling"
+              :disabled="gameEnded"
+              @click="handleCallBingo(card.id)"
+            >
+              {{ gameEnded ? "Game Ended" : "Call Bingo" }}
             </UButton>
           </div>
-          <div v-if="isWinner" class="mt-2 text-sm">
-            Prize: {{ winnerPayout }} 💎
-          </div>
-        </template>
-      </div>
+        </div>
 
-      <p v-if="message" class="text-xs text-green-400 mt-2">{{ message }}</p>
-    </div>
+        <!-- Winner / Game Over -->
+        <div
+          v-if="gameEnded"
+          class="p-4 rounded text-center mt-6"
+          :class="
+            winnerId === contestant?.id
+              ? 'bg-green-700 text-white'
+              : 'bg-red-700 text-white'
+          "
+        >
+          <template v-if="isWinner">
+            🎉 Congratulations {{ winnerName }} — You Won!
+            <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
+              Prize: {{ winnerPayout }} 💎
+            </div>
+          </template>
+          <template v-else>
+            <div class="flex flex-col gap-2">
+              <span>❌ Game Over — Give it another shot!.</span>
+
+              <UButton
+                @click="enterAnotherCode"
+                size="sm"
+                class="text-center"
+                color="primary"
+                >Enter Another Code
+              </UButton>
+            </div>
+            <div v-if="isWinner" class="mt-2 text-sm">
+              Prize: {{ winnerPayout }} 💎
+            </div>
+          </template>
+        </div>
+
+        <p v-if="message" class="text-xs text-green-400 mt-2">{{ message }}</p>
+      </div>
+    </section>
   </main>
 </template>

@@ -96,7 +96,14 @@ const isReady = (c: ContestantType): boolean => {
         </div>
         <div class="flex justify-between items-center">
           <div class="text-sm text-gray-300">Cards: {{ c.num_cards }}</div>
-
+          <UButton
+            label="View Card"
+            :to="`/play/bingo/${c.code}`"
+            target="_blank"
+            rel="noopener noreferrer"
+            color="info"
+            variant="outline"
+          />
           <UButton
             @click="emit('removeContestant', c.id)"
             v-if="gameStatus === 'lobby'"
