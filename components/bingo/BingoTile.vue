@@ -3,13 +3,13 @@
     type="button"
     class="group relative w-full aspect-square grid place-items-center rounded-xl border bg-zinc-900 text-zinc-100 transition focus:outline-none focus:ring-2 focus:ring-emerald-400/70"
     :class="[
-      // base/hover
+      // marked or FREE
       marked || isFree
         ? 'border-emerald-500 bg-emerald-600/15'
         : 'border-white/10 hover:border-white/30 hover:bg-white/5 active:scale-[.98]',
-      // pulse only when needed
+      // pulse only when number is drawn but not marked
       canPulse ? 'border-emerald-500 animate-pulse-soft' : '',
-      // FREE tile accent (soft gradient + aura)
+      // FREE tile accent
       isFree
         ? 'bg-gradient-to-br from-emerald-500/20 to-teal-500/20 ring-1 ring-emerald-400/40 animate-glow-free'
         : '',
@@ -27,12 +27,13 @@
       {{ isFree ? "FREE" : value }}
     </span>
 
-    <!-- corner check hint (subtle, for marked) -->
+    <!-- subtle check in corner when marked -->
     <span
       v-if="marked && !isFree"
       class="absolute bottom-1 right-1 text-[10px] sm:text-xs text-emerald-300/90"
-      >✓</span
     >
+      ✓
+    </span>
   </button>
 </template>
 
@@ -40,8 +41,8 @@
 const props = withDefaults(
   defineProps<{
     value: number | null;
-    marked: boolean;
-    shouldPulse: boolean;
+    marked: boolean; // true = explicitly marked (click or restored)
+    shouldPulse: boolean; // true = number was drawn
     isFree?: boolean;
   }>(),
   { isFree: false }
@@ -49,6 +50,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{ (e: "mark"): void }>();
 
+// Pulse only if drawn AND not marked AND not free
 const canPulse = computed(
   () => props.shouldPulse && !props.marked && !props.isFree
 );

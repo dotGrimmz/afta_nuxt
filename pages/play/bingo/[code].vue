@@ -13,7 +13,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { checkBingoClient } from "~/utils/bingo/checkBingoClient";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { WatchStopHandle } from "vue";
-const { profile } = useProfile();
+import { useBingoStorage } from "~/composables/useBingoStorage";
 
 const route = useRoute();
 const router = useRouter();
@@ -40,7 +40,7 @@ const isWinner = computed(
       currentGame.value?.winner_id === contestant.value?.id
     )
 );
-
+const { ready, autoMark, restoreCardGrid, persistCardGrid } = useBingoStorage();
 const contestants = ref<ContestantType[]>([]);
 
 const autoMarkEnabled = computed(() => !!cards.value[0]?.auto_mark_enabled);
@@ -68,16 +68,6 @@ const refreshGameRow = async (gameId: string) => {
   if (!error && data) currentGame.value = data;
 };
 
-const showBingoToast = (payout: number | string | undefined) => {
-  $toast.success(`BINGO 🎉 ${payout} 💎`, {
-    //@ts-ignore
-    position: "top-left",
-    timeout: 2000,
-    closeOnClick: true,
-    pauseOnHover: true,
-  });
-};
-
 const enterAnotherCode = (event: MouseEvent) => {
   event.preventDefault();
   router.push("/play/bingo");
@@ -100,7 +90,12 @@ onMounted(async () => {
 
     contestant.value = result.contestant;
     cards.value = result.cards;
-
+    for (const card of cards.value) {
+      restoreCardGrid(card, draws.value);
+    }
+    // hydrate auto mark from local storage, fallback to server
+    // autoMarkOn.value =
+    //   autoMark.value || cards.value[0]?.auto_mark_enabled || false;
     const gameId = result.contestant.game_id;
     if (!gameId) {
       error.value = "No game id on for contestant!";
@@ -243,8 +238,7 @@ onBeforeUnmount(() => {
 
 const lastSixDesc = computed(() => draws.value.slice(-6).reverse());
 // const autoMarkOn = ref<boolean>(autoMarkEnabled.value ?? false);
-const autoMarkOn = ref(false);
-const ready = ref(false);
+const autoMarkOn = ref(autoMarkEnabled.value ?? false);
 
 watch(
   autoMarkEnabled,
@@ -253,6 +247,10 @@ watch(
   },
   { immediate: true }
 );
+
+watch(autoMarkOn, (val) => {
+  autoMark.value = val; // keep composable in sync
+});
 
 let channel: RealtimeChannel | null = null;
 let stopReadyWatch: WatchStopHandle | null = null;
@@ -340,6 +338,7 @@ watch([() => draws.value.at(-1), autoMarkOn], ([latest, enabled]) => {
       for (let c = 0; c < 5; c++) {
         if (card.grid.numbers[r][c] === latest) {
           card.grid.marked[r][c] = true;
+          persistCardGrid(card);
         }
       }
     }
@@ -404,6 +403,7 @@ const restoreMarks = (): void => {
         }
       }
     }
+    persistCardGrid(card);
   }
 };
 
