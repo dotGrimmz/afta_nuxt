@@ -55,6 +55,9 @@ const calling = ref(false);
 const message = ref("");
 const showBingoModal = ref(false);
 const showAnimation = ref(false);
+const showStartAnimation = ref(false);
+const gameStatus = computed(() => currentGame.value?.status ?? null);
+let startAnimationTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const { $toast } = useNuxtApp();
 
@@ -234,6 +237,10 @@ const subscribeToContestants = (gameId: string) => {
 onBeforeUnmount(() => {
   subscriptions.forEach((sub) => supabase.removeChannel(sub));
   subscriptions.length = 0;
+  if (startAnimationTimeout) {
+    clearTimeout(startAnimationTimeout);
+    startAnimationTimeout = null;
+  }
 });
 
 const lastSixDesc = computed(() => draws.value.slice(-6).reverse());
@@ -250,6 +257,17 @@ watch(
 
 watch(autoMarkOn, (val) => {
   autoMark.value = val; // keep composable in sync
+});
+
+watch(gameStatus, (nextStatus, prevStatus) => {
+  if (prevStatus === "lobby" && nextStatus === "active") {
+    if (startAnimationTimeout) clearTimeout(startAnimationTimeout);
+    showStartAnimation.value = true;
+    startAnimationTimeout = setTimeout(() => {
+      showStartAnimation.value = false;
+      startAnimationTimeout = null;
+    }, 3000);
+  }
 });
 
 let channel: RealtimeChannel | null = null;
@@ -420,6 +438,18 @@ onUnmounted(() => {
   <main class="p-4 space-y-6">
     <!-- Jet (only rendered when animation starts) -->
     <section class="relative w-full h-screen">
+      <Transition name="start-flash">
+        <div
+          v-if="showStartAnimation"
+          class="absolute inset-0 z-30 flex items-center justify-center bg-black/70 pointer-events-none"
+        >
+          <div
+            class="text-white text-4xl sm:text-5xl font-extrabold tracking-wide animate-pulse"
+          >
+            Game Starting!
+          </div>
+        </div>
+      </Transition>
       <BingoWin :visible="showAnimation" />
 
       <div v-if="loading" class="text-gray-400">Loading your cards...</div>
@@ -576,3 +606,22 @@ onUnmounted(() => {
     </section>
   </main>
 </template>
+
+<style scoped>
+.start-flash-enter-active,
+.start-flash-leave-active {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.start-flash-enter-from,
+.start-flash-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.start-flash-enter-to,
+.start-flash-leave-from {
+  opacity: 1;
+  transform: scale(1);
+}
+</style>
