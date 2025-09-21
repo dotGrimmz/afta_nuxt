@@ -56,8 +56,11 @@ const message = ref("");
 const showBingoModal = ref(false);
 const showAnimation = ref(false);
 const showStartAnimation = ref(false);
+const showAdminEndAnimation = ref(false);
+const calledBingoSuccessfully = ref(false);
 const gameStatus = computed(() => currentGame.value?.status ?? null);
 let startAnimationTimeout: ReturnType<typeof setTimeout> | null = null;
+let endAnimationTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const { $toast } = useNuxtApp();
 
@@ -241,6 +244,10 @@ onBeforeUnmount(() => {
     clearTimeout(startAnimationTimeout);
     startAnimationTimeout = null;
   }
+  if (endAnimationTimeout) {
+    clearTimeout(endAnimationTimeout);
+    endAnimationTimeout = null;
+  }
 });
 
 const lastSixDesc = computed(() => draws.value.slice(-6).reverse());
@@ -266,6 +273,20 @@ watch(gameStatus, (nextStatus, prevStatus) => {
     startAnimationTimeout = setTimeout(() => {
       showStartAnimation.value = false;
       startAnimationTimeout = null;
+    }, 3000);
+  }
+
+  if (
+    prevStatus === "active" &&
+    nextStatus === "ended" &&
+    !calledBingoSuccessfully.value &&
+    !isWinner.value
+  ) {
+    if (endAnimationTimeout) clearTimeout(endAnimationTimeout);
+    showAdminEndAnimation.value = true;
+    endAnimationTimeout = setTimeout(() => {
+      showAdminEndAnimation.value = false;
+      endAnimationTimeout = null;
     }, 3000);
   }
 });
@@ -396,6 +417,7 @@ const handleCallBingo = async (cardId: string) => {
     );
 
     if (data) {
+      calledBingoSuccessfully.value = true;
       await refreshGameRow(data.game.id);
       showAnimation.value = true;
       message.value = `Bingo! ${data.result.username} Won ${data.result.payout} 💎`;
@@ -447,6 +469,18 @@ onUnmounted(() => {
             class="text-white text-4xl sm:text-5xl font-extrabold tracking-wide animate-pulse"
           >
             Game Starting!
+          </div>
+        </div>
+      </Transition>
+      <Transition name="end-flash">
+        <div
+          v-if="showAdminEndAnimation"
+          class="absolute inset-0 z-30 flex items-center justify-center bg-black/70 pointer-events-none"
+        >
+          <div
+            class="text-white text-4xl sm:text-5xl font-extrabold tracking-wide"
+          >
+            Game Ended By Host
           </div>
         </div>
       </Transition>
@@ -609,18 +643,24 @@ onUnmounted(() => {
 
 <style scoped>
 .start-flash-enter-active,
-.start-flash-leave-active {
+.start-flash-leave-active,
+.end-flash-enter-active,
+.end-flash-leave-active {
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
 .start-flash-enter-from,
-.start-flash-leave-to {
+.start-flash-leave-to,
+.end-flash-enter-from,
+.end-flash-leave-to {
   opacity: 0;
   transform: scale(0.95);
 }
 
 .start-flash-enter-to,
-.start-flash-leave-from {
+.start-flash-leave-from,
+.end-flash-enter-to,
+.end-flash-leave-from {
   opacity: 1;
   transform: scale(1);
 }
