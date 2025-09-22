@@ -135,8 +135,9 @@ const adminLinks = [
 ];
 
 const userLinks = [
-  { label: "Bingo", to: "/dashboard/bingo", icon: "i-heroicons-play" },
   { label: "Profile", to: "/dashboard/profile", icon: "i-heroicons-user" },
+  { label: "Bingo", to: "/dashboard/bingo", icon: "i-heroicons-play" },
+
   {
     label: "Challenges",
     to: "/dashboard/challenges",
