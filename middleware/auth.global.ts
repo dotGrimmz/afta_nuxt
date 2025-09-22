@@ -11,7 +11,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   const supabase = useSupabaseClient();
   const user = useSupabaseUser();
-
+  console.log("super user", user.value);
   if (!to.path.startsWith("/dashboard")) return; // only guard dashboard
 
   // 🔑 Check authenticated user
