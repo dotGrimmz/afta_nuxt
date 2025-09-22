@@ -137,6 +137,11 @@ const adminLinks = [
 const userLinks = [
   { label: "Bingo", to: "/dashboard/bingo", icon: "i-heroicons-play" },
   { label: "Profile", to: "/dashboard/profile", icon: "i-heroicons-user" },
+  {
+    label: "Challenges",
+    to: "/dashboard/challenges",
+    icon: "i-heroicons-calendar-days",
+  },
 ];
 
 const isActive = (to: string) => route.path.endsWith(to);

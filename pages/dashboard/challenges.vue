@@ -1,3 +1,7 @@
 <template>
-  <h1>this is the challenges page</h1>
+  <CurrencyExchange />
 </template>
+
+<script setup>
+import CurrencyExchange from "~/components/challenges/CurrencyExchange.vue";
+</script>
