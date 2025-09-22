@@ -14,6 +14,7 @@ import { checkBingoClient } from "~/utils/bingo/checkBingoClient";
 import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { WatchStopHandle } from "vue";
 import { useBingoStorage } from "~/composables/useBingoStorage";
+import DrawBalls from "~/components/bingo/DrawBalls.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -25,6 +26,7 @@ const { joinGame, getState, callBingo, narrowGame } = useBingo();
 const contestant = ref<ContestantType | null>(null);
 const cards = ref<BingoCard[]>([]);
 const draws = ref<number[]>([]);
+const disableInitialDrawAnimation = ref(false);
 
 const currentGame = ref<BingoGameRow | null>(null);
 const gameLobby = computed(() => currentGame.value?.status === "lobby");
@@ -55,10 +57,46 @@ const calling = ref(false);
 const message = ref("");
 const showBingoModal = ref(false);
 const showAnimation = ref(false);
+const showStartAnimation = ref(false);
+const showAdminEndAnimation = ref(false);
+const calledBingoSuccessfully = ref(false);
+const gameStatus = computed(() => currentGame.value?.status ?? null);
+let startAnimationTimeout: ReturnType<typeof setTimeout> | null = null;
+let endAnimationTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const { $toast } = useNuxtApp();
 
 const subscriptions: RealtimeChannel[] = [];
+const getDrawStorageKey = (gameId: string) => `bingo-draws-${gameId}`;
+
+const loadStoredDraws = (gameId: string): number[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(getDrawStorageKey(gameId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value) => typeof value === "number")
+      : [];
+  } catch (err) {
+    console.warn("Failed to load stored draws", err);
+    return [];
+  }
+};
+
+const persistStoredDraws = (gameId: string, numbers: number[]) => {
+  if (typeof window === "undefined") return;
+  try {
+    const sanitized = numbers.filter((value) => typeof value === "number");
+    window.localStorage.setItem(
+      getDrawStorageKey(gameId),
+      JSON.stringify(sanitized)
+    );
+  } catch (err) {
+    console.warn("Failed to persist draws", err);
+  }
+};
+
 const refreshGameRow = async (gameId: string) => {
   const { data, error } = await supabase
     .from("bingo_games")
@@ -102,6 +140,17 @@ onMounted(async () => {
       return;
     }
 
+    const storedDraws = loadStoredDraws(gameId);
+    if (storedDraws.length) {
+      draws.value.splice(0, draws.value.length, ...storedDraws);
+      disableInitialDrawAnimation.value = true;
+      for (const card of cards.value) {
+        restoreCardGrid(card, draws.value);
+      }
+    } else {
+      disableInitialDrawAnimation.value = false;
+    }
+
     // assign server game state to local game state
     const state = await getState(gameId);
     console.log("gamestate from mount ", state);
@@ -130,7 +179,30 @@ onMounted(async () => {
     //const gameLobby = computed(() => currentGame.value?.status === "lobby");
 
     // hydrate draws without replacing the array ref
-    draws.value.splice(0, draws.value.length, ...state.draws.map((d) => d)); // if state.draws is already number[]
+    const serverDraws = state.draws.map((d) => d);
+    if (!disableInitialDrawAnimation.value) {
+      draws.value.splice(0, draws.value.length, ...serverDraws);
+    } else {
+      const serverSet = new Set(serverDraws);
+      const filtered = draws.value.filter((num) => serverSet.has(num));
+      const merged = [...filtered];
+      const seen = new Set(filtered);
+      for (const num of serverDraws) {
+        if (!seen.has(num)) {
+          merged.push(num);
+          seen.add(num);
+        }
+      }
+      draws.value.splice(0, draws.value.length, ...merged);
+    }
+
+    if (currentGame.value?.id) {
+      persistStoredDraws(currentGame.value.id, draws.value);
+    }
+
+    if (serverDraws.length === 0) {
+      disableInitialDrawAnimation.value = false;
+    }
 
     // subscribe after hydration
     subscribeToDraws(gameId);
@@ -234,9 +306,16 @@ const subscribeToContestants = (gameId: string) => {
 onBeforeUnmount(() => {
   subscriptions.forEach((sub) => supabase.removeChannel(sub));
   subscriptions.length = 0;
+  if (startAnimationTimeout) {
+    clearTimeout(startAnimationTimeout);
+    startAnimationTimeout = null;
+  }
+  if (endAnimationTimeout) {
+    clearTimeout(endAnimationTimeout);
+    endAnimationTimeout = null;
+  }
 });
 
-const lastSixDesc = computed(() => draws.value.slice(-6).reverse());
 // const autoMarkOn = ref<boolean>(autoMarkEnabled.value ?? false);
 const autoMarkOn = ref(autoMarkEnabled.value ?? false);
 
@@ -251,6 +330,41 @@ watch(
 watch(autoMarkOn, (val) => {
   autoMark.value = val; // keep composable in sync
 });
+
+watch(gameStatus, (nextStatus, prevStatus) => {
+  if (prevStatus === "lobby" && nextStatus === "active") {
+    if (startAnimationTimeout) clearTimeout(startAnimationTimeout);
+    showStartAnimation.value = true;
+    startAnimationTimeout = setTimeout(() => {
+      showStartAnimation.value = false;
+      startAnimationTimeout = null;
+    }, 3000);
+  }
+
+  if (
+    prevStatus === "active" &&
+    nextStatus === "ended" &&
+    !calledBingoSuccessfully.value &&
+    !isWinner.value
+  ) {
+    if (endAnimationTimeout) clearTimeout(endAnimationTimeout);
+    showAdminEndAnimation.value = true;
+    endAnimationTimeout = setTimeout(() => {
+      showAdminEndAnimation.value = false;
+      endAnimationTimeout = null;
+    }, 3000);
+  }
+});
+
+watch(
+  draws,
+  (values) => {
+    const id = gameId.value;
+    if (!id) return;
+    persistStoredDraws(id, values);
+  },
+  { deep: true }
+);
 
 let channel: RealtimeChannel | null = null;
 let stopReadyWatch: WatchStopHandle | null = null;
@@ -378,6 +492,7 @@ const handleCallBingo = async (cardId: string) => {
     );
 
     if (data) {
+      calledBingoSuccessfully.value = true;
       await refreshGameRow(data.game.id);
       showAnimation.value = true;
       message.value = `Bingo! ${data.result.username} Won ${data.result.payout} 💎`;
@@ -420,6 +535,30 @@ onUnmounted(() => {
   <main class="p-4 space-y-6">
     <!-- Jet (only rendered when animation starts) -->
     <section class="relative w-full h-screen">
+      <Transition name="start-flash">
+        <div
+          v-if="showStartAnimation"
+          class="absolute inset-0 z-30 flex items-center justify-center bg-black/70 pointer-events-none"
+        >
+          <div
+            class="text-white text-4xl sm:text-5xl font-extrabold tracking-wide animate-pulse"
+          >
+            Game Starting!
+          </div>
+        </div>
+      </Transition>
+      <Transition name="end-flash">
+        <div
+          v-if="showAdminEndAnimation"
+          class="absolute inset-0 z-30 flex items-center justify-center bg-black/70 pointer-events-none"
+        >
+          <div
+            class="text-white text-4xl sm:text-5xl font-extrabold tracking-wide"
+          >
+            Game Ended By Host
+          </div>
+        </div>
+      </Transition>
       <BingoWin :visible="showAnimation" />
 
       <div v-if="loading" class="text-gray-400">Loading your cards...</div>
@@ -472,25 +611,19 @@ onUnmounted(() => {
             }}
           </h2>
 
-          <div v-if="!gameEnded" class="flex flex-wrap justify-between">
-            <div
-              v-for="(num, idx) in lastSixDesc"
-              :key="`${num}-${idx}`"
-              class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full bg-blue-600 text-white font-bold text-base md:text-lg shadow-md select-none"
-              :class="{
-                'animate-pulse ring-2 ring-white/70 scale-105': idx === 0,
-              }"
-            >
-              {{ num }}
-            </div>
+          <div
+            v-if="!gameEnded"
+            class="flex flex-wrap w-full items-center gap-4"
+          >
+            <DrawBalls
+              :numbers="draws"
+              :disable-initial-animation="disableInitialDrawAnimation"
+              class="flex-grow"
+            />
             <!-- "All" button that toggles modal -->
-            <button
-              type="button"
-              class="h-10 sm:h-11 md:h-12 aspect-square flex items-center justify-center rounded-full border border-blue-600 text-blue-600 font-semibold text-sm md:text-base hover:bg-blue-600 hover:text-white transition"
-              @click="showBingoModal = true"
-            >
+            <UButton type="button" @click="showBingoModal = true">
               All
-            </button>
+            </UButton>
           </div>
 
           <BingoModal
@@ -511,12 +644,6 @@ onUnmounted(() => {
               'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
             }"
           >
-            <!-- <BingoCard
-            :autoMarkEnabled="autoMarkEnabled"
-            :game-ended="gameEnded"
-            :card="card"
-            :draws="draws"
-          /> -->
             <BingoCard
               ref="bingoCardEl"
               :card="card"
@@ -576,3 +703,28 @@ onUnmounted(() => {
     </section>
   </main>
 </template>
+
+<style scoped>
+.start-flash-enter-active,
+.start-flash-leave-active,
+.end-flash-enter-active,
+.end-flash-leave-active {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.start-flash-enter-from,
+.start-flash-leave-to,
+.end-flash-enter-from,
+.end-flash-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.start-flash-enter-to,
+.start-flash-leave-from,
+.end-flash-enter-to,
+.end-flash-leave-from {
+  opacity: 1;
+  transform: scale(1);
+}
+</style>

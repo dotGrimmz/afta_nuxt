@@ -1075,7 +1075,7 @@ console.log("all ready", allReady);
           </li>
         </ul>
       </section>
+      <BingoAdminTool v-if="isAdmin" />
     </section>
   </main>
 </template>
-<!-- :draws="stateMap[game.id]?.draws || []" -->
