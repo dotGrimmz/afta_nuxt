@@ -12,10 +12,12 @@
   "dependencies": {
     "@nuxt/image": "^1.11.0",
     "@nuxt/ui": "^3.3.0",
+    "@nuxtjs/color-mode": "^3.5.2",
     "@nuxtjs/storybook": "^8.4.1",
     "@nuxtjs/supabase": "^1.5.2",
     "@supa-kit/auth-ui-vue": "^0.4.3",
     "@supabase/auth-ui-shared": "^0.1.8",
+    "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.56.0",
     "canvas-confetti": "^1.9.3",
     "cheerio": "^1.1.0",
