@@ -122,7 +122,8 @@ const adminLinks = [
     to: "/dashboard/challenges",
     icon: "i-heroicons-calendar-days",
   },
-  { label: "Games", to: "/dashboard/games", icon: "i-heroicons-play" },
+  { label: "Bingo", to: "/dashboard/bingo", icon: "i-heroicons-play" },
+  { label: "Trivia", to: "/dashboard/trivia", icon: "i-heroicons-play" },
 
   { label: "Users", to: "/dashboard/users", icon: "i-heroicons-user-group" },
   {
@@ -134,7 +135,7 @@ const adminLinks = [
 ];
 
 const userLinks = [
-  { label: "Play", to: "/dashboard/games", icon: "i-heroicons-play" },
+  { label: "Bingo", to: "/dashboard/bingo", icon: "i-heroicons-play" },
   { label: "Profile", to: "/dashboard/profile", icon: "i-heroicons-user" },
 ];
 
