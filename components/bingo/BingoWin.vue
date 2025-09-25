@@ -206,7 +206,7 @@ const spawnDiamond = () => {
 // Button redirect
 const handleReturn = () => {
   if (profile.value) {
-    router.push("/dashboard/games");
+    router.push("/dashboard/bingo");
   } else {
     router.push("/bingo/play");
   }

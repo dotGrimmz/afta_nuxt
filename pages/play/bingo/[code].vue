@@ -481,14 +481,14 @@ const handleCallBingo = async (cardId: string) => {
 
     console.log("current game prior calling bingo:", currentGame.value);
 
-    if (!currentGame.value?.payout)
+    if (currentGame.value?.status === "ended")
       return (message.value = "Game Not Started!");
     const data: CallBingoResponse = await callBingo(
       contestant.value.game_id,
       cardId,
       contestant.value.id,
       contestant.value.username,
-      currentGame.value.payout
+      currentGame.value?.payout
     );
 
     if (data) {
@@ -555,7 +555,7 @@ onUnmounted(() => {
           <div
             class="text-white text-4xl sm:text-5xl font-extrabold tracking-wide"
           >
-            Game Ended By Host
+            Game Ended
           </div>
         </div>
       </Transition>
@@ -580,7 +580,7 @@ onUnmounted(() => {
               label="Home"
               size="sm"
               variant="link"
-              href="/dashboard/games"
+              href="/dashboard/profile"
             />
           </div>
         </div>
