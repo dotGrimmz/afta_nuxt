@@ -16,6 +16,7 @@
           type="number"
           min="0"
           icon="i-heroicons-banknotes-20-solid"
+          class="w-full"
         />
       </UFormGroup>
 
@@ -28,6 +29,7 @@
           type="number"
           min="0"
           icon="i-heroicons-sparkles-20-solid"
+          class="w-full"
         />
       </UFormGroup>
     </div>
