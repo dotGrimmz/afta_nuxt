@@ -20,59 +20,58 @@
 
     <main class="relative z-10">
       <section
-        id="hero"
-        class="relative flex min-h-screen items-center justify-center overflow-hidden px-6 text-center"
+        class="relative pt-4 pb-6 flex fit-content justify-center overflow-hidden px-6 text-center"
       >
         <div class="absolute inset-0 -z-10">
-          <LightRays
+          <!-- <Orb
             class="!h-full !w-full"
             class-name="-z-10"
-            rays-origin="top-center"
-            rays-color="#00ffff"
-            :rays-speed="1.2"
-            :light-spread="2"
-            :ray-length="3"
-            :follow-mouse="false"
-            :noise-amount="0.1"
-            :distortion="0.2"
+            :rotateOnHover="false"
+            :hue="390"
+            :forceHoverState="false"
+          /> -->
+          <DarkVeil
+            :hue-shift="58"
+            :noise-intensity="0"
+            :scanline-intensity="0"
+            :speed="2.5"
+            :scanline-frequency="0"
+            :warp-amount="0"
+            :resolution-scale="1"
           />
         </div>
 
         <div class="relative z-10 flex max-w-3xl flex-col items-center">
-          <p class="text-base uppercase tracking-[0.4em] text-cyan-300/70">
-            Welcome to AFTA
-          </p>
-          <h1 class="mt-6 text-4xl font-bold leading-tight md:text-6xl">
-            Explore the future galaxy of collaborative trading and analytics.
-          </h1>
-          <p class="mt-6 text-lg text-white/80 md:text-xl">
-            Scroll to discover how our community leverages real-time insights
-            and smart automation to stay ahead of the market.
-          </p>
-          <NuxtLink
-            to="#features"
-            class="mt-10 rounded-full border border-white/40 px-6 py-3 text-sm font-semibold uppercase tracking-widest transition-colors hover:border-cyan-400 hover:bg-cyan-400/20"
-          >
-            Learn More
-          </NuxtLink>
+          <NuxtImg src="/images/logo/afta-logo-2.png" alt="afta-logo" />
+          <NuxtImg
+            :width="480"
+            :height="120"
+            alt="grim-logo"
+            src="/images/logo/grim-logo.png"
+            class="mt-6 w-72 h-20 rounded-full border-2 border-[#05DF72] bg-white/10 ring-2 ring-white/20 object-contain shadow-lg"
+          />
         </div>
       </section>
 
+      <!-- <section class="h-10 w-full bg-white"></section> -->
       <section
         id="bosses"
         ref="bossesSectionRef"
-        class="relative z-20 px-6 pb-24 pt-16 text-center"
+        class="relative z-20 px-6 pt-16 text-center"
       >
+        <div class="absolute inset-0 -z-10">
+          <Galaxy :hue-shift="330" :saturation="1" :glow-intensity="0.45" />
+        </div>
         <p class="text-sm uppercase tracking-[0.5em] text-cyan-200/80">
           Bosses of the Week
         </p>
         <h2 class="mt-4 text-3xl font-semibold md:text-4xl">
           Recognizing this week’s top supporters
         </h2>
-        <p class="mt-4 mx-auto max-w-2xl text-base text-white/70">
+        <!-- <p class="mt-4 mx-auto max-w-2xl text-base text-white/70">
           Honoring the members pushing AFTA forward. Your guidance, energy, and
           consistency keep the desk sharp.
-        </p>
+        </p> -->
 
         <div
           class="mt-16 flex flex-col items-center gap-10 md:flex-row md:items-end md:justify-center"
@@ -133,9 +132,10 @@
             </div>
           </div>
         </div>
+        <PollsPollSection />
       </section>
 
-      <section id="features" class="min-h-screen px-6 py-24">
+      <section id="features" class="min-h-screen px-6">
         <!--    <div
           class="mx-auto flex max-w-5xl flex-col gap-12 md:grid md:grid-cols-2"
         >
@@ -164,9 +164,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import Galaxy from "~/components/vue-bits/Backgrounds/Galaxy/Galaxy.vue";
+import DarkVeil from "~/components/vue-bits/Backgrounds/DarkVeil/DarkVeil.vue";
+import ElectricBorder from "~/components/vue-bits/Animations/ElectricBorder/ElectricBorder.vue";
 
 import LightRays from "~/components/vue-bits/Backgrounds/LightRays/LightRays.vue";
-
+import Orb from "~/components/vue-bits/Backgrounds/Orb/Orb.vue";
 const isNavVisible = ref(false);
 const NAV_TRIGGER_Y = 160;
 
@@ -266,7 +269,7 @@ onMounted(() => {
     {
       threshold: 0.35,
       rootMargin: "0px 0px -10% 0px",
-    },
+    }
   );
 
   bossesObserver.observe(bossesSectionRef.value);

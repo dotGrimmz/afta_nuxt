@@ -68,5 +68,21 @@
     50%     { box-shadow: 0 0 0 8px rgba(16,185,129,0) }
   }
   .animate-glow-free { animation: glow-free 2.2s ease-in-out infinite; }
+  .red-outline {outline: 1px solid red}
+  .blur-bottom-1rem {
+  position: relative;
+}
+
+.blur-bottom-1rem::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1rem;
+  backdrop-filter: blur(8px); /* adjust blur strength */
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: none;
+}
 }
 
