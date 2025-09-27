@@ -80,6 +80,7 @@
             v-for="supporter in supporters"
             :key="supporter.name"
             class="relative flex flex-col items-center text-center"
+            :class="supporter.orderClass"
           >
             <div
               class="relative flex items-center justify-center"
@@ -132,7 +133,33 @@
             </div>
           </div>
         </div>
-        <PollsPollSection />
+        @ts-ignore
+        <InfiniteScroll
+          :items="items"
+          width="30rem"
+          max-height="50rem"
+          :item-min-height="300"
+          :is-tilted="true"
+          tilt-direction="left"
+          :autoplay="true"
+          :autoplay-speed="0.5"
+          autoplay-direction="down"
+          :pause-on-hover="false"
+        />
+        <div
+          class="mt-10 flex flex-col items-center gap-3 text-xs uppercase tracking-[0.25em] text-white/60 md:flex-row md:justify-center md:gap-6 md:text-sm"
+        >
+          <span>© {{ trademarkYear }} AFTA LTD. TRADEMARK</span>
+          <span class="hidden h-3 w-px bg-white/30 md:inline-block" aria-hidden="true" />
+          <span>Powered by dotGrimmz</span>
+          <span class="hidden h-3 w-px bg-white/30 md:inline-block" aria-hidden="true" />
+          <a
+            href="mailto:rakeemxng@gmail.com"
+            class="text-cyan-300 transition-colors hover:text-cyan-100"
+          >
+            Contact Me
+          </a>
+        </div>
       </section>
 
       <section id="features" class="min-h-screen px-6">
@@ -162,30 +189,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { defineComponent, h, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import Galaxy from "~/components/vue-bits/Backgrounds/Galaxy/Galaxy.vue";
 import DarkVeil from "~/components/vue-bits/Backgrounds/DarkVeil/DarkVeil.vue";
-import ElectricBorder from "~/components/vue-bits/Animations/ElectricBorder/ElectricBorder.vue";
+import InfiniteScroll from "~/components/vue-bits/Components/InfiniteScroll/InfiniteScroll.vue";
 
-import LightRays from "~/components/vue-bits/Backgrounds/LightRays/LightRays.vue";
-import Orb from "~/components/vue-bits/Backgrounds/Orb/Orb.vue";
 const isNavVisible = ref(false);
 const NAV_TRIGGER_Y = 160;
 
 const supporters = [
-  {
-    name: "Leigh Anderson",
-    image: "/images/bosses/Leigh.jpg",
-    title: "3rd Place",
-    note: "Daily liquidity drops and late-session guidance.",
-    auraClass:
-      "bg-gradient-to-b from-orange-200/70 via-amber-400/60 to-orange-500/40",
-    wrapperClass: "md:translate-y-10",
-    imageClass: "h-36 w-36 md:h-44 md:w-44",
-    delay: 0,
-    initialAuraScale: "scale(0.5)",
-  },
   {
     name: "Hunny Coffee",
     image: "/images/bosses/hunny_coffee.jpg",
@@ -195,7 +208,8 @@ const supporters = [
       "bg-gradient-to-b from-yellow-200/80 via-amber-300/70 to-yellow-500/50",
     wrapperClass: "md:-mt-6",
     imageClass: "h-44 w-44 md:h-56 md:w-56",
-    delay: 240,
+    orderClass: "md:order-2",
+    delay: 0,
     initialAuraScale: "scale(0.4)",
   },
   {
@@ -207,10 +221,98 @@ const supporters = [
       "bg-gradient-to-b from-slate-100/70 via-slate-400/60 to-slate-600/40",
     wrapperClass: "md:translate-y-6",
     imageClass: "h-40 w-40 md:h-48 md:w-48",
+    orderClass: "md:order-3",
     delay: 120,
     initialAuraScale: "scale(0.45)",
   },
+  {
+    name: "Leigh Anderson",
+    image: "/images/bosses/Leigh.jpg",
+    title: "3rd Place",
+    note: "Daily liquidity drops and late-session guidance.",
+    auraClass:
+      "bg-gradient-to-b from-orange-200/70 via-amber-400/60 to-orange-500/40",
+    wrapperClass: "md:translate-y-10",
+    imageClass: "h-36 w-36 md:h-44 md:w-44",
+    orderClass: "md:order-1",
+    delay: 240,
+    initialAuraScale: "scale(0.5)",
+  },
 ] as const;
+
+interface ImageItemOptions {
+  objectPosition?: string;
+}
+
+const createImageItem = (
+  src: string,
+  alt: string,
+  options: ImageItemOptions = {}
+) => ({
+  content: defineComponent({
+    name: "InfiniteScrollImageItem",
+    setup() {
+      return () =>
+        h("img", {
+          src,
+          alt,
+          class:
+            "h-full w-full rounded-2xl border border-white/10 object-cover shadow-lg shadow-black/40",
+          style: options.objectPosition
+            ? { objectPosition: options.objectPosition }
+            : undefined,
+          loading: "lazy",
+        });
+    },
+  }),
+});
+
+const createTextItem = (title: string, body: string) => ({
+  content: defineComponent({
+    name: "InfiniteScrollTextItem",
+    setup() {
+      return () =>
+        h(
+          "div",
+          {
+            class:
+              "flex h-full w-full flex-col justify-center gap-3 rounded-2xl bg-white/5 p-6 text-left",
+          },
+          [
+            h(
+              "p",
+              { class: "text-sm uppercase tracking-[0.25em] text-cyan-200/80" },
+              title
+            ),
+            h("p", { class: "text-lg font-semibold" }, body),
+          ]
+        );
+    },
+  }),
+});
+
+const items = [
+  createImageItem("/images/flyers/bingo.png", "AFTA bingo night flyer"),
+  createImageItem(
+    "/images/flyers/church_flyer.png",
+    "Animated Grimmz event poster",
+    { objectPosition: "left center" }
+  ),
+  // createTextItem(
+  //   "Bossboard",
+  //   "Catch the nightly recap from Grimmz and keep your trading prep sharp."
+  // ),
+  // createImageItem(
+  //   "/images/flyers/live_grimmz.png",
+  //   "Live Grimmz session announcement"
+  // ),
+  // createTextItem(
+  //   "Community Wins",
+  //   "Shoutouts to the crew stacking plays and sharing insight in the war room."
+  // ),
+];
+
+const trademarkYear = new Date().getFullYear();
 
 const bossesSectionRef = ref<HTMLElement | null>(null);
 const bossesVisible = ref(false);
