@@ -94,6 +94,8 @@ const props = withDefaults(defineProps<LightRaysProps>(), {
   className: "",
 });
 
+const isClient = typeof window !== "undefined";
+
 const containerRef = useTemplateRef<HTMLDivElement>("containerRef");
 
 const uniformsRef = ref<WebGLUniforms | null>(null);
@@ -112,7 +114,7 @@ const rgbColor = computed<[number, number, number]>(() =>
 );
 const pulsatingValue = computed<number>(() => (props.pulsating ? 1.0 : 0.0));
 const devicePixelRatio = computed<number>(() =>
-  Math.min(window.devicePixelRatio || 1, 2),
+  isClient ? Math.min(window.devicePixelRatio || 1, 2) : 1,
 );
 
 const hexToRgb = (hex: string): [number, number, number] => {
@@ -156,8 +158,13 @@ const debouncedUpdatePlacement = (() => {
   let timeoutId: number | null = null;
 
   return (updateFn: () => void): void => {
+    if (!isClient) {
+      updateFn();
+      return;
+    }
+
     if (timeoutId !== null) {
-      clearTimeout(timeoutId);
+      window.clearTimeout(timeoutId);
     }
     timeoutId = window.setTimeout(() => {
       updateFn();
@@ -269,6 +276,7 @@ void main() {
 }`;
 
 const initializeWebGL = async (): Promise<void> => {
+  if (!isClient) return;
   if (!containerRef.value) return;
 
   await nextTick();
@@ -381,7 +389,9 @@ const initializeWebGL = async (): Promise<void> => {
       debouncedUpdatePlacement(updatePlacement);
     };
 
-    window.addEventListener("resize", handleResize, { passive: true });
+    if (isClient) {
+      window.addEventListener("resize", handleResize, { passive: true });
+    }
     updatePlacement();
     animationIdRef.value = requestAnimationFrame(loop);
 
@@ -391,7 +401,9 @@ const initializeWebGL = async (): Promise<void> => {
         animationIdRef.value = null;
       }
 
-      window.removeEventListener("resize", handleResize);
+      if (isClient) {
+        window.removeEventListener("resize", handleResize);
+      }
 
       if (resizeTimeoutRef.value) {
         clearTimeout(resizeTimeoutRef.value);
@@ -425,6 +437,7 @@ const initializeWebGL = async (): Promise<void> => {
 
 let mouseThrottleId: number | null = null;
 const handleMouseMove = (e: MouseEvent): void => {
+  if (!isClient) return;
   if (!containerRef.value || !rendererRef.value) return;
 
   if (mouseThrottleId) return;
@@ -441,7 +454,7 @@ const handleMouseMove = (e: MouseEvent): void => {
 };
 
 onMounted((): void => {
-  if (!containerRef.value) return;
+  if (!isClient || !containerRef.value) return;
 
   observerRef.value = new IntersectionObserver(
     (entries: IntersectionObserverEntry[]): void => {
@@ -458,6 +471,7 @@ onMounted((): void => {
 });
 
 watch(isVisible, (newVisible: boolean): void => {
+  if (!isClient) return;
   if (newVisible && containerRef.value) {
     if (cleanupFunctionRef.value) {
       cleanupFunctionRef.value();
@@ -484,9 +498,10 @@ watch(
     () => props.saturation,
     () => props.mouseInfluence,
     () => props.noiseAmount,
-    () => props.distortion,
+  () => props.distortion,
   ],
   (): void => {
+    if (!isClient) return;
     if (!uniformsRef.value || !containerRef.value || !rendererRef.value) return;
 
     const u = uniformsRef.value;
@@ -519,6 +534,7 @@ watch(
 watch(
   () => props.followMouse,
   (newFollowMouse: boolean): void => {
+    if (!isClient) return;
     if (newFollowMouse) {
       window.addEventListener("mousemove", handleMouseMove, { passive: true });
     } else {
@@ -533,6 +549,7 @@ watch(
 );
 
 onUnmounted((): void => {
+  if (!isClient) return;
   if (observerRef.value) {
     observerRef.value.disconnect();
     observerRef.value = null;
