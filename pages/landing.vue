@@ -133,7 +133,6 @@
             </div>
           </div>
         </div>
-        @ts-ignore
         <InfiniteScroll
           :items="items"
           width="30rem"
@@ -150,9 +149,15 @@
           class="mt-10 flex flex-col items-center gap-3 text-xs uppercase tracking-[0.25em] text-white/60 md:flex-row md:justify-center md:gap-6 md:text-sm"
         >
           <span>© {{ trademarkYear }} AFTA LTD. TRADEMARK</span>
-          <span class="hidden h-3 w-px bg-white/30 md:inline-block" aria-hidden="true" />
+          <span
+            class="hidden h-3 w-px bg-white/30 md:inline-block"
+            aria-hidden="true"
+          />
           <span>Powered by dotGrimmz</span>
-          <span class="hidden h-3 w-px bg-white/30 md:inline-block" aria-hidden="true" />
+          <span
+            class="hidden h-3 w-px bg-white/30 md:inline-block"
+            aria-hidden="true"
+          />
           <a
             href="mailto:rakeemxng@gmail.com"
             class="text-cyan-300 transition-colors hover:text-cyan-100"
