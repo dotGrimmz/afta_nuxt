@@ -186,7 +186,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 const DEFAULT_PLAYER_COUNT = 12;
 const DEFAULT_PAYOUT_PERCENT = 0.8;
@@ -204,6 +204,93 @@ const cardsOwned = ref<number>(DEFAULT_CARDS_OWNED);
 const copyFeedback = ref("");
 let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
+const STORAGE_KEY = "bingo-admin-tool-state";
+type PersistedState = {
+  playerCount: number | null;
+  ticketPrice: number | null;
+  payoutPercent: number;
+  payout: number;
+  house: number;
+  gross: number;
+  cardsOwned: number;
+};
+
+let isHydrating = true;
+
+const persistState = () => {
+  if (isHydrating || typeof window === "undefined") return;
+
+  const payload: PersistedState = {
+    playerCount: playerCount.value ?? null,
+    ticketPrice: ticketPrice.value ?? null,
+    payoutPercent: payoutPercent.value,
+    payout: payout.value,
+    house: house.value,
+    gross: gross.value,
+    cardsOwned: cardsOwned.value,
+  };
+
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch (err) {
+    console.warn("Unable to persist bingo admin tool state", err);
+  }
+};
+
+const restorePersistedState = () => {
+  if (typeof window === "undefined") {
+    isHydrating = false;
+    return;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+
+    const parsed = JSON.parse(raw) as Partial<PersistedState>;
+
+    if (parsed.playerCount !== undefined) {
+      playerCount.value = parsed.playerCount;
+    }
+    if (parsed.ticketPrice !== undefined) {
+      ticketPrice.value = parsed.ticketPrice;
+    }
+    if (parsed.payoutPercent !== undefined) {
+      payoutPercent.value = parsed.payoutPercent;
+    }
+    if (parsed.payout !== undefined) {
+      payout.value = parsed.payout;
+    }
+    if (parsed.house !== undefined) {
+      house.value = parsed.house;
+    }
+    if (parsed.gross !== undefined) {
+      gross.value = parsed.gross;
+    }
+    if (parsed.cardsOwned !== undefined) {
+      cardsOwned.value = parsed.cardsOwned;
+    }
+  } catch (err) {
+    console.warn("Unable to restore bingo admin tool state", err);
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch (removeErr) {
+      console.warn("Unable to clear persisted bingo admin tool state", removeErr);
+    }
+  } finally {
+    isHydrating = false;
+  }
+};
+
+const clearPersistedState = () => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch (err) {
+    console.warn("Unable to clear bingo admin tool state", err);
+  }
+};
+
 const scheduleCopyFeedbackClear = () => {
   if (copyTimeout) clearTimeout(copyTimeout);
   copyTimeout = setTimeout(() => {
@@ -211,6 +298,10 @@ const scheduleCopyFeedbackClear = () => {
     copyTimeout = null;
   }, 2000);
 };
+
+onMounted(() => {
+  restorePersistedState();
+});
 
 const numberFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 0,
@@ -477,7 +568,24 @@ const summary = computed(() => {
   )}, and the house keeps ${formatAmount(house.value)}. ${oddsInfo}`.trim();
 });
 
+watch(
+  [
+    playerCount,
+    ticketPrice,
+    payoutPercent,
+    payout,
+    house,
+    gross,
+    cardsOwned,
+  ],
+  () => {
+    persistState();
+  },
+  { flush: "post" }
+);
+
 const resetForm = () => {
+  isHydrating = true;
   playerCount.value = DEFAULT_PLAYER_COUNT;
   ticketPrice.value = null;
   payoutPercent.value = DEFAULT_PAYOUT_PERCENT;
@@ -491,6 +599,10 @@ const resetForm = () => {
     clearTimeout(copyTimeout);
     copyTimeout = null;
   }
+  clearPersistedState();
+  nextTick(() => {
+    isHydrating = false;
+  });
 };
 
 const copySummary = async () => {

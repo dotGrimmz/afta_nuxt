@@ -23,13 +23,6 @@
         class="relative pt-4 pb-6 flex fit-content justify-center overflow-hidden px-6 text-center"
       >
         <div class="absolute inset-0 -z-10">
-          <!-- <Orb
-            class="!h-full !w-full"
-            class-name="-z-10"
-            :rotateOnHover="false"
-            :hue="390"
-            :forceHoverState="false"
-          /> -->
           <DarkVeil
             :hue-shift="58"
             :noise-intensity="0"
@@ -41,19 +34,20 @@
           />
         </div>
 
-        <div class="relative z-10 flex max-w-3xl flex-col items-center">
+        <div
+          class="relative z-10 flex max-w-3xl flex-col justify-center items-center"
+        >
           <NuxtImg src="/images/logo/afta-logo-2.png" alt="afta-logo" />
-          <NuxtImg
+          <!-- <NuxtImg
             :width="480"
             :height="120"
             alt="grim-logo"
             src="/images/logo/grim-logo.png"
-            class="mt-6 w-72 h-20 rounded-full border-2 border-[#05DF72] bg-white/10 ring-2 ring-white/20 object-contain shadow-lg"
-          />
+            class="mt-6 w-72 h-20 rounded border-2 border-[#05DF72] bg-white/10 ring-2 ring-white/20 object-contain shadow-lg"
+          /> -->
         </div>
       </section>
 
-      <!-- <section class="h-10 w-full bg-white"></section> -->
       <section
         id="bosses"
         ref="bossesSectionRef"
@@ -68,10 +62,6 @@
         <h2 class="mt-4 text-3xl font-semibold md:text-4xl">
           Recognizing this week’s top supporters
         </h2>
-        <!-- <p class="mt-4 mx-auto max-w-2xl text-base text-white/70">
-          Honoring the members pushing AFTA forward. Your guidance, energy, and
-          consistency keep the desk sharp.
-        </p> -->
 
         <div
           class="mt-16 flex flex-col items-center gap-10 md:flex-row md:items-end md:justify-center"
@@ -133,7 +123,6 @@
             </div>
           </div>
         </div>
-        @ts-ignore
         <InfiniteScroll
           :items="items"
           width="30rem"
@@ -147,12 +136,18 @@
           :pause-on-hover="false"
         />
         <div
-          class="mt-10 flex flex-col items-center gap-3 text-xs uppercase tracking-[0.25em] text-white/60 md:flex-row md:justify-center md:gap-6 md:text-sm"
+          class="mt-10 flex flex-col items-center gap-3 text-xs uppercase tracking-[0.25em] h-[200px] text-white/60 md:flex-row md:justify-center md:gap-6 md:text-sm"
         >
           <span>© {{ trademarkYear }} AFTA LTD. TRADEMARK</span>
-          <span class="hidden h-3 w-px bg-white/30 md:inline-block" aria-hidden="true" />
+          <span
+            class="hidden h-3 w-px bg-white/30 md:inline-block"
+            aria-hidden="true"
+          />
           <span>Powered by dotGrimmz</span>
-          <span class="hidden h-3 w-px bg-white/30 md:inline-block" aria-hidden="true" />
+          <span
+            class="hidden h-3 w-px bg-white/30 md:inline-block"
+            aria-hidden="true"
+          />
           <a
             href="mailto:rakeemxng@gmail.com"
             class="text-cyan-300 transition-colors hover:text-cyan-100"
@@ -160,29 +155,6 @@
             Contact Me
           </a>
         </div>
-      </section>
-
-      <section id="features" class="min-h-screen px-6">
-        <!--    <div
-          class="mx-auto flex max-w-5xl flex-col gap-12 md:grid md:grid-cols-2"
-        >
-          <article class="space-y-4">
-            <h2 class="text-3xl font-semibold">Modular Insights</h2>
-            <p class="text-white/80">
-              Plug into a library of AI-assisted trading strategies, customize
-              them, and deploy with confidence. Our dashboards keep you focused
-              on the signals that matter most.
-            </p>
-          </article>
-          <article class="space-y-4">
-            <h2 class="text-3xl font-semibold">Realtime Collaboration</h2>
-            <p class="text-white/80">
-              Invite teammates, rehearse different market scenarios, and share
-              findings instantly. Coordinate moves across desks regardless of
-              where you trade from.
-            </p>
-          </article>
-        </div>-->
       </section>
     </main>
   </div>
