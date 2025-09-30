@@ -48,11 +48,7 @@
         </div>
       </section>
 
-      <section
-        id="bosses"
-        ref="bossesSectionRef"
-        class="relative z-20 px-6 pt-16 text-center"
-      >
+      <section id="bosses" class="relative z-20 px-6 pt-16 text-center">
         <div class="absolute inset-0 -z-10">
           <Galaxy :hue-shift="330" :saturation="1" :glow-intensity="0.45" />
         </div>
@@ -80,13 +76,9 @@
                 class="absolute inset-0 -z-10 rounded-full blur-2xl transition-all duration-700 ease-out"
                 :class="supporter.auraClass"
                 :style="{
-                  transform: bossesVisible
-                    ? 'scale(1)'
-                    : supporter.initialAuraScale,
-                  opacity: bossesVisible ? '1' : '0',
-                  transitionDelay: bossesVisible
-                    ? supporter.delay + 'ms'
-                    : '0ms',
+                  transform: 'scale(1)',
+                  opacity: '1',
+                  transitionDelay: supporter.delay + 'ms',
                 }"
               />
 
@@ -96,23 +88,17 @@
                 class="rounded-full object-cover shadow-2xl ring-4 ring-white/20 transition-all duration-700 ease-out"
                 :class="supporter.imageClass"
                 :style="{
-                  opacity: bossesVisible ? '1' : '0',
-                  transform: bossesVisible
-                    ? 'translateY(0) scale(1)'
-                    : 'translateY(40px) scale(0.85)',
-                  transitionDelay: bossesVisible
-                    ? supporter.delay + 'ms'
-                    : '0ms',
+                  opacity: '1',
+                  transform: 'translateY(0) scale(1)',
+                  transitionDelay: supporter.delay + 'ms',
                 }"
               />
             </div>
             <div
               class="mt-6 space-y-1 transition-opacity duration-700"
               :style="{
-                opacity: bossesVisible ? '1' : '0',
-                transitionDelay: bossesVisible
-                  ? supporter.delay + 150 + 'ms'
-                  : '0ms',
+                opacity: '1',
+                transitionDelay: supporter.delay + 150 + 'ms',
               }"
             >
               <p class="text-sm uppercase tracking-[0.3em] text-white/60">
@@ -189,7 +175,6 @@ const supporters = [
     imageClass: "h-36 w-36 md:h-44 md:w-44",
     orderClass: "md:order-1",
     delay: 240,
-    initialAuraScale: "scale(0.5)",
   },
 
   {
@@ -203,7 +188,6 @@ const supporters = [
     imageClass: "h-40 w-40 md:h-48 md:w-48",
     orderClass: "md:order-2",
     delay: 120,
-    initialAuraScale: "scale(0.45)",
   },
   {
     name: "㊙️ℬ𝓊𝓃𝓃𝓎🐰",
@@ -216,7 +200,6 @@ const supporters = [
     imageClass: "h-44 w-44 md:h-56 md:w-56",
     orderClass: "md:order-3",
     delay: 0,
-    initialAuraScale: "scale(0.4)",
   },
 ] as const;
 
@@ -303,10 +286,6 @@ const items = [
 
 const trademarkYear = new Date().getFullYear();
 
-const bossesSectionRef = ref<HTMLElement | null>(null);
-const bossesVisible = ref(false);
-let bossesObserver: IntersectionObserver | null = null;
-
 const handleScroll = () => {
   if (typeof window === "undefined") return;
   isNavVisible.value = window.scrollY > NAV_TRIGGER_Y;
@@ -319,11 +298,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener("scroll", handleScroll);
-
-  if (bossesObserver) {
-    bossesObserver.disconnect();
-    bossesObserver = null;
-  }
 });
 
 const route = useRoute();
@@ -338,31 +312,4 @@ onMounted(() => {
   }
 });
 
-onMounted(() => {
-  if (typeof window === "undefined") return;
-
-  if (!("IntersectionObserver" in window)) {
-    bossesVisible.value = true;
-    return;
-  }
-
-  if (!bossesSectionRef.value) return;
-
-  bossesObserver = new IntersectionObserver(
-    (entries) => {
-      const entry = entries[0];
-      if (entry?.isIntersecting) {
-        bossesVisible.value = true;
-        bossesObserver?.disconnect();
-        bossesObserver = null;
-      }
-    },
-    {
-      threshold: 0.35,
-      rootMargin: "0px 0px -10% 0px",
-    }
-  );
-
-  bossesObserver.observe(bossesSectionRef.value);
-});
 </script>
