@@ -162,10 +162,12 @@
 
 <script setup lang="ts">
 import { defineComponent, h, onMounted, onUnmounted, ref } from "vue";
+import type { Component } from "vue";
 import { useRoute } from "vue-router";
 import Galaxy from "~/components/vue-bits/Backgrounds/Galaxy/Galaxy.vue";
 import DarkVeil from "~/components/vue-bits/Backgrounds/DarkVeil/DarkVeil.vue";
 import InfiniteScroll from "~/components/vue-bits/Components/InfiniteScroll/InfiniteScroll.vue";
+import BigBossBingoFlyer from "~/components/flyers/BigBossBingoFlyer.vue";
 
 const isNavVisible = ref(false);
 const NAV_TRIGGER_Y = 160;
@@ -269,8 +271,18 @@ const createTextItem = (title: string, body: string) => ({
   }),
 });
 
+const createComponentItem = (component: Component, name: string) => ({
+  content: defineComponent({
+    name,
+    setup() {
+      return () =>
+        h("div", { class: "h-full w-full" }, [h(component, { class: "h-full w-full" })]);
+    },
+  }),
+});
+
 const items = [
-  createImageItem("/images/flyers/bingo.png", "AFTA bingo night flyer"),
+  createComponentItem(BigBossBingoFlyer, "InfiniteScrollBigBossFlyerItem"),
   createImageItem(
     "/images/flyers/church_flyer.png",
     "Animated Grimmz event poster",
