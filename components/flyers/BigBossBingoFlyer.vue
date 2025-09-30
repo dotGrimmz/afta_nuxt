@@ -37,17 +37,12 @@
                   sizes="80px"
                 />
                 <span
-                  class="absolute left-1/2 top-1/2 w-max -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-black shadow-[0_12px_30px_rgba(16,185,129,0.45)]"
+                  class="absolute left-1/3 top-1.2 w-max -translate-x-1/3 -translate-y-1/5 rounded-full bg-emerald-400 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-black shadow-[0_12px_30px_rgba(16,185,129,0.45)]"
                 >
                   Win a dragon
                 </span>
               </div>
             </div>
-            <p
-              class="max-w-[18rem] text-sm font-medium text-emerald-200/90 sm:text-base"
-            >
-              Payout is a dragon
-            </p>
           </div>
         </div>
 
