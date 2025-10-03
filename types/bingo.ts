@@ -1,5 +1,8 @@
 import type { Database } from "~/types/supabase";
 
+// The interface your composable will return
+import type { Ref } from "vue";
+
 /** ── DB row aliases (exactly as Supabase generates) ───────────────────────── */
 export type BaseGameRow = Database["public"]["Tables"]["bingo_games"]["Row"];
 
@@ -93,9 +96,6 @@ export type IssueJoinCodeResponse = {
   code: JoinCode | "";
   cards: BingoCard[];
 };
-
-// The interface your composable will return
-import type { Ref } from "vue";
 
 export interface UseBingo {
   games?: Ref<BingoGameRow[]>; // non-null (we’ll set a default)

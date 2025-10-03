@@ -6,7 +6,7 @@ type EventRow = Tables<"events">;
 const props = defineProps<{
   events: EventRow[];
   fetchEvents: () => Promise<void>;
-  loading: Boolean;
+  loading: boolean;
   errorMsg: string | null;
   fmtDate: (iso?: string | null) => string;
   handleDelete: (id: string) => Promise<void>;
@@ -28,7 +28,7 @@ const hasEvents = computed(() => (props.events?.length ?? 0) > 0);
       <div v-if="errorMsg" class="p-3 text-red-600 text-sm">{{ errorMsg }}</div>
 
       <div v-if="loading" class="space-y-3">
-        <USkeleton class="h-20 w-full" v-for="i in 3" :key="i" />
+        <USkeleton v-for="i in 3" :key="i" class="h-20 w-full" />
       </div>
 
       <div v-else>

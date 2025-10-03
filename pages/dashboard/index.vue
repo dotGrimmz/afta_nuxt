@@ -21,7 +21,7 @@
         <section class="h-full min-h-0">
           <div class="h-full min-h-0 flex flex-col">
             <AnimatedList
-              :displayScrollbar="false"
+              :display-scrollbar="false"
               class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
               :items="pollsData"
             >
@@ -29,10 +29,10 @@
                 <PollTile
                   :key="poll.id"
                   :poll="poll"
-                  @poll-updated="refreshPolls"
-                  :resetVotes="resetVotes"
+                  :reset-votes="resetVotes"
                   :loading="pollsLoading"
-                  :deletePoll="deletePoll"
+                  :delete-poll="deletePoll"
+                  @poll-updated="refreshPolls"
                 />
               </template>
             </AnimatedList>
@@ -64,12 +64,12 @@
               class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
             >
               <EventsList
-                :fmtDate="fmtDate"
-                :fetchEvents="fetchEvents"
+                :fmt-date="fmtDate"
+                :fetch-events="fetchEvents"
                 :events="events"
                 :loading="eventLoading"
-                :errorMsg="eventErr"
-                :handleDelete="deleteEvent"
+                :error-msg="eventErr"
+                :handle-delete="deleteEvent"
               />
             </div>
           </div>

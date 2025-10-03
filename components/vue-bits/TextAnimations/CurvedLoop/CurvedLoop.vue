@@ -186,8 +186,8 @@ watch([spacing, () => props.speed], () => {
 
       <defs>
         <path
-          ref="pathRef"
           :id="pathId"
+          ref="pathRef"
           :d="pathD"
           fill="none"
           stroke="transparent"

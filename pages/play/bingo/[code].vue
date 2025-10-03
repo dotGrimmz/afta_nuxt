@@ -630,8 +630,8 @@ onUnmounted(() => {
             v-model="showBingoModal"
             title="All Numbers Drawn"
             :numbers="draws"
-            :gameEnded="gameEnded"
-            :restoreMarks="restoreMarks"
+            :game-ended="gameEnded"
+            :restore-marks="restoreMarks"
           />
         </div>
         <!-- Cards grid -->
@@ -685,10 +685,10 @@ onUnmounted(() => {
               <span>❌ Game Over — Give it another shot!.</span>
 
               <UButton
-                @click="enterAnotherCode"
                 size="sm"
                 class="text-center"
                 color="primary"
+                @click="enterAnotherCode"
                 >Enter Another Code
               </UButton>
             </div>

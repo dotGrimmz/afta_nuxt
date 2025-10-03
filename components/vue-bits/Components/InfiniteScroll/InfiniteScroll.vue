@@ -5,16 +5,16 @@
 <template>
   <div class="w-full">
     <div
-      class="infinite-scroll-wrapper relative flex items-center justify-center w-full overflow-hidden"
       ref="wrapperRef"
+      class="infinite-scroll-wrapper relative flex items-center justify-center w-full overflow-hidden"
       :style="{
         maxHeight: maxHeight,
         overscrollBehavior: 'none',
       }"
     >
       <div
-        class="infinite-scroll-container flex flex-col px-4 cursor-grab"
         ref="containerRef"
+        class="infinite-scroll-container flex flex-col px-4 cursor-grab"
         :style="{
           transform: getTiltTransform(),
           width: width,

@@ -1,4 +1,4 @@
-import { Database } from "#build/types/supabase-database";
+import type { Database } from "#build/types/supabase-database";
 import { serverSupabaseClient } from "#supabase/server";
 import type {
   BingoGameRow,

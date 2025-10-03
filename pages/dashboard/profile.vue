@@ -71,9 +71,9 @@ const saveUsername = async (): Promise<void> => {
       <UButton
         :loading="saving"
         :disabled="!username.trim()"
-        @click="saveUsername"
         color="primary"
         class="w-full cursor-pointer"
+        @click="saveUsername"
       >
         Save
       </UButton>

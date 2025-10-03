@@ -26,8 +26,8 @@
     <!-- Continue button -->
     <button
       ref="continueBtn"
-      @click="handleReturn"
       class="absolute bottom-8 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg opacity-0 z-50"
+      @click="handleReturn"
     >
       Continue
     </button>

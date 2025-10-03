@@ -28,12 +28,12 @@
       <!-- Activate -->
       <UButton
         v-if="!poll.is_active"
-        @click="activatePoll"
         :loading="pollLoading"
         :variant="'solid'"
         :color="'primary'"
         class="rounded-soft cursor-pointer"
         size="sm"
+        @click="activatePoll"
       >
         Activate
       </UButton>
@@ -41,36 +41,36 @@
       <!-- Deactivate -->
       <UButton
         v-else
-        @click="deActivatePoll"
         :loading="pollLoading"
         :variant="'solid'"
         :color="'primary'"
         size="sm"
         class="rounded-soft cursor-pointer"
+        @click="deActivatePoll"
       >
         Deactivate
       </UButton>
 
       <!-- Reset votes -->
       <UButton
-        @click="handleReset(poll.id)"
         :loading="votesResetting"
         :variant="'solid'"
         :color="'secondary'"
         class="rounded-soft cursor-pointer"
         size="sm"
+        @click="handleReset(poll.id)"
       >
         Reset Poll Votes
       </UButton>
 
       <!-- Delete -->
       <UButton
-        @click="handelPollDeletion(poll.id)"
         :loading="pendingPollDeletion"
         :variant="'solid'"
         color="error"
         class="rounded-soft cursor-pointer"
         size="sm"
+        @click="handelPollDeletion(poll.id)"
       >
         Delete Poll
       </UButton>

@@ -43,10 +43,10 @@
 
             <button
               class="pc-contact-btn"
-              @click="handleContactClick"
               style="pointer-events: auto"
               type="button"
               :aria-label="`Contact ${name || 'user'}`"
+              @click="handleContactClick"
             >
               {{ contactText }}
             </button>

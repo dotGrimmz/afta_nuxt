@@ -39,17 +39,17 @@ const isReady = (c: ContestantType): boolean => {
     <div v-else class="flex gap-2 items-center">
       <UButton
         :disabled="props.gameStatus !== 'active' || props.autoDrawRunning"
-        @click="emit('draw', props.gameId)"
         size="sm"
         color="primary"
+        @click="emit('draw', props.gameId)"
       >
         Draw Number
       </UButton>
       <UButton
         :disabled="props.gameStatus !== 'active'"
-        @click="emit('stop', gameStatus)"
         size="sm"
         color="error"
+        @click="emit('stop', gameStatus)"
       >
         Stop Game
       </UButton>
@@ -58,8 +58,8 @@ const isReady = (c: ContestantType): boolean => {
         <UButton
           color="warning"
           size="sm"
-          @click="emit('reloadGame')"
           class="text-gray-400 text-sm"
+          @click="emit('reloadGame')"
           >Game Ended - Refresh
         </UButton>
       </template>
@@ -105,10 +105,10 @@ const isReady = (c: ContestantType): boolean => {
             variant="outline"
           />
           <UButton
-            @click="emit('removeContestant', c.id)"
             v-if="gameStatus === 'lobby'"
             size="sm"
             color="error"
+            @click="emit('removeContestant', c.id)"
           >
             Remove Contestant
           </UButton>

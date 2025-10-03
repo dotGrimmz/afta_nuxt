@@ -79,20 +79,20 @@ async function handleVote(optionId: string) {
         <span>{{ opt.text }}</span>
         <button
           :disabled="loading || props.loading"
-          @click="handleVote(opt.id)"
           :class="[
             'mb-2 flex justify-between border px-2 py-1 rounded',
             selectedOptionId === opt.id
               ? 'border-[1.5px] border-teal-500'
               : 'border-gray-300', // fallback/default border
           ]"
+          @click="handleVote(opt.id)"
         >
           Vote — {{ opt.vote_count }}
         </button>
       </li>
     </ul>
 
-    <template #footer v-if="error">
+    <template v-if="error" #footer>
       <p class="text-red-600 mt-2">{{ error }}</p>
     </template>
   </UCard>

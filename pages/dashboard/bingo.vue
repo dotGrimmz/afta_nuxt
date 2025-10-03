@@ -551,7 +551,7 @@ const handleReloadGame = async () => {
 
 const handleRemoveContestant = async (contestantId: string): Promise<void> => {
   console.log("calling handle Remove contestant");
-  if (!isLobby) {
+  if (!isLobby.value) {
     console.log("Game already started, cannot remove contestant.");
     return;
   }
@@ -799,9 +799,9 @@ console.log("all ready", allReady);
       <div v-if="isAdmin" class="bg-gray-800 p-4 rounded space-y-3">
         <UButton
           :loading="bingoCreating"
-          @click="handleCreateBingoGame()"
           color="primary"
           class="w-full"
+          @click="handleCreateBingoGame()"
         >
           Create Game
         </UButton>
@@ -811,8 +811,8 @@ console.log("all ready", allReady);
               >Base Card Cost</label
             >
             <UInput
-              type="number"
               v-model="baseCardCost"
+              type="number"
               min="0"
               class="w-full"
             />
@@ -823,8 +823,8 @@ console.log("all ready", allReady);
               >Free Space Cost</label
             >
             <UInput
-              type="number"
               v-model="freeSpaceCost"
+              type="number"
               min="0"
               class="w-full"
             />
@@ -835,8 +835,8 @@ console.log("all ready", allReady);
               >Auto Mark Cost</label
             >
             <UInput
-              type="number"
               v-model="autoMarkCost"
+              type="number"
               min="0"
               class="w-full"
             />
@@ -897,18 +897,18 @@ console.log("all ready", allReady);
 
               <UButton
                 v-if="isLobby && currentGame.contestants.length > 1"
-                @click="
-                  handleStartBingoGame(
-                    currentGame.game.id,
-                    currentGame.game.payout || 0
-                  )
-                "
                 size="sm"
                 color="primary"
                 :class="
                   allReady
                     ? 'ring-4 ring-green-500 animate-pulse shadow-lg shadow-green-500/30'
                     : ''
+                "
+                @click="
+                  handleStartBingoGame(
+                    currentGame.game.id,
+                    currentGame.game.payout || 0
+                  )
                 "
               >
                 Start
@@ -980,17 +980,17 @@ console.log("all ready", allReady);
           things arent being updated  -->
           <BingoGameControl
             v-if="isAdmin && currentGame.game"
-            :gameStatus="currentGame.game.status"
-            :gameId="game_id"
+            :game-status="currentGame.game.status"
+            :game-id="game_id"
             :draws="currentGame.draws"
             :contestants="currentGame.contestants"
             :loading="currentGame.loading"
-            :autoDrawRunning="isRunning"
+            :auto-draw-running="isRunning"
             :ready-ids="getReadyIds()"
             @draw="onDraw"
-            @reloadGame="handleReloadGame"
+            @reload-game="handleReloadGame"
             @stop="onStop(game_id)"
-            @removeContestant="handleRemoveContestant"
+            @remove-contestant="handleRemoveContestant"
           />
 
           <!-- Player control -->
@@ -1011,15 +1011,15 @@ console.log("all ready", allReady);
               </p>
 
               <UButton
-                @click="handleSelfJoinCurrentGame()"
                 size="sm"
                 color="primary"
+                @click="handleSelfJoinCurrentGame()"
               >
                 Join
               </UButton>
               <UInput
-                :disabled="!!loggedInContestant.code"
                 v-model.number="loggedInContestant.numCards"
+                :disabled="!!loggedInContestant.code"
                 type="number"
                 min="1"
                 placeholder="Cards"
@@ -1030,16 +1030,16 @@ console.log("all ready", allReady);
             <div class="flex gap-2 justify-start">
               <label class="flex items-center text-xs text-gray-300 space-x-1">
                 <input
-                  :disabled="!!loggedInContestant.code"
                   v-model="loggedInContestant.freeSpace"
+                  :disabled="!!loggedInContestant.code"
                   type="checkbox"
                 />
                 <span>Free Space</span>
               </label>
               <label class="flex items-center text-xs text-gray-300 space-x-1">
                 <input
-                  :disabled="!!loggedInContestant.code"
                   v-model="loggedInContestant.autoMark"
+                  :disabled="!!loggedInContestant.code"
                   type="checkbox"
                 />
                 <span>Auto Mark</span>
