@@ -23,7 +23,7 @@
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
-              "path": ["api","bingo","events"]
+              "path": ["api", "bingo", "events"]
             }
           },
           "event": [
@@ -48,7 +48,7 @@
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
-              "path": ["api","bingo","events"]
+              "path": ["api", "bingo", "events"]
             }
           }
         },
@@ -59,14 +59,14 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"event_id\": \"{{eventId}}\",\n  \"user_id\": null,\n  \"card_amount\": 3,\n  \"free_space_enabled\": false,\n  \"auto_mark_enabled\": false,\n  \"status\": \"verbal\",\n  \"status\": \"pending\"\n}"
+              "raw": "{\n  \"event_id\": \"{{eventId}}\",\n  \"user_id\": null,\n  \"card_amount\": 3,\n  \"free_space_enabled\": false,\n  \"auto_mark_enabled\": false,\n  \"status\": \"pending\"\n}"
             },
             "url": {
               "raw": "http://localhost:3000/api/bingo/events/{{eventId}}/participants",
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
-              "path": ["api","bingo","events","{{eventId}}","participants"]
+              "path": ["api", "bingo", "events", "{{eventId}}", "participants"]
             }
           },
           "event": [
@@ -89,14 +89,14 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"paid\",\n  \"status\": \"paid\",\n  \"free_space_enabled\": true,\n  \"auto_mark_enabled\": true\n}"
+              "raw": "{\n  \"status\": \"paid\",\n  \"free_space_enabled\": true,\n  \"auto_mark_enabled\": true\n}"
             },
             "url": {
               "raw": "http://localhost:3000/api/bingo/events/{{eventId}}/participants/{{participantId}}",
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
-              "path": ["api","bingo","events","{{eventId}}","participants","{{participantId}}"]
+              "path": ["api", "bingo", "events", "{{eventId}}", "participants", "{{participantId}}"]
             }
           }
         },
@@ -109,7 +109,7 @@
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
-              "path": ["api","bingo","events","{{eventId}}","participants"]
+              "path": ["api", "bingo", "events", "{{eventId}}", "participants"]
             }
           }
         },
@@ -122,7 +122,7 @@
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
-              "path": ["api","bingo","events","{{eventId}}","participants","{{participantId}}"]
+              "path": ["api", "bingo", "events", "{{eventId}}", "participants", "{{participantId}}"]
             }
           }
         },
@@ -135,7 +135,7 @@
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
-              "path": ["api","bingo","events","{{eventId}}"]
+              "path": ["api", "bingo", "events", "{{eventId}}"]
             }
           }
         }
