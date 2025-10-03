@@ -189,11 +189,14 @@
       <div class="flex flex-wrap items-center gap-3 text-xs text-gray-400">
         <span>{{ presetPayoutPercentageLabel }}</span>
       </div>
-      <div v-if="presetPreviewRows.length" class="flex flex-wrap gap-2 text-xs">
+      <div
+        v-if="presetPreviewRows.length"
+        class="flex flex-wrap gap-2 text-xs"
+      >
         <div
           v-for="row in presetPreviewRows"
           :key="row.cards"
-          class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-700 bg-gray-800/70 text-gray-200"
+          class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-700 bg-gray-800/70 text-gray-200 w-full sm:w-full lg:w-auto"
         >
           <span class="font-semibold">{{ row.cards }} cards</span>
           <span class="text-emerald-300">payout {{ row.payoutLabel }}</span>

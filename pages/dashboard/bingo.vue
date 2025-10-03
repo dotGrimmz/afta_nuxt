@@ -16,6 +16,12 @@ import type {
   JoinGameResponse,
   UseBingo,
 } from "~/types/bingo";
+import {
+  useBingoPricingPresets,
+  type PricingPreset,
+  type PricingPresetDraft,
+  roundPayoutToNearestTen,
+} from "~/composables/useBingoPricingPresets";
 
 const supabase = useSupabaseClient<Database>();
 const { profile, isAdmin } = useProfile();
@@ -599,315 +605,18 @@ watch(
   }
 );
 
-type PricingPreset = {
-  id: string;
-  name: string;
-  baseCardCost: number;
-  freeSpaceCost: number;
-  autoMarkCost: number;
-  payout?: number;
-  payoutPercentage?: number;
-  metadata?: {
-    source?: "builtin" | "custom";
-    createdAt?: string;
-  };
-};
-
-type PricingPresetDraft = {
-  name: string;
-  baseCardCost: number;
-  freeSpaceCost: number;
-  autoMarkCost: number;
-  payout?: number;
-  payoutPercentage?: number;
-};
-
-const PRICING_PRESETS_STORAGE_KEY = "dashboard_bingo_custom_presets";
-const PRICING_PRESET_SELECTION_KEY = "dashboard_bingo_selected_preset";
-const PRICING_BASE_VALUES_KEY = "dashboard_bingo_pricing_values";
-const CUSTOM_PRESET_SELECTION_SENTINEL = "__custom__";
-
-const isBrowser = typeof window !== "undefined";
-let isRestoringPricingPresets = true;
-
-const createPresetSlug = (raw: string) =>
-  raw
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-const generateUniquePresetId = (name: string, taken: Set<string>) => {
-  const base = createPresetSlug(name) || "preset";
-  let candidate = base;
-  let suffix = 1;
-  while (taken.has(candidate)) {
-    candidate = `${base}-${suffix++}`;
-  }
-  taken.add(candidate);
-  return candidate;
-};
-
-const initialPricingPresets: PricingPreset[] = [
-  {
-    id: "rose",
-    name: "Rose Bingo",
-    baseCardCost: 80,
-    freeSpaceCost: 0,
-    autoMarkCost: 0,
-    payoutPercentage: 0.5,
-    metadata: { source: "builtin" },
-  },
-  {
-    id: "standard",
-    name: "Standard",
-    baseCardCost: 400,
-    freeSpaceCost: 100,
-    autoMarkCost: 0,
-    payout: 1000,
-    metadata: { source: "builtin" },
-  },
-  {
-    id: "premium",
-    name: "Premium",
-    baseCardCost: 500,
-    freeSpaceCost: 125,
-    autoMarkCost: 50,
-    payout: 1500,
-    metadata: { source: "builtin" },
-  },
-  {
-    id: "highRoller",
-    name: "High Roller",
-    baseCardCost: 600,
-    freeSpaceCost: 150,
-    autoMarkCost: 100,
-    payout: 2000,
-    metadata: { source: "builtin" },
-  },
-];
-
-const pricingPresets = ref<PricingPreset[]>([...initialPricingPresets]);
-
-const clampCurrency = (value: number) =>
-  Math.round(Math.max(value, 0) * 10) / 10;
-
-const findPresetById = (id: string | null | undefined) =>
-  pricingPresets.value.find((preset) => preset.id === id);
-
-const loadCustomPricingPresets = (): PricingPreset[] => {
-  if (!isBrowser) return [];
-  try {
-    const raw = window.localStorage.getItem(PRICING_PRESETS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    const taken = new Set(pricingPresets.value.map((preset) => preset.id));
-    const restored: PricingPreset[] = [];
-
-    for (const entry of parsed) {
-      if (!entry || typeof entry !== "object") continue;
-      const obj = entry as Record<string, any>;
-      const name =
-        typeof obj.name === "string" && obj.name.trim()
-          ? obj.name.trim()
-          : "Custom Preset";
-      let id =
-        typeof obj.id === "string" && obj.id.trim()
-          ? obj.id.trim()
-          : createPresetSlug(name) || "preset";
-      if (taken.has(id)) {
-        id = generateUniquePresetId(name, taken);
-      } else {
-        taken.add(id);
-      }
-
-      const base = Number(obj.baseCardCost);
-      const free = Number(obj.freeSpaceCost);
-      const auto = Number(obj.autoMarkCost);
-      if (![base, free, auto].every((n) => Number.isFinite(n))) continue;
-
-      const payoutRaw = Number(obj.payout);
-      const payoutPercentageRaw = Number(obj.payoutPercentage);
-
-      restored.push({
-        id,
-        name,
-        baseCardCost: clampCurrency(base),
-        freeSpaceCost: clampCurrency(free),
-        autoMarkCost: clampCurrency(auto),
-        payout:
-          Number.isFinite(payoutRaw) && payoutRaw >= 0
-            ? clampCurrency(payoutRaw)
-            : undefined,
-        payoutPercentage:
-          Number.isFinite(payoutPercentageRaw) && payoutPercentageRaw >= 0
-            ? Math.min(Math.max(payoutPercentageRaw, 0), 1)
-            : undefined,
-        metadata: {
-          source: "custom",
-          createdAt:
-            typeof (obj as any).metadata?.createdAt === "string"
-              ? (obj as any).metadata.createdAt
-              : new Date().toISOString(),
-        },
-      });
-    }
-
-    return restored;
-  } catch (err) {
-    console.warn("Unable to restore custom pricing presets", err);
-    return [];
-  }
-};
-
-const restoredCustomPresets = loadCustomPricingPresets();
-if (restoredCustomPresets.length) {
-  pricingPresets.value = [...pricingPresets.value, ...restoredCustomPresets];
-}
-
-const loadBasePricingValues = () => {
-  if (!isBrowser) return null;
-  try {
-    const raw = window.localStorage.getItem(PRICING_BASE_VALUES_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Record<string, any>;
-    const base = Number(parsed.baseCardCost);
-    const free = Number(parsed.freeSpaceCost);
-    const auto = Number(parsed.autoMarkCost);
-    if (![base, free, auto].every((n) => Number.isFinite(n))) return null;
-    return {
-      baseCardCost: clampCurrency(base),
-      freeSpaceCost: clampCurrency(free),
-      autoMarkCost: clampCurrency(auto),
-    };
-  } catch (err) {
-    console.warn("Unable to restore base pricing values", err);
-    return null;
-  }
-};
-
-const savedSelectionRaw = isBrowser
-  ? window.localStorage.getItem(PRICING_PRESET_SELECTION_KEY)
-  : null;
-const savedSelectionWasCustom =
-  savedSelectionRaw === CUSTOM_PRESET_SELECTION_SENTINEL;
-const savedSelectedPresetId =
-  !savedSelectionWasCustom && savedSelectionRaw
-    ? savedSelectionRaw
-    : null;
-const storedBasePricingValues = loadBasePricingValues();
-
-const fallbackPreset =
-  findPresetById("rose") ?? pricingPresets.value[0] ?? null;
-
-let initialSelectedPreset =
-  savedSelectedPresetId ? findPresetById(savedSelectedPresetId) ?? null : null;
-
-if (!initialSelectedPreset && !savedSelectionWasCustom) {
-  initialSelectedPreset = fallbackPreset;
-}
-
-const baseCardCost = ref(
-  savedSelectionWasCustom
-    ? storedBasePricingValues?.baseCardCost ??
-        fallbackPreset?.baseCardCost ??
-        400
-    : initialSelectedPreset?.baseCardCost ?? 400
-); // default in diamonds / points / $
-const freeSpaceCost = ref(
-  savedSelectionWasCustom
-    ? storedBasePricingValues?.freeSpaceCost ??
-        fallbackPreset?.freeSpaceCost ??
-        100
-    : initialSelectedPreset?.freeSpaceCost ?? 100
-);
-const autoMarkCost = ref(
-  savedSelectionWasCustom
-    ? storedBasePricingValues?.autoMarkCost ??
-        fallbackPreset?.autoMarkCost ??
-        0
-    : initialSelectedPreset?.autoMarkCost ?? 0
-);
-const selectedPricingPresetId = ref<string | null>(
-  savedSelectionWasCustom ? null : initialSelectedPreset?.id ?? null
-);
-
-const formatPercentageLabel = (value: number) => {
-  const raw = (value * 100).toFixed(1);
-  return raw.endsWith(".0") ? raw.slice(0, -2) : raw;
-};
-
-const formatPresetLabel = (preset: PricingPreset) => {
-  const details: string[] = [`${preset.baseCardCost} base`];
-  if (preset.freeSpaceCost) {
-    details.push(`${preset.freeSpaceCost} free`);
-  }
-  if (preset.autoMarkCost) {
-    details.push(`${preset.autoMarkCost} auto`);
-  }
-  const payoutLabel =
-    typeof preset.payoutPercentage === "number"
-      ? `${formatPercentageLabel(preset.payoutPercentage)}% pot`
-      : `💎${preset.payout ?? 0}`;
-  return `${preset.name} · ${details.join(" / ")} (${payoutLabel})`;
-};
-
-const pricingPresetItems = computed(() =>
-  pricingPresets.value.map((preset) => ({
-    label: formatPresetLabel(preset),
-    value: preset.id,
-  }))
-);
-
-const roundPayoutToNearestTen = (total: number, percent: number) => {
-  const roundedTotal = Math.round(total * 10) / 10;
-  const payout = Math.min(
-    roundedTotal,
-    Math.max(0, Math.round((roundedTotal * percent) / 10) * 10)
-  );
-  return payout;
-};
-
-const persistCustomPricingPresets = () => {
-  if (!isBrowser || isRestoringPricingPresets) return;
-  const customPresets = pricingPresets.value.filter(
-    (preset) => preset.metadata?.source === "custom"
-  );
-  if (!customPresets.length) {
-    window.localStorage.removeItem(PRICING_PRESETS_STORAGE_KEY);
-    return;
-  }
-  window.localStorage.setItem(
-    PRICING_PRESETS_STORAGE_KEY,
-    JSON.stringify(customPresets)
-  );
-};
-
-const persistSelectedPricingPresetId = (id: string | null) => {
-  if (!isBrowser || isRestoringPricingPresets) return;
-  if (!id) {
-    window.localStorage.setItem(
-      PRICING_PRESET_SELECTION_KEY,
-      CUSTOM_PRESET_SELECTION_SENTINEL
-    );
-  } else {
-    window.localStorage.setItem(PRICING_PRESET_SELECTION_KEY, id);
-  }
-};
-
-const persistBasePricingValues = () => {
-  if (!isBrowser || isRestoringPricingPresets) return;
-  const payload = {
-    baseCardCost: baseCardCost.value,
-    freeSpaceCost: freeSpaceCost.value,
-    autoMarkCost: autoMarkCost.value,
-  };
-  window.localStorage.setItem(
-    PRICING_BASE_VALUES_KEY,
-    JSON.stringify(payload)
-  );
-};
+const {
+  pricingPresets,
+  pricingPresetItems,
+  selectedPricingPresetId,
+  selectedPricingPreset,
+  baseCardCost,
+  freeSpaceCost,
+  autoMarkCost,
+  createPreset,
+  removePreset,
+  findPresetById,
+} = useBingoPricingPresets();
 
 const totalContestantCards = computed(() =>
   currentGame.value.contestants.reduce(
@@ -947,8 +656,7 @@ const applyPricingPreset = (preset: PricingPreset | undefined) => {
   if (currentGame.value.game) {
     const payoutValue = computePresetPayout(preset);
     if (typeof payoutValue === "number") {
-      // Round to nearest tenth to match UI previews
-      currentGame.value.game.payout = Math.round(payoutValue * 10) / 10;
+      currentGame.value.game.payout = payoutValue;
     }
   }
   nextTick(() => {
@@ -964,15 +672,11 @@ watch(
       const fallback =
         findPresetById("rose") ?? pricingPresets.value[0] ?? null;
       selectedPricingPresetId.value = fallback?.id ?? null;
-      if (!fallback) {
-        persistSelectedPricingPresetId(null);
-      }
       return;
     }
     if (preset) {
       applyPricingPreset(preset);
     }
-    persistSelectedPricingPresetId(id);
   },
   { immediate: true }
 );
@@ -1007,30 +711,14 @@ const clearPresetIfCustom = () => {
 
 watch([baseCardCost, freeSpaceCost, autoMarkCost], () => {
   clearPresetIfCustom();
-  persistBasePricingValues();
 });
+
 watch(
   () => currentGame.value.game?.payout,
   () => {
     clearPresetIfCustom();
   }
 );
-
-watch(
-  pricingPresets,
-  () => {
-    persistCustomPricingPresets();
-  },
-  { deep: true }
-);
-
-if (isBrowser) {
-  nextTick(() => {
-    isRestoringPricingPresets = false;
-  });
-} else {
-  isRestoringPricingPresets = false;
-}
 
 watch(
   [totalContestantCards, () => currentGame.value.game?.status],
@@ -1046,7 +734,7 @@ watch(
     if (typeof payoutValue !== "number") return;
 
     isApplyingPricingPreset.value = true;
-    currentGame.value.game.payout = Math.round(payoutValue * 10) / 10;
+    currentGame.value.game.payout = payoutValue;
     nextTick(() => {
       isApplyingPricingPreset.value = false;
     });
@@ -1054,40 +742,8 @@ watch(
   { immediate: true }
 );
 
-const selectedPricingPreset = computed(() =>
-  findPresetById(selectedPricingPresetId.value)
-);
-
-const ensureUniquePresetId = (name: string) =>
-  generateUniquePresetId(name, new Set(pricingPresets.value.map((p) => p.id)));
-
 const handleCreatePricingPreset = (draft: PricingPresetDraft) => {
-  const name = draft.name.trim() || "Custom Preset";
-  const id = ensureUniquePresetId(name);
-
-  const payload: PricingPreset = {
-    id,
-    name,
-    baseCardCost: clampCurrency(draft.baseCardCost),
-    freeSpaceCost: clampCurrency(draft.freeSpaceCost),
-    autoMarkCost: clampCurrency(draft.autoMarkCost),
-    metadata: {
-      source: "custom",
-      createdAt: new Date().toISOString(),
-    },
-  };
-
-  if (typeof draft.payoutPercentage === "number") {
-    payload.payoutPercentage = Math.min(
-      Math.max(draft.payoutPercentage, 0),
-      1
-    );
-  } else if (typeof draft.payout === "number") {
-    payload.payout = clampCurrency(draft.payout);
-  }
-
-  pricingPresets.value = [...pricingPresets.value, payload];
-  selectedPricingPresetId.value = payload.id;
+  createPreset(draft);
 };
 
 const handleDeletePricingPreset = (id: string) => {
@@ -1102,13 +758,7 @@ const handleDeletePricingPreset = (id: string) => {
     if (!confirmed) return;
   }
 
-  pricingPresets.value = pricingPresets.value.filter((item) => item.id !== id);
-
-  if (selectedPricingPresetId.value === id) {
-    const fallback =
-      findPresetById("rose") ?? pricingPresets.value[0] ?? null;
-    selectedPricingPresetId.value = fallback?.id ?? null;
-  }
+  removePreset(id);
 };
 
 // computed → dynamic cost per card
