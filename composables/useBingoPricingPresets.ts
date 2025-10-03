@@ -30,7 +30,8 @@ const CUSTOM_PRESET_SELECTION_SENTINEL = "__custom__";
 
 const isBrowser = typeof window !== "undefined";
 
-const clampCurrency = (value: number) => Math.round(Math.max(value, 0) * 10) / 10;
+const clampCurrency = (value: number) =>
+  Math.round(Math.max(value, 0) * 10) / 10;
 
 const createPresetSlug = (raw: string) =>
   raw
@@ -215,7 +216,7 @@ export const useBingoPricingPresets = () => {
     findPresetById("rose") ?? pricingPresets.value[0] ?? null;
 
   let initialSelectedPreset = savedSelectedPresetId
-    ? findPresetById(savedSelectedPresetId) ?? null
+    ? (findPresetById(savedSelectedPresetId) ?? null)
     : null;
 
   if (!initialSelectedPreset && !savedSelectionWasCustom) {
@@ -224,24 +225,34 @@ export const useBingoPricingPresets = () => {
 
   const baseCardCost = ref(
     savedSelectionWasCustom
-      ? storedBaseValues?.baseCardCost ?? fallbackPreset?.baseCardCost ?? 400
-      : initialSelectedPreset?.baseCardCost ?? fallbackPreset?.baseCardCost ?? 400
+      ? (storedBaseValues?.baseCardCost ?? fallbackPreset?.baseCardCost ?? 400)
+      : (initialSelectedPreset?.baseCardCost ??
+          fallbackPreset?.baseCardCost ??
+          400)
   );
 
   const freeSpaceCost = ref(
     savedSelectionWasCustom
-      ? storedBaseValues?.freeSpaceCost ?? fallbackPreset?.freeSpaceCost ?? 100
-      : initialSelectedPreset?.freeSpaceCost ?? fallbackPreset?.freeSpaceCost ?? 100
+      ? (storedBaseValues?.freeSpaceCost ??
+          fallbackPreset?.freeSpaceCost ??
+          100)
+      : (initialSelectedPreset?.freeSpaceCost ??
+          fallbackPreset?.freeSpaceCost ??
+          100)
   );
 
   const autoMarkCost = ref(
     savedSelectionWasCustom
-      ? storedBaseValues?.autoMarkCost ?? fallbackPreset?.autoMarkCost ?? 0
-      : initialSelectedPreset?.autoMarkCost ?? fallbackPreset?.autoMarkCost ?? 0
+      ? (storedBaseValues?.autoMarkCost ?? fallbackPreset?.autoMarkCost ?? 0)
+      : (initialSelectedPreset?.autoMarkCost ??
+          fallbackPreset?.autoMarkCost ??
+          0)
   );
 
-  const selectedPricingPresetId = ref<string | null>(
-    savedSelectionWasCustom ? null : initialSelectedPreset?.id ?? fallbackPreset?.id ?? null
+  const selectedPricingPresetId = ref<string>(
+    savedSelectionWasCustom
+      ? ""
+      : (initialSelectedPreset?.id ?? fallbackPreset?.id ?? "")
   );
 
   const formatPresetLabel = (preset: PricingPreset) => {
@@ -357,7 +368,9 @@ export const useBingoPricingPresets = () => {
     const preset = findPresetById(id);
     if (!preset || preset.metadata?.source === "builtin") return;
 
-    pricingPresets.value = pricingPresets.value.filter((item) => item.id !== id);
+    pricingPresets.value = pricingPresets.value.filter(
+      (item) => item.id !== id
+    );
 
     if (selectedPricingPresetId.value === id) {
       const fallback =

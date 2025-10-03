@@ -16,12 +16,6 @@ import type {
   JoinGameResponse,
   UseBingo,
 } from "~/types/bingo";
-import {
-  useBingoPricingPresets,
-  type PricingPreset,
-  type PricingPresetDraft,
-  roundPayoutToNearestTen,
-} from "~/composables/useBingoPricingPresets";
 
 const supabase = useSupabaseClient<Database>();
 const { profile, isAdmin } = useProfile();
@@ -616,6 +610,7 @@ const {
   createPreset,
   removePreset,
   findPresetById,
+  roundPayoutToNearestTen,
 } = useBingoPricingPresets();
 
 const totalContestantCards = computed(() =>
@@ -705,7 +700,7 @@ const clearPresetIfCustom = () => {
     autoMarkCost.value !== preset.autoMarkCost ||
     (currentGame.value.game && !payoutMatches)
   ) {
-    selectedPricingPresetId.value = null;
+    selectedPricingPresetId.value = "";
   }
 };
 
