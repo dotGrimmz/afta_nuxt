@@ -599,9 +599,186 @@ watch(
   }
 );
 
-const baseCardCost = ref(400); // default in diamonds / points / $
-const freeSpaceCost = ref(100);
-const autoMarkCost = ref(0);
+type PricingPreset = {
+  id: string;
+  label: string;
+  baseCardCost: number;
+  freeSpaceCost: number;
+  autoMarkCost: number;
+  payout?: number;
+  payoutPercentage?: number;
+};
+
+const pricingPresets: PricingPreset[] = [
+  {
+    id: "rose",
+    label: "Rose Bingo · 80 base / 0 free / 0 auto (50% pot)",
+    baseCardCost: 80,
+    freeSpaceCost: 0,
+    autoMarkCost: 0,
+    payoutPercentage: 0.5,
+  },
+  {
+    id: "standard",
+    label: "Standard · 400 base / 100 free / 0 auto (💎1000)",
+    baseCardCost: 400,
+    freeSpaceCost: 100,
+    autoMarkCost: 0,
+    payout: 1000,
+  },
+  {
+    id: "premium",
+    label: "Premium · 500 base / 125 free / 50 auto (💎1500)",
+    baseCardCost: 500,
+    freeSpaceCost: 125,
+    autoMarkCost: 50,
+    payout: 1500,
+  },
+  {
+    id: "highRoller",
+    label: "High Roller · 600 base / 150 free / 100 auto (💎2000)",
+    baseCardCost: 600,
+    freeSpaceCost: 150,
+    autoMarkCost: 100,
+    payout: 2000,
+  },
+];
+
+const defaultPricingPreset =
+  pricingPresets.find((preset) => preset.id === "standard") ??
+  pricingPresets[0] ??
+  null;
+
+const baseCardCost = ref(defaultPricingPreset?.baseCardCost ?? 400); // default in diamonds / points / $
+const freeSpaceCost = ref(defaultPricingPreset?.freeSpaceCost ?? 100);
+const autoMarkCost = ref(defaultPricingPreset?.autoMarkCost ?? 0);
+const selectedPricingPresetId = ref<string | undefined>(
+  defaultPricingPreset?.id ?? pricingPresets[0]?.id ?? undefined
+);
+
+const pricingPresetItems = computed(() =>
+  pricingPresets.map((preset) => ({
+    label: preset.label,
+    value: preset.id,
+  }))
+);
+
+const totalContestantCards = computed(() =>
+  currentGame.value.contestants.reduce(
+    (total, contestant) => total + (contestant.num_cards ?? 0),
+    0
+  )
+);
+
+const computePresetPayout = (preset: PricingPreset | undefined) => {
+  if (!preset) return null;
+
+  if (typeof preset.payoutPercentage === "number") {
+    const totalCards = totalContestantCards.value;
+    if (totalCards <= 0) {
+      return 0;
+    }
+    const totalCardCost = totalCards * preset.baseCardCost;
+    return Math.round(totalCardCost * preset.payoutPercentage);
+  }
+
+  if (typeof preset.payout === "number") {
+    return preset.payout;
+  }
+
+  return null;
+};
+
+const isApplyingPricingPreset = ref(false);
+
+const applyPricingPreset = (preset: PricingPreset | undefined) => {
+  if (!preset) return;
+  isApplyingPricingPreset.value = true;
+  baseCardCost.value = preset.baseCardCost;
+  freeSpaceCost.value = preset.freeSpaceCost;
+  autoMarkCost.value = preset.autoMarkCost;
+
+  if (currentGame.value.game) {
+    const payoutValue = computePresetPayout(preset);
+    if (typeof payoutValue === "number") {
+      currentGame.value.game.payout = payoutValue;
+    }
+  }
+  nextTick(() => {
+    isApplyingPricingPreset.value = false;
+  });
+};
+
+watch(
+  selectedPricingPresetId,
+  (id) => {
+    if (!id) return;
+    const preset = pricingPresets.find((item) => item.id === id);
+    applyPricingPreset(preset);
+  },
+  { immediate: true }
+);
+
+const clearPresetIfCustom = () => {
+  if (isApplyingPricingPreset.value) return;
+  if (!selectedPricingPresetId.value) return;
+  const preset = pricingPresets.find(
+    (item) => item.id === selectedPricingPresetId.value
+  );
+  if (!preset) return;
+
+  const payout = currentGame.value.game?.payout;
+  const expectedPayout = computePresetPayout(preset);
+  let payoutNumber = 0;
+  if (typeof payout === "number") {
+    payoutNumber = payout;
+  } else if (typeof payout === "string") {
+    const parsed = Number(payout);
+    payoutNumber = Number.isNaN(parsed) ? 0 : parsed;
+  }
+  const payoutMatches =
+    expectedPayout === null ? true : payoutNumber === expectedPayout;
+
+  if (
+    baseCardCost.value !== preset.baseCardCost ||
+    freeSpaceCost.value !== preset.freeSpaceCost ||
+    autoMarkCost.value !== preset.autoMarkCost ||
+    (currentGame.value.game && !payoutMatches)
+  ) {
+    selectedPricingPresetId.value = undefined;
+  }
+};
+
+watch([baseCardCost, freeSpaceCost, autoMarkCost], clearPresetIfCustom);
+watch(
+  () => currentGame.value.game?.payout,
+  () => {
+    clearPresetIfCustom();
+  }
+);
+
+watch(
+  [totalContestantCards, () => currentGame.value.game?.status],
+  () => {
+    if (!selectedPricingPresetId.value) return;
+    const preset = pricingPresets.find(
+      (item) => item.id === selectedPricingPresetId.value
+    );
+    if (!preset) return;
+    if (typeof preset.payoutPercentage !== "number") return;
+    if (!currentGame.value.game || currentGame.value.game.status !== "lobby") return;
+
+    const payoutValue = computePresetPayout(preset);
+    if (typeof payoutValue !== "number") return;
+
+    isApplyingPricingPreset.value = true;
+    currentGame.value.game.payout = payoutValue;
+    nextTick(() => {
+      isApplyingPricingPreset.value = false;
+    });
+  },
+  { immediate: true }
+);
 
 // computed → dynamic cost per card
 
@@ -805,6 +982,15 @@ console.log("all ready", allReady);
         >
           Create Game
         </UButton>
+        <div>
+          <label class="block text-gray-300 text-sm mb-1">Pricing Preset</label>
+          <USelect
+            v-model="selectedPricingPresetId"
+            :items="pricingPresetItems"
+            placeholder="Select a preset"
+            class="w-full"
+          />
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label class="block text-gray-300 text-sm mb-1"
