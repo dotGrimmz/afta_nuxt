@@ -21,10 +21,7 @@ const emit = defineEmits<{
 console.log("current status ", props.gameStatus);
 const readySet = computed<Set<string>>(() => new Set(props.readyIds ?? []));
 
-const isReady = (c: ContestantType): boolean => {
-  const key = (c as any).user_id ?? c.id;
-  return key ? readySet.value.has(String(key)) : false;
-};
+const isReady = (c: ContestantType): boolean => readySet.value.has(c.id);
 </script>
 
 <template>
