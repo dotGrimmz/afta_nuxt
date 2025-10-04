@@ -1,7 +1,7 @@
 import type { Database } from "~/types/supabase";
 
 // The interface your composable will return
-import type { Ref } from "vue";
+import type { ComputedRef, Ref } from "vue";
 
 /** ── DB row aliases (exactly as Supabase generates) ───────────────────────── */
 export type BaseGameRow = Database["public"]["Tables"]["bingo_games"]["Row"];
@@ -81,6 +81,12 @@ export type DashboardGameState = {
   loading: boolean;
 };
 
+export type LobbyPresence = {
+  user_id: string;
+  username: string;
+  ready: boolean;
+};
+
 // Add this client-normalized state (numbers instead of draw rows)
 export type ClientGameState = {
   game: BingoGameRow | undefined | null;
@@ -97,6 +103,27 @@ export type IssueJoinCodeResponse = {
   cards: BingoCard[];
 };
 
+export type DashboardControllerOptions = {
+  onResult?: (result: BingoResultRow) => void;
+};
+
+export type DashboardController = {
+  state: DashboardGameState;
+  players: Ref<LobbyPresence[]>;
+  allReady: ComputedRef<boolean>;
+  recentResults: Ref<any[]>;
+  recentResultsLoading: Ref<boolean>;
+  hydrate: (gameId: string) => Promise<void>;
+  refresh: (gameId: string) => Promise<void>;
+  loadLatestGame: () => Promise<BingoGameRow | undefined>;
+  fetchRecentResults: () => Promise<void>;
+  subscribe: (gameId: string) => void;
+  unsubscribe: () => void;
+  removeContestant: (contestantId: string) => Promise<void>;
+  findGameCode: (profileId: string | undefined) => string | undefined;
+  totalContestantCards: ComputedRef<number>;
+};
+
 export interface UseBingo {
   games?: Ref<BingoGameRow[]>; // non-null (we’ll set a default)
   loading: Ref<boolean>;
@@ -109,7 +136,7 @@ export interface UseBingo {
   startGame: (
     gameId: string,
     payout: number | string | undefined
-  ) => Promise<void>;
+  ) => Promise<BingoGameRow | undefined>;
   stopGame: (gameId: string) => Promise<{ game: BingoGameRow } | undefined>;
 
   drawNumber: (gameId: string) => Promise<{ draw: BingoDrawRow } | undefined>;
@@ -144,5 +171,8 @@ export interface UseBingo {
     payout?: string | number
   ) => Promise<CallBingoResponse>;
   narrowGame: (row: BaseGameRow) => BingoGameRow;
-  loadGame: () => Promise<BingoGameRow | undefined | null>;
+  loadGame: () => Promise<BingoGameRow | undefined>;
+  createDashboardController: (
+    options?: DashboardControllerOptions
+  ) => DashboardController;
 }

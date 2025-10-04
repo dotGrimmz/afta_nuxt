@@ -1,15 +1,11 @@
 <script setup lang="ts">
 import type { Database } from "~/types/supabase";
 import BaseModal from "~/components/BaseModal.vue";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useAutoDraw } from "~/composables/useAutoDraw";
 
 import type {
   BingoCard,
-  BingoGameRow,
-  BingoResultRow,
   ContestantType,
-  DashboardGameState,
   IssueJoinCodeResponse,
   UseBingo,
 } from "~/types/bingo";
@@ -26,23 +22,12 @@ const {
   startGame: startBingoGame,
   stopGame,
   drawNumber,
-  getState,
   issueJoinCode,
   getContestants,
   refresh: refreshBingo,
-  loadGame: loadBingoGame,
-  narrowGame,
+  createDashboardController,
 } = useBingo() as UseBingo;
-
-const currentGame = ref<DashboardGameState>({
-  game: null,
-  draws: [],
-  candidates: [],
-  contestants: [],
-  loading: false,
-});
-
-const gameIdRef = computed(() => currentGame.value.game?.id ?? "");
+const gameIdRef = computed(() => currentGame.game?.id ?? "");
 const {
   start,
   stop: stopAutoDraw,
@@ -50,23 +35,23 @@ const {
 } = useAutoDraw({
   gameId: gameIdRef,
   drawFn: onDraw,
-  getDraws: () => currentGame.value.draws,
+  getDraws: () => currentGame.draws,
 });
 
-const isLobby = computed(() => currentGame.value.game?.status === "lobby");
-const isActive = computed(() => currentGame.value.game?.status === "active");
+const isLobby = computed(() => currentGame.game?.status === "lobby");
+const isActive = computed(() => currentGame.game?.status === "active");
 
 const handleCreateBingoGame = async () => {
-  if (!currentGame.value) {
-    bingoMessage.value = "Bingo Game Exists";
-    return;
-  }
   bingoLoading.value = true;
 
   try {
     const gameInitialized = await createBingoGame();
     if (gameInitialized) {
-      currentGame.value.game = gameInitialized;
+      unsubscribeFromGameState();
+      currentGame.game = gameInitialized;
+      await hydrateGameState(gameInitialized.id);
+      subscribeToGameState(gameInitialized.id);
+      await fetchRecentResults();
     }
   } catch (e: any) {
     bingoMessage.value = e.message;
@@ -91,7 +76,6 @@ const loggedInContestant = reactive({
 const lastIssuedCode = ref<string | null>(null);
 const lastContestantUsername = ref<string | null>(null);
 const overlay = useOverlay();
-const channels: Record<string, RealtimeChannel> = {};
 
 const modal = overlay.create(BaseModal);
 const open = async (
@@ -111,6 +95,47 @@ const open = async (
     refreshBingo();
   }
 };
+
+const {
+  state: currentGame,
+  players,
+  allReady,
+  recentResults,
+  recentResultsLoading,
+  hydrate: hydrateGameState,
+  refresh: refreshCurrentGame,
+  loadLatestGame,
+  fetchRecentResults,
+  subscribe: subscribeToGameState,
+  unsubscribe: unsubscribeFromGameState,
+  removeContestant,
+  findGameCode,
+  totalContestantCards,
+} = createDashboardController({
+  onResult: (confirmed) => {
+    if (confirmed.username && confirmed.contestant_id && isAdmin.value) {
+      open(
+        confirmed.username ?? confirmed.contestant_id,
+        confirmed.contestant_id ?? confirmed.contestant_id,
+        confirmed.payout ?? confirmed.payout
+      );
+    }
+  },
+});
+
+onMounted(async () => {
+  await fetchRecentResults();
+});
+
+onMounted(async () => {
+  const game = await loadLatestGame();
+  if (!game) return;
+  subscribeToGameState(game.id);
+});
+
+onBeforeUnmount(() => {
+  unsubscribeFromGameState();
+});
 const handleIssueCode = async (gameId: string) => {
   try {
     const { code } = (await issueJoinCode(
@@ -124,7 +149,7 @@ const handleIssueCode = async (gameId: string) => {
     lastIssuedCode.value = code;
     lastContestantUsername.value = newContestant.username;
 
-    currentGame.value.contestants = (await getContestants(
+    currentGame.contestants = (await getContestants(
       gameId
     )) as ContestantType[];
 
@@ -137,26 +162,15 @@ const handleIssueCode = async (gameId: string) => {
   }
 };
 
-const findGameCode = (profileId: string | undefined): string | undefined => {
-  if (!profileId) return;
-  const playerExistsInGame = currentGame.value.contestants.find(
-    (contestant) => contestant.user_id === profile.value?.id
-  );
-
-  if (playerExistsInGame) {
-    return playerExistsInGame.code;
-  }
-};
-
 const mySelectedContestantCard = ref<ContestantType | null>(null);
 
 const hydrateMyPrefsFromGame = async () => {
   if (!profile.value?.id || isAdmin.value) return;
-  const gameId = currentGame.value.game?.id;
+  const gameId = currentGame.game?.id;
   if (!gameId) return;
 
   const mineContestant =
-    currentGame.value.contestants.find(
+    currentGame.contestants.find(
       (c) => c.user_id === profile.value!.id
     ) ?? null;
 
@@ -186,8 +200,8 @@ const lastHydratedGameId = ref<string | null>(null);
 
 watch(
   () => ({
-    gid: currentGame.value.game?.id ?? null,
-    contestantsLen: currentGame.value.contestants.length,
+    gid: currentGame.game?.id ?? null,
+    contestantsLen: currentGame.contestants.length,
     uid: profile.value?.id ?? null,
     role: profile.value?.role ?? null,
   }),
@@ -203,195 +217,9 @@ watch(
   { immediate: true, deep: false }
 );
 
-const subscribeToContestants = (gameId: BingoGameRow["id"]) => {
-  if (channels.contestants) return;
-  channels.contestants = supabase
-    .channel(`bingo_contestants_${gameId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "bingo_contestants",
-        filter: `game_id=eq.${gameId}`,
-      },
-      (payload) => {
-        const c = payload.new as ContestantType;
-        currentGame.value.contestants = [...currentGame.value.contestants, c];
-      }
-    )
-    .subscribe();
-};
-
-const subscribeToResults = (gameId: BingoGameRow["id"]) => {
-  supabase
-    .channel(`bingo_results_${gameId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "bingo_results",
-        filter: `game_id=eq.${gameId}`,
-      },
-      async (payload) => {
-        const confirmed = payload?.new as BingoResultRow;
-        stopAutoDraw();
-        if (confirmed.username && confirmed.contestant_id && isAdmin) {
-          open(
-            confirmed.username ?? confirmed.contestant_id,
-            confirmed.contestant_id ?? confirmed.contestant_id,
-            confirmed.payout ?? confirmed.payout
-          );
-        }
-        stopAutoDraw();
-      }
-    )
-    .subscribe();
-};
-
-const subscribeToGame = (gameId: BingoGameRow["id"]) => {
-  if (channels.game) return;
-  channels.game = supabase
-    .channel(`bingo_games_${gameId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "bingo_games",
-        filter: `id=eq.${gameId}`,
-      },
-      (payload) => {
-        const updated = payload.new as BingoGameRow;
-        currentGame.value.game = narrowGame(updated);
-      }
-    )
-    .subscribe();
-};
-
-const subscribeToDraws = (gameId: BingoGameRow["id"]) => {
-  if (channels.draws) return;
-  channels.draws = supabase
-    .channel(`bingo_draws_${gameId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "bingo_draws",
-        filter: `game_id=eq.${gameId}`,
-      },
-      (payload) => {
-        const row =
-          payload.new as Database["public"]["Tables"]["bingo_draws"]["Row"];
-        if (!currentGame.value.draws.includes(row.number)) {
-          currentGame.value.draws.push(row.number);
-        }
-      }
-    )
-    .subscribe();
-};
-
-const unsubscribeAll = () => {
-  Object.values(channels).forEach((ch) => supabase.removeChannel(ch));
-  for (const key of Object.keys(channels)) {
-    Reflect.deleteProperty(channels, key);
-  }
-};
-
-const recentResults = ref<any[]>([]);
-const recentResultsLoading = ref(true);
-
-onMounted(async () => {
-  try {
-    const data = await $fetch<any>("/api/bingo/results/recent");
-
-    recentResults.value = data;
-  } catch (err) {
-    console.error("Failed to fetch results", err);
-  } finally {
-    recentResultsLoading.value = false;
-  }
-});
-
-onMounted(async () => {
-  const game = await loadBingoGame();
-  if (!game) return;
-
-  currentGame.value.game = game;
-  await hydrateGameState(game.id);
-
-  subscribeToGame(game.id);
-  subscribeToDraws(game.id);
-  subscribeToContestants(game.id);
-  subscribeToResults(game.id);
-  setupLobbyChannel(game.id);
-});
-
-onBeforeUnmount(() => {
-  unsubscribeAll();
-});
-
-async function hydrateGameState(gameId: string) {
-  currentGame.value.loading = true;
-  try {
-    const state = await getState(gameId);
-    if (!state.game) return;
-    currentGame.value.game = state.game;
-
-    currentGame.value.draws.splice(
-      0,
-      currentGame.value.draws.length,
-      ...state.draws
-    );
-    currentGame.value.candidates.splice(
-      0,
-      currentGame.value.candidates.length,
-      ...state.candidates
-    );
-    currentGame.value.contestants.splice(
-      0,
-      currentGame.value.contestants.length,
-      ...state.contestants
-    );
-  } finally {
-    currentGame.value.loading = false;
-  }
-}
-
-const refreshCurrentGame = async (gameId: string) => {
-  currentGame.value.loading = true;
-  try {
-    const next = await getState(gameId);
-
-    if (!next.game) {
-      return;
-    }
-    currentGame.value.game = next.game;
-
-    currentGame.value.draws.splice(
-      0,
-      currentGame.value.draws.length,
-      ...next.draws
-    );
-    currentGame.value.candidates.splice(
-      0,
-      currentGame.value.candidates.length,
-      ...next.candidates
-    );
-    currentGame.value.contestants.splice(
-      0,
-      currentGame.value.contestants.length,
-      ...next.contestants
-    );
-  } finally {
-    currentGame.value.loading = false;
-  }
-};
 
 const handleSelfJoinCurrentGame = async () => {
-  const gameId = currentGame.value.game?.id;
+  const gameId = currentGame.game?.id;
   const profileId = profile.value?.id; // Supabase auth user id
   if (!gameId || !profileId) return;
 
@@ -416,8 +244,8 @@ const handleSelfJoinCurrentGame = async () => {
     );
 
     if (res?.contestant) {
-      currentGame.value.contestants = [
-        ...currentGame.value.contestants,
+      currentGame.contestants = [
+        ...currentGame.contestants,
         res.contestant,
       ];
     }
@@ -435,8 +263,8 @@ const handleSelfJoinCurrentGame = async () => {
 
 async function onDraw(gameId: string) {
   const res = await drawNumber(gameId);
-  if (res?.draw && !currentGame.value.draws.includes(res.draw.number)) {
-    currentGame.value.draws.push(res.draw.number);
+  if (res?.draw && !currentGame.draws.includes(res.draw.number)) {
+    currentGame.draws.push(res.draw.number);
   }
 }
 
@@ -448,53 +276,34 @@ const onStop = async (gameId: string | null) => {
 
   recentResults.value = data;
   if (res?.game) {
-    currentGame.value.game = res.game;
+    currentGame.game = res.game;
   } else {
     await refreshCurrentGame(gameId);
   }
 };
 
 const handleReloadGame = async () => {
-  currentGame.value.game = null;
-  currentGame.value.draws = [];
-  currentGame.value.candidates = [];
-  currentGame.value.contestants = [];
-  currentGame.value.loading = false;
-  const game = await loadBingoGame();
+  unsubscribeFromGameState();
+  currentGame.game = null;
+  currentGame.draws = [];
+  currentGame.candidates = [];
+  currentGame.contestants = [];
+  currentGame.loading = false;
+
+  const game = await loadLatestGame();
   if (!game) return;
 
-  currentGame.value.game = game;
-  await hydrateGameState(game.id);
-  const data = await $fetch<any>("/api/bingo/results/recent");
-
-  recentResults.value = data;
+  subscribeToGameState(game.id);
+  await fetchRecentResults();
 };
 
 const handleRemoveContestant = async (contestantId: string): Promise<void> => {
-  if (!isLobby.value || !currentGame.value.game?.id) {
-    return;
-  }
-  try {
-    await supabase
-      .from("bingo_cards")
-      .delete()
-      .eq("contestant_id", contestantId)
-      .eq("game_id", currentGame.value.game?.id);
-    await supabase
-      .from("bingo_contestants")
-      .delete()
-      .eq("id", contestantId)
-      .eq("game_id", currentGame.value.game?.id);
-    const updatedContestants = await getContestants(currentGame.value.game?.id);
-    if (!updatedContestants) return;
-    currentGame.value.contestants = updatedContestants;
-  } catch (err) {
-    console.error("Error removing contestant:", err);
-  }
+  if (!isLobby.value) return;
+  await removeContestant(contestantId);
 };
 
 watch(
-  () => currentGame.value?.game?.status,
+  () => currentGame.game?.status,
   (newStatus, oldStatus) => {
     if (newStatus === "ended" && oldStatus !== "ended") {
       stopAutoDraw();
@@ -515,13 +324,6 @@ const {
   findPresetById,
   roundPayoutToNearestTen,
 } = useBingoPricingPresets();
-
-const totalContestantCards = computed(() =>
-  currentGame.value.contestants.reduce(
-    (total, contestant) => total + (contestant.num_cards ?? 0),
-    0
-  )
-);
 
 const computePresetPayout = (preset: PricingPreset | undefined) => {
   if (!preset) return null;
@@ -551,10 +353,10 @@ const applyPricingPreset = (preset: PricingPreset | undefined) => {
   freeSpaceCost.value = preset.freeSpaceCost;
   autoMarkCost.value = preset.autoMarkCost;
 
-  if (currentGame.value.game) {
+  if (currentGame.game) {
     const payoutValue = computePresetPayout(preset);
     if (typeof payoutValue === "number") {
-      currentGame.value.game.payout = payoutValue;
+      currentGame.game.payout = payoutValue;
     }
   }
   nextTick(() => {
@@ -584,7 +386,7 @@ const clearPresetIfCustom = () => {
   const preset = findPresetById(selectedPricingPresetId.value);
   if (!preset) return;
 
-  const payout = currentGame.value.game?.payout;
+  const payout = currentGame.game?.payout;
   const expectedPayout = computePresetPayout(preset);
   let payoutNumber = 0;
   if (typeof payout === "number") {
@@ -600,7 +402,7 @@ const clearPresetIfCustom = () => {
     baseCardCost.value !== preset.baseCardCost ||
     freeSpaceCost.value !== preset.freeSpaceCost ||
     autoMarkCost.value !== preset.autoMarkCost ||
-    (currentGame.value.game && !payoutMatches)
+    (currentGame.game && !payoutMatches)
   ) {
     selectedPricingPresetId.value = undefined;
   }
@@ -611,27 +413,27 @@ watch([baseCardCost, freeSpaceCost, autoMarkCost], () => {
 });
 
 watch(
-  () => currentGame.value.game?.payout,
+  () => currentGame.game?.payout,
   () => {
     clearPresetIfCustom();
   }
 );
 
 watch(
-  [totalContestantCards, () => currentGame.value.game?.status],
+  [totalContestantCards, () => currentGame.game?.status],
   () => {
     if (!selectedPricingPresetId.value) return;
     const preset = findPresetById(selectedPricingPresetId.value);
     if (!preset) return;
     if (typeof preset.payoutPercentage !== "number") return;
-    if (!currentGame.value.game || currentGame.value.game.status !== "lobby")
+    if (!currentGame.game || currentGame.game.status !== "lobby")
       return;
 
     const payoutValue = computePresetPayout(preset);
     if (typeof payoutValue !== "number") return;
 
     isApplyingPricingPreset.value = true;
-    currentGame.value.game.payout = payoutValue;
+    currentGame.game.payout = payoutValue;
     nextTick(() => {
       isApplyingPricingPreset.value = false;
     });
@@ -679,45 +481,7 @@ const handleStartBingoGame = async (
   payout: number | undefined | string
 ) => {
   await startBingoGame(gameId, payout);
-  const updatedState = await getState(gameId);
-  if (!updatedState.game) {
-    bingoMessage.value = "Error Loading game after Starting Bingo";
-    return;
-  }
-  currentGame.value = {
-    ...updatedState,
-    game: updatedState.game ?? undefined,
-    loading: false,
-  };
-};
-
-const players = ref<any[]>([]);
-const allReady = ref(false);
-let channel: RealtimeChannel | null = null;
-
-const setupLobbyChannel = (gameId: string) => {
-  if (channel) {
-    channel.unsubscribe();
-    channel = null;
-  }
-
-  channel = supabase.channel(`lobby:${gameId}`, { config: { presence: {} } });
-
-  channel
-    .on("presence", { event: "sync" }, () => {
-      const state = channel!.presenceState();
-      const entries = Object.values(state) as Array<any>;
-      const flat = entries.flat() as Array<{
-        user_id: string;
-        username: string;
-        ready: boolean;
-      }>;
-      players.value = flat;
-      allReady.value =
-        players.value.length > 0 &&
-        players.value.every((p) => p.ready === true);
-    })
-    .subscribe();
+  await refreshCurrentGame(gameId);
 };
 
 const getReadyIds = () =>
