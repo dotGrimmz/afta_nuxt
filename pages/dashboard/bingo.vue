@@ -9,6 +9,10 @@ import type {
   IssueJoinCodeResponse,
   UseBingo,
 } from "~/types/bingo";
+import type {
+  PricingPreset,
+  PricingPresetDraft,
+} from "~/composables/useBingoPricingPresets";
 
 const supabase = useSupabaseClient<Database>();
 const { profile, isAdmin } = useProfile();
@@ -515,64 +519,19 @@ const getReadyIds = () =>
         <h1 class="text-3xl font-semibold">Bingo Games</h1>
       </header>
 
-      <div v-if="isAdmin" class="space-y-5 rounded-lg bg-gray-800 p-6 shadow-sm">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <UButton
-            :loading="bingoCreating"
-            color="primary"
-            class="w-full sm:w-auto"
-            @click="handleCreateBingoGame()"
-          >
-            Create Game
-          </UButton>
-
-          <div class="w-full space-y-2 sm:max-w-md">
-            <label class="block text-sm text-gray-300">Pricing Preset</label>
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <USelect
-                v-model="selectedPricingPresetId"
-                :items="pricingPresetItems"
-                placeholder="Select a preset"
-                class="w-full"
-              />
-              <UButton
-                v-if="
-                  selectedPricingPreset &&
-                  selectedPricingPreset.metadata?.source !== 'builtin'
-                "
-                size="xs"
-                color="error"
-                variant="soft"
-                class="w-full sm:w-auto"
-                @click="handleDeletePricingPreset(selectedPricingPreset.id)"
-              >
-                Delete
-              </UButton>
-            </div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div class="space-y-2">
-            <label class="block text-sm text-gray-300">Base Card Cost</label>
-            <UInput v-model="baseCardCost" type="number" min="0" class="w-full" />
-          </div>
-
-          <div class="space-y-2">
-            <label class="block text-sm text-gray-300">Free Space Cost</label>
-            <UInput v-model="freeSpaceCost" type="number" min="0" class="w-full" />
-          </div>
-
-          <div class="space-y-2">
-            <label class="block text-sm text-gray-300">Auto Mark Cost</label>
-            <UInput v-model="autoMarkCost" type="number" min="0" class="w-full" />
-          </div>
-        </div>
-
-        <p v-if="bingoMessage" class="text-sm text-gray-300">
-          {{ bingoMessage }}
-        </p>
-      </div>
+      <BingoAdminPricingControls
+        v-if="isAdmin"
+        v-model:selected-preset-id="selectedPricingPresetId"
+        v-model:base-card-cost="baseCardCost"
+        v-model:free-space-cost="freeSpaceCost"
+        v-model:auto-mark-cost="autoMarkCost"
+        :creating="bingoCreating"
+        :preset-items="pricingPresetItems"
+        :selected-preset="selectedPricingPreset"
+        :bingo-message="bingoMessage"
+        @create-game="handleCreateBingoGame"
+        @delete-preset="handleDeletePricingPreset"
+      />
 
       <div v-if="bingoLoading" class="text-gray-400">Loading games...</div>
 
@@ -771,51 +730,15 @@ const getReadyIds = () =>
     </section>
 
     <section v-if="isAdmin" class="space-y-6">
-      <div class="space-y-4 rounded-lg bg-gray-800 p-6 shadow-sm">
-        <h2 class="text-xl font-semibold">Recent Bingo Winners</h2>
-
-        <div v-if="recentResultsLoading" class="text-gray-400">
-          Loading results...
-        </div>
-        <div v-else-if="!recentResults.length" class="text-gray-400">
-          No results yet.
-        </div>
-
-        <template v-else>
-          <ul class="space-y-3">
-            <li
-              v-for="res in recentResults"
-              :key="res.id"
-              class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-gray-900 px-4 py-3 text-sm"
-            >
-              <span>{{ res.username || res.contestant_id }}</span>
-              <span class="text-green-400">{{ res.payout }} 💎</span>
-              <span class="text-gray-400">
-                {{ new Date(res.created_at).toLocaleString() }}
-              </span>
-            </li>
-          </ul>
-
-          <div
-            v-if="recentResultsTotal > 0"
-            class="flex flex-col gap-3 pt-3 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <p v-if="recentResultsRangeText" class="text-xs text-gray-400">
-              Showing {{ recentResultsRangeText }}
-            </p>
-
-            <UPagination
-              v-if="recentResultsTotal > recentResultsPageSize"
-              :page="recentResultsPage"
-              :items-per-page="recentResultsPageSize"
-              :total="recentResultsTotal"
-              :disabled="recentResultsLoading"
-              size="xs"
-              @update:page="handleRecentResultsPageChange"
-            />
-          </div>
-        </template>
-      </div>
+      <BingoRecentResultsList
+        :results="recentResults"
+        :loading="recentResultsLoading"
+        :total="recentResultsTotal"
+        :page="recentResultsPage"
+        :page-size="recentResultsPageSize"
+        :range-label="recentResultsRangeText"
+        @page-change="handleRecentResultsPageChange"
+      />
 
       <div class="rounded-lg bg-gray-800 p-6 shadow-sm">
         <BingoAdminTool
