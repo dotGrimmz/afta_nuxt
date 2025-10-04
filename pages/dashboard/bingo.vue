@@ -5,35 +5,18 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useAutoDraw } from "~/composables/useAutoDraw";
 
 import type {
-  BaseGameRow,
   BingoCard,
   BingoGameRow,
   BingoResultRow,
-  ClientGameState,
   ContestantType,
   DashboardGameState,
   IssueJoinCodeResponse,
-  JoinGameResponse,
   UseBingo,
 } from "~/types/bingo";
 
 const supabase = useSupabaseClient<Database>();
 const { profile, isAdmin } = useProfile();
 const router = useRouter();
-
-// Trivia composable (unchanged)
-// const {
-//   games: triviaGames,
-//   visibleGames: visibleTriviaGames,
-//   loading: triviaLoading,
-//   creating: triviaCreating,
-//   message: triviaMessage,
-//   createGame: createTriviaGame,
-//   startGame: startTriviaGame,
-//   joinGame: joinTriviaGame,
-// } = useTrivia();
-
-const newTriviaTitle = ref("");
 
 const {
   loading: bingoLoading,
@@ -43,7 +26,6 @@ const {
   startGame: startBingoGame,
   stopGame,
   drawNumber,
-  joinGame: joinBingoGame,
   getState,
   issueJoinCode,
   getContestants,
@@ -60,21 +42,19 @@ const currentGame = ref<DashboardGameState>({
   loading: false,
 });
 
-//@ts-ignore
-const game_id = computed(() => currentGame.value?.game.id);
+const gameIdRef = computed(() => currentGame.value.game?.id ?? "");
 const {
   start,
   stop: stopAutoDraw,
   isRunning,
 } = useAutoDraw({
-  gameId: game_id,
+  gameId: gameIdRef,
   drawFn: onDraw,
   getDraws: () => currentGame.value.draws,
 });
 
 const isLobby = computed(() => currentGame.value.game?.status === "lobby");
 const isActive = computed(() => currentGame.value.game?.status === "active");
-const isEnded = computed(() => currentGame.value.game?.status === "ended");
 
 const handleCreateBingoGame = async () => {
   if (!currentGame.value) {
@@ -93,7 +73,7 @@ const handleCreateBingoGame = async () => {
   } finally {
     bingoLoading.value = false;
   }
-}; // For issuing join codes
+};
 const newContestant = reactive({
   username: "",
   numCards: 1,
@@ -108,13 +88,8 @@ const loggedInContestant = reactive({
   autoMark: true,
   code: "",
 });
-type RTESubs = {
-  channel: RealtimeChannel;
-  id: string;
-};
 const lastIssuedCode = ref<string | null>(null);
 const lastContestantUsername = ref<string | null>(null);
-const gameEnded = ref(false);
 const overlay = useOverlay();
 const channels: Record<string, RealtimeChannel> = {};
 
@@ -138,7 +113,7 @@ const open = async (
 };
 const handleIssueCode = async (gameId: string) => {
   try {
-    const { code, contestant } = (await issueJoinCode(
+    const { code } = (await issueJoinCode(
       gameId,
       newContestant.username,
       newContestant.numCards,
@@ -153,32 +128,20 @@ const handleIssueCode = async (gameId: string) => {
       gameId
     )) as ContestantType[];
 
-    // reset form
     newContestant.username = "";
     newContestant.numCards = 1;
     newContestant.freeSpace = true;
     newContestant.autoMark = true;
-
-    // add newly added constant data to the current contestant list
   } catch (err) {
     console.error("Error issuing join code:", err);
   }
 };
 
-// to find the gamecode we need to check the current player id
-// and see if it exist within the current game list of contestants
-const findGameCode = (
-  profileId: Profile["id"] | undefined
-): string | undefined => {
+const findGameCode = (profileId: string | undefined): string | undefined => {
   if (!profileId) return;
-
-  console.log("profile Id", profileId);
   const playerExistsInGame = currentGame.value.contestants.find(
     (contestant) => contestant.user_id === profile.value?.id
   );
-
-  // const contestants = stateMap.value?.[gameId]?.contestants;
-  // if (!contestants || !Array.isArray(contestants)) return null;
 
   if (playerExistsInGame) {
     return playerExistsInGame.code;
@@ -188,31 +151,19 @@ const findGameCode = (
 const mySelectedContestantCard = ref<ContestantType | null>(null);
 
 const hydrateMyPrefsFromGame = async () => {
-  // only for logged-in, non-admin users in a game context
   if (!profile.value?.id || isAdmin.value) return;
   const gameId = currentGame.value.game?.id;
   if (!gameId) return;
 
-  // find this user’s contestant row in this game (by user_id)
-  // const mineCandidate =
-  //   currentGame.value.candidates.find(
-  //     (c) => c.contestant_id === profile.value!.id
-  //   ) ?? null;
   const mineContestant =
     currentGame.value.contestants.find(
       (c) => c.user_id === profile.value!.id
     ) ?? null;
 
-  // mySelectedCandidateCard.value = mineCandidate;
   mySelectedContestantCard.value = mineContestant;
   if (!mineContestant) return;
 
-  // use their current num cards (for estimated cost)
   loggedInContestant.numCards = mineContestant.num_cards ?? 1;
-  // loggedInContestant.autoMark = mineCandidate.auto_mark_enabled;
-  // loggedInContestant.freeSpace = mineCandidate.free_space;
-
-  // 3) fetch ONE card to read prefs (don't trust currentGame.candidates for this)
   const { data: rows, error } = await supabase
     .from("bingo_cards")
     .select("*")
@@ -243,7 +194,6 @@ watch(
   async ({ gid }) => {
     if (!gid) return;
     if (lastHydratedGameId.value === gid) {
-      // contestants might have loaded later — still hydrate
       await hydrateMyPrefsFromGame();
       return;
     }
@@ -271,8 +221,6 @@ const subscribeToContestants = (gameId: BingoGameRow["id"]) => {
       }
     )
     .subscribe();
-
-  console.log("Subscribed to Contestants");
 };
 
 const subscribeToResults = (gameId: BingoGameRow["id"]) => {
@@ -289,7 +237,6 @@ const subscribeToResults = (gameId: BingoGameRow["id"]) => {
       async (payload) => {
         const confirmed = payload?.new as BingoResultRow;
         stopAutoDraw();
-        // if thstopAutoDrawe new result has a winner name then we open the modal
         if (confirmed.username && confirmed.contestant_id && isAdmin) {
           open(
             confirmed.username ?? confirmed.contestant_id,
@@ -297,13 +244,10 @@ const subscribeToResults = (gameId: BingoGameRow["id"]) => {
             confirmed.payout ?? confirmed.payout
           );
         }
-        // refresh gamestate here ?
-        // refreshBingo();
         stopAutoDraw();
       }
     )
     .subscribe();
-  console.log("Subscribed to Results");
 };
 
 const subscribeToGame = (gameId: BingoGameRow["id"]) => {
@@ -320,12 +264,10 @@ const subscribeToGame = (gameId: BingoGameRow["id"]) => {
       },
       (payload) => {
         const updated = payload.new as BingoGameRow;
-        // keep app-level status union
         currentGame.value.game = narrowGame(updated);
       }
     )
     .subscribe();
-  console.log("Subscribed to Game");
 };
 
 const subscribeToDraws = (gameId: BingoGameRow["id"]) => {
@@ -344,17 +286,18 @@ const subscribeToDraws = (gameId: BingoGameRow["id"]) => {
         const row =
           payload.new as Database["public"]["Tables"]["bingo_draws"]["Row"];
         if (!currentGame.value.draws.includes(row.number)) {
-          currentGame.value.draws.push(row.number); // mutate to preserve reactivity
+          currentGame.value.draws.push(row.number);
         }
       }
     )
     .subscribe();
-  console.log("Subscribed to Draws");
 };
 
 const unsubscribeAll = () => {
   Object.values(channels).forEach((ch) => supabase.removeChannel(ch));
-  for (const k of Object.keys(channels)) delete channels[k];
+  for (const key of Object.keys(channels)) {
+    Reflect.deleteProperty(channels, key);
+  }
 };
 
 const recentResults = ref<any[]>([]);
@@ -372,17 +315,13 @@ onMounted(async () => {
   }
 });
 
-// on mounted lets fetch the first active or lobby game
-
 onMounted(async () => {
-  // fetch the latest non-ended game
   const game = await loadBingoGame();
   if (!game) return;
 
   currentGame.value.game = game;
   await hydrateGameState(game.id);
 
-  // subscribe after initial hydration
   subscribeToGame(game.id);
   subscribeToDraws(game.id);
   subscribeToContestants(game.id);
@@ -397,11 +336,10 @@ onBeforeUnmount(() => {
 async function hydrateGameState(gameId: string) {
   currentGame.value.loading = true;
   try {
-    const state = await getState(gameId); // ClientGameState: draws:number[], winners, candidates, contestants
+    const state = await getState(gameId);
     if (!state.game) return;
     currentGame.value.game = state.game;
 
-    // mutate arrays to preserve identity
     currentGame.value.draws.splice(
       0,
       currentGame.value.draws.length,
@@ -425,14 +363,13 @@ async function hydrateGameState(gameId: string) {
 const refreshCurrentGame = async (gameId: string) => {
   currentGame.value.loading = true;
   try {
-    const next = await getState(gameId); // ClientGameState (draws:number[])
+    const next = await getState(gameId);
 
     if (!next.game) {
       return;
     }
     currentGame.value.game = next.game;
 
-    // keep array identity (reactivity-safe)
     currentGame.value.draws.splice(
       0,
       currentGame.value.draws.length,
@@ -453,34 +390,23 @@ const refreshCurrentGame = async (gameId: string) => {
   }
 };
 
-// Types you already have:
-// type BingoGameRow, type ContestantType, type IssueJoinCodeResponse, etc.
-
 const handleSelfJoinCurrentGame = async () => {
   const gameId = currentGame.value.game?.id;
   const profileId = profile.value?.id; // Supabase auth user id
   if (!gameId || !profileId) return;
 
-  // 1) Already a contestant? Navigate using their existing code.
   const existingCode = findGameCode(profileId);
   if (existingCode) {
-    console.log("code exists");
     router.push(`/play/bingo/${existingCode}`);
     return;
   }
 
-  // 2) Not a contestant yet → create one (with user_id) and navigate.
   try {
-    // Call a dedicated endpoint that:
-    //  - upserts/creates a contestant with { game_id, user_id, username, ... }
-    //  - generates a join code
-    //  - returns { contestant, code, cards }
     const res = await $fetch<IssueJoinCodeResponse>(
       `/api/bingo/games/${gameId}/join-as-user`,
       {
         method: "POST",
         body: {
-          // sensible defaults; tweak to your UI
           username: profile.value?.username || profile.value?.email || "Player",
           numCards: loggedInContestant.numCards ?? 1,
           freeSpace: loggedInContestant.freeSpace,
@@ -489,7 +415,6 @@ const handleSelfJoinCurrentGame = async () => {
       }
     );
 
-    // update local state so UI reflects the new contestant immediately
     if (res?.contestant) {
       currentGame.value.contestants = [
         ...currentGame.value.contestants,
@@ -500,7 +425,6 @@ const handleSelfJoinCurrentGame = async () => {
     if (res?.code) {
       router.push(`/play/bingo/${res.code}`);
     } else {
-      // Fallback if the API ever omits code
       const codeFromList = findGameCode(profileId);
       if (codeFromList) router.push(`/play/bingo/${codeFromList}`);
     }
@@ -510,24 +434,21 @@ const handleSelfJoinCurrentGame = async () => {
 };
 
 async function onDraw(gameId: string) {
-  // try to apply the minimal change first
-  const res = await drawNumber(gameId); // => { draw } | undefined
+  const res = await drawNumber(gameId);
   if (res?.draw && !currentGame.value.draws.includes(res.draw.number)) {
     currentGame.value.draws.push(res.draw.number);
-  } else {
-    // fallback: full refresh
-    // await refreshCurrentGame(gameId);
   }
 }
 
-const onStop = async (gameId: string) => {
+const onStop = async (gameId: string | null) => {
+  if (!gameId) return;
   stopAutoDraw();
-  const res = await stopGame(gameId); // => { game } | undefined
+  const res = await stopGame(gameId);
   const data = await $fetch<any>("/api/bingo/results/recent");
 
   recentResults.value = data;
   if (res?.game) {
-    currentGame.value.game = res.game; // status should be 'ended' now
+    currentGame.value.game = res.game;
   } else {
     await refreshCurrentGame(gameId);
   }
@@ -550,40 +471,23 @@ const handleReloadGame = async () => {
 };
 
 const handleRemoveContestant = async (contestantId: string): Promise<void> => {
-  console.log("calling handle Remove contestant");
-  if (!isLobby.value) {
-    console.log("Game already started, cannot remove contestant.");
+  if (!isLobby.value || !currentGame.value.game?.id) {
     return;
   }
-
-  if (!currentGame.value.game?.id) {
-    console.log("No current game id?");
-    return;
-  }
-  console.log("deleting cards");
   try {
-    // Delete cards first
     await supabase
       .from("bingo_cards")
       .delete()
       .eq("contestant_id", contestantId)
       .eq("game_id", currentGame.value.game?.id);
-    console.log("cards deleted. now deleting from contestant list");
-    // Delete contestant
     await supabase
       .from("bingo_contestants")
       .delete()
       .eq("id", contestantId)
       .eq("game_id", currentGame.value.game?.id);
-    console.log("contestant deleted. now refetching contestant list");
-
-    // Refetch contestants list
     const updatedContestants = await getContestants(currentGame.value.game?.id);
-    console.log("updated contestants", updatedContestants);
     if (!updatedContestants) return;
     currentGame.value.contestants = updatedContestants;
-
-    console.log("Contestant removed:", contestantId);
   } catch (err) {
     console.error("Error removing contestant:", err);
   }
@@ -593,7 +497,6 @@ watch(
   () => currentGame.value?.game?.status,
   (newStatus, oldStatus) => {
     if (newStatus === "ended" && oldStatus !== "ended") {
-      console.log("[autoDraw] Game ended → stopping auto draw");
       stopAutoDraw();
     }
   }
@@ -664,9 +567,8 @@ watch(
   (id) => {
     const preset = id ? findPresetById(id) : undefined;
     if (id && !preset) {
-      const fallback =
-        findPresetById("rose") ?? pricingPresets.value[0] ?? null;
-      selectedPricingPresetId.value = fallback?.id ?? null;
+      const fallback = findPresetById("rose") ?? pricingPresets.value[0] ?? null;
+      selectedPricingPresetId.value = fallback?.id ?? undefined;
       return;
     }
     if (preset) {
@@ -700,7 +602,7 @@ const clearPresetIfCustom = () => {
     autoMarkCost.value !== preset.autoMarkCost ||
     (currentGame.value.game && !payoutMatches)
   ) {
-    selectedPricingPresetId.value = "";
+    selectedPricingPresetId.value = undefined;
   }
 };
 
@@ -756,15 +658,11 @@ const handleDeletePricingPreset = (id: string) => {
   removePreset(id);
 };
 
-// computed → dynamic cost per card
-
 const calculateCost = (
   numCards: number,
   freeSpace: boolean,
   autoMark: boolean
 ) => {
-  // should take a number of cards from new contestant or logged in user
-
   let solution = numCards * baseCardCost.value;
   if (freeSpace) {
     solution = solution + freeSpaceCost.value;
@@ -805,145 +703,29 @@ const setupLobbyChannel = (gameId: string) => {
 
   channel = supabase.channel(`lobby:${gameId}`, { config: { presence: {} } });
 
-  // keep last presence snapshot
-  let prev = new Map<string, { username: string; ready: boolean }>();
-
   channel
     .on("presence", { event: "sync" }, () => {
       const state = channel!.presenceState();
-      // flatten and build current map
-      const curr = new Map<string, { username: string; ready: boolean }>();
-      //@ts-ignore
-      const flat = Object.values(state).flat() as Array<{
+      const entries = Object.values(state) as Array<any>;
+      const flat = entries.flat() as Array<{
         user_id: string;
         username: string;
         ready: boolean;
       }>;
-      flat.forEach((p) =>
-        curr.set(p.user_id, { username: p.username, ready: !!p.ready })
-      );
-
-      // joins + toggles
-      for (const [id, now] of curr) {
-        const before = prev.get(id);
-        if (!before) {
-          console.log(`[JOIN] ${now.username} ready=${now.ready}`);
-        } else if (before.ready !== now.ready) {
-          console.log(
-            `[TOGGLE] ${now.username} ${before.ready} -> ${now.ready}`
-          );
-        }
-      }
-
-      // real leaves
-      for (const [id, before] of prev) {
-        if (!curr.has(id)) {
-          console.log(`[LEAVE] ${before.username} left`);
-        }
-      }
-
-      // update your UI state
       players.value = flat;
       allReady.value =
         players.value.length > 0 &&
         players.value.every((p) => p.ready === true);
-
-      // save snapshot
-      prev = curr;
     })
     .subscribe();
 };
 
-const getReadyIds = () => {
-  const readyPlayers = players.value
-    .filter((p) => p.ready === true)
-    .map((p) => String(p.user_id));
-  return readyPlayers;
-};
-
-console.log("all ready", allReady);
+const getReadyIds = () =>
+  players.value.filter((p) => p.ready === true).map((p) => String(p.user_id));
 </script>
 
 <template>
   <main class="p-2 space-y-8">
-    <!-- Trivia Games Section -->
-    <!-- <section>
-      <h1 class="text-2xl font-bold mb-2">Trivia Games</h1>
-
-      <div v-if="isAdmin" class="bg-gray-800 p-4 rounded space-y-3">
-        <label class="block">
-          <span class="text-sm text-gray-300">Game Title</span>
-          <input
-            v-model="newTriviaTitle"
-            type="text"
-            class="w-full mt-1 p-2 rounded bg-gray-900 border border-gray-600 text-white"
-            placeholder="Enter a game title"
-          />
-        </label>
-
-        <UButton
-          :loading="triviaCreating"
-          :disabled="!newTriviaTitle.trim()"
-          @click="createTriviaGame(newTriviaTitle)"
-          color="primary"
-          class="w-full"
-        >
-          Create Game
-        </UButton>
-
-        <p v-if="triviaMessage" class="text-sm mt-2">{{ triviaMessage }}</p>
-      </div>
-
-      <div v-if="triviaLoading">Loading games...</div>
-
-      <div v-else-if="visibleTriviaGames.length === 0" class="text-gray-400">
-        <span v-if="isAdmin">
-          No trivia games created yet. Create one to get started!
-        </span>
-        <span v-else> No live trivia games available right now. </span>
-      </div>
-
-      <div v-else>
-        <div
-          v-for="game in visibleTriviaGames"
-          :key="game.id"
-          class="p-2 my-2 bg-gray-800 rounded flex justify-between items-center"
-        >
-          <div>
-            <p class="font-semibold">{{ game.title }}</p>
-            <p class="text-sm text-gray-400">Status: {{ game.status }}</p>
-          </div>
-
-          <div class="flex gap-2">
-            <template v-if="isAdmin">
-              <UButton :to="`/play/${game.id}`" size="sm">Open</UButton>
-              <UButton
-                v-if="game.status === 'lobby'"
-                @click="startTriviaGame(game.id)"
-                size="sm"
-                color="primary"
-              >
-                Start
-              </UButton>
-              <UButton v-if="game.status !== 'ended'" size="sm" color="error">
-                End
-              </UButton>
-            </template>
-
-            <template v-else>
-              <UButton
-                @click="joinTriviaGame(game.id)"
-                size="sm"
-                color="primary"
-              >
-                Join
-              </UButton>
-            </template>
-          </div>
-        </div>
-      </div>
-    </section> -->
-
     <!-- Bingo Games Section -->
     <section>
       <h1 class="text-2xl font-bold mb-2">Bingo Games</h1>
@@ -1157,7 +939,7 @@ console.log("all ready", allReady);
           <BingoGameControl
             v-if="isAdmin && currentGame.game"
             :game-status="currentGame.game.status"
-            :game-id="game_id"
+            :game-id="gameIdRef"
             :draws="currentGame.draws"
             :contestants="currentGame.contestants"
             :loading="currentGame.loading"
@@ -1165,7 +947,7 @@ console.log("all ready", allReady);
             :ready-ids="getReadyIds()"
             @draw="onDraw"
             @reload-game="handleReloadGame"
-            @stop="onStop(game_id)"
+            @stop="onStop(gameIdRef)"
             @remove-contestant="handleRemoveContestant"
           />
 

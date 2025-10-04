@@ -249,10 +249,10 @@ export const useBingoPricingPresets = () => {
           0)
   );
 
-  const selectedPricingPresetId = ref<string>(
+  const selectedPricingPresetId = ref<string | undefined>(
     savedSelectionWasCustom
-      ? ""
-      : (initialSelectedPreset?.id ?? fallbackPreset?.id ?? "")
+      ? undefined
+      : initialSelectedPreset?.id ?? fallbackPreset?.id ?? undefined
   );
 
   const formatPresetLabel = (preset: PricingPreset) => {
@@ -309,7 +309,7 @@ export const useBingoPricingPresets = () => {
     );
   };
 
-  const persistSelectedPricingPresetId = (id: string | null) => {
+  const persistSelectedPricingPresetId = (id: string | undefined) => {
     if (!isBrowser || isHydrating.value) return;
     if (!id) {
       window.localStorage.setItem(
@@ -321,9 +321,15 @@ export const useBingoPricingPresets = () => {
     }
   };
 
-  watch(pricingPresets, persistCustomPricingPresets, { deep: true });
-  watch([baseCardCost, freeSpaceCost, autoMarkCost], persistBasePricingValues);
-  watch(selectedPricingPresetId, persistSelectedPricingPresetId);
+  watch(pricingPresets, () => persistCustomPricingPresets(), {
+    deep: true,
+  });
+  watch([baseCardCost, freeSpaceCost, autoMarkCost], () => {
+    persistBasePricingValues();
+  });
+  watch(selectedPricingPresetId, (id) => {
+    persistSelectedPricingPresetId(id);
+  });
 
   if (isBrowser) {
     nextTick(() => {
@@ -375,7 +381,7 @@ export const useBingoPricingPresets = () => {
     if (selectedPricingPresetId.value === id) {
       const fallback =
         findPresetById("rose") ?? pricingPresets.value[0] ?? null;
-      selectedPricingPresetId.value = fallback?.id ?? null;
+      selectedPricingPresetId.value = fallback?.id ?? undefined;
     }
   };
 
