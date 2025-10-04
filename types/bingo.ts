@@ -113,10 +113,13 @@ export type DashboardController = {
   allReady: ComputedRef<boolean>;
   recentResults: Ref<any[]>;
   recentResultsLoading: Ref<boolean>;
+  recentResultsPage: Ref<number>;
+  recentResultsPageSize: Ref<number>;
+  recentResultsTotal: Ref<number>;
   hydrate: (gameId: string) => Promise<void>;
   refresh: (gameId: string) => Promise<void>;
   loadLatestGame: () => Promise<BingoGameRow | undefined>;
-  fetchRecentResults: () => Promise<void>;
+  fetchRecentResults: (page?: number) => Promise<void>;
   subscribe: (gameId: string) => void;
   unsubscribe: () => void;
   removeContestant: (contestantId: string) => Promise<void>;

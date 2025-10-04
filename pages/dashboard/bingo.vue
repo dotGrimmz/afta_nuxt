@@ -102,6 +102,9 @@ const {
   allReady,
   recentResults,
   recentResultsLoading,
+  recentResultsPage,
+  recentResultsPageSize,
+  recentResultsTotal,
   hydrate: hydrateGameState,
   refresh: refreshCurrentGame,
   loadLatestGame,
@@ -122,6 +125,25 @@ const {
     }
   },
 });
+
+const recentResultsRangeText = computed(() => {
+  if (!recentResultsTotal.value) return "";
+
+  const start = (recentResultsPage.value - 1) * recentResultsPageSize.value + 1;
+  const end = Math.min(
+    recentResultsTotal.value,
+    recentResultsPage.value * recentResultsPageSize.value
+  );
+
+  return `${start}-${end} of ${recentResultsTotal.value}`;
+});
+
+const handleRecentResultsPageChange = (page: number) => {
+  if (recentResultsPage.value !== page) {
+    recentResultsPage.value = page;
+  }
+  fetchRecentResults(page);
+};
 
 onMounted(async () => {
   await fetchRecentResults();
@@ -272,9 +294,7 @@ const onStop = async (gameId: string | null) => {
   if (!gameId) return;
   stopAutoDraw();
   const res = await stopGame(gameId);
-  const data = await $fetch<any>("/api/bingo/results/recent");
-
-  recentResults.value = data;
+  await fetchRecentResults(1);
   if (res?.game) {
     currentGame.game = res.game;
   } else {
@@ -489,292 +509,270 @@ const getReadyIds = () =>
 </script>
 
 <template>
-  <main class="p-2 space-y-8">
-    <!-- Bingo Games Section -->
-    <section>
-      <h1 class="text-2xl font-bold mb-2">Bingo Games</h1>
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+    <section class="space-y-6">
+      <header class="space-y-1">
+        <h1 class="text-3xl font-semibold">Bingo Games</h1>
+      </header>
 
-      <!-- Admin-only: Create Bingo Game -->
-      <div v-if="isAdmin" class="bg-gray-800 p-4 rounded space-y-3">
-        <UButton
-          :loading="bingoCreating"
-          color="primary"
-          class="w-full"
-          @click="handleCreateBingoGame()"
-        >
-          Create Game
-        </UButton>
-        <div>
-          <label class="block text-gray-300 text-sm mb-1">Pricing Preset</label>
-          <div class="flex items-center gap-2">
-            <USelect
-              v-model="selectedPricingPresetId"
-              :items="pricingPresetItems"
-              placeholder="Select a preset"
-              class="w-full"
-            />
-            <UButton
-              v-if="
-                selectedPricingPreset &&
-                selectedPricingPreset.metadata?.source !== 'builtin'
-              "
-              size="xs"
-              color="error"
-              variant="soft"
-              @click="handleDeletePricingPreset(selectedPricingPreset.id)"
-            >
-              Delete
-            </UButton>
-          </div>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-gray-300 text-sm mb-1"
-              >Base Card Cost</label
-            >
-            <UInput
-              v-model="baseCardCost"
-              type="number"
-              min="0"
-              class="w-full"
-            />
-          </div>
+      <div v-if="isAdmin" class="space-y-5 rounded-lg bg-gray-800 p-6 shadow-sm">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <UButton
+            :loading="bingoCreating"
+            color="primary"
+            class="w-full sm:w-auto"
+            @click="handleCreateBingoGame()"
+          >
+            Create Game
+          </UButton>
 
-          <div>
-            <label class="block text-gray-300 text-sm mb-1"
-              >Free Space Cost</label
-            >
-            <UInput
-              v-model="freeSpaceCost"
-              type="number"
-              min="0"
-              class="w-full"
-            />
-          </div>
-
-          <div>
-            <label class="block text-gray-300 text-sm mb-1"
-              >Auto Mark Cost</label
-            >
-            <UInput
-              v-model="autoMarkCost"
-              type="number"
-              min="0"
-              class="w-full"
-            />
-          </div>
-        </div>
-        <p v-if="bingoMessage" class="text-sm mt-2">{{ bingoMessage }}</p>
-      </div>
-
-      <!-- Loading -->
-      <div v-if="bingoLoading">Loading games...</div>
-
-      <!-- No games -->
-      <div v-else-if="!currentGame.game" class="text-gray-400">
-        <span v-if="isAdmin">
-          No bingo games created yet. Create one to get started!
-        </span>
-        <span v-else> No live bingo games available right now. </span>
-      </div>
-
-      <!-- Games list -->
-      <div v-else>
-        <div :key="currentGame.game.id" class="p-2 my-2 bg-gray-800 rounded">
-          <!-- Game header -->
-          <div class="flex justify-between items-center">
-            <div class="w-full">
-              <div class="flex w-full items-center justify-between">
-                <p class="font-semibold">Current Game</p>
-
-                <p v-if="isActive" class="text-sm text-gray-400">
-                  💎 {{ currentGame.game.payout }}
-                </p>
-              </div>
-              <div class="flex w-full items-center justify-between">
-                <p class="text-sm text-gray-400">
-                  Status: {{ currentGame.game.status }}
-                </p>
-
-                <USwitch
-                  v-if="isActive"
-                  v-model="isRunning"
-                  label="Auto Draw"
-                  @update:model-value="
-                    (val: boolean) => (val ? start() : stopAutoDraw())
-                  "
-                />
-              </div>
-            </div>
-
-            <!-- Inline: Start & payout input -->
-            <div v-if="isAdmin" class="flex gap-2">
-              <UInput
-                v-if="isLobby"
-                v-model.number="currentGame.game.payout"
-                type="number"
-                class="w-24 p-1 rounded bg-gray-900 border border-gray-600 text-white text-sm"
-                placeholder="Payout"
+          <div class="w-full space-y-2 sm:max-w-md">
+            <label class="block text-sm text-gray-300">Pricing Preset</label>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <USelect
+                v-model="selectedPricingPresetId"
+                :items="pricingPresetItems"
+                placeholder="Select a preset"
+                class="w-full"
               />
-
               <UButton
-                v-if="isLobby && currentGame.contestants.length > 1"
-                size="sm"
-                color="primary"
-                :class="
-                  allReady
-                    ? 'ring-4 ring-green-500 animate-pulse shadow-lg shadow-green-500/30'
-                    : ''
+                v-if="
+                  selectedPricingPreset &&
+                  selectedPricingPreset.metadata?.source !== 'builtin'
                 "
-                @click="
-                  handleStartBingoGame(
-                    currentGame.game.id,
-                    currentGame.game.payout || 0
-                  )
-                "
+                size="xs"
+                color="error"
+                variant="soft"
+                class="w-full sm:w-auto"
+                @click="handleDeletePricingPreset(selectedPricingPreset.id)"
               >
-                Start
+                Delete
               </UButton>
             </div>
           </div>
+        </div>
 
-          <!-- Issue Join Code panel -->
-          <div v-if="isAdmin && isLobby" class="mt-4 bg-gray-700 p-3 rounded">
-            <h3 class="text-sm font-semibold text-gray-200 mb-2">
-              Issue Join Code
-            </h3>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div class="space-y-2">
+            <label class="block text-sm text-gray-300">Base Card Cost</label>
+            <UInput v-model="baseCardCost" type="number" min="0" class="w-full" />
+          </div>
 
-            <div class="grid grid-cols-2 gap-2">
-              <UInput
-                v-model="newContestant.username"
-                placeholder="Username"
-                size="sm"
-                class="bg-gray-900 border border-gray-600 text-white"
-              />
-              <UInput
-                v-model.number="newContestant.numCards"
-                type="number"
-                min="1"
-                placeholder="Cards"
-                size="sm"
-                class="bg-gray-900 border border-gray-600 text-white"
-              />
+          <div class="space-y-2">
+            <label class="block text-sm text-gray-300">Free Space Cost</label>
+            <UInput v-model="freeSpaceCost" type="number" min="0" class="w-full" />
+          </div>
 
-              <label class="flex items-center text-xs text-gray-300 space-x-1">
-                <input v-model="newContestant.freeSpace" type="checkbox" />
-                <span>Free Space</span>
-              </label>
-              <label class="flex items-center text-xs text-gray-300 space-x-1">
-                <input v-model="newContestant.autoMark" type="checkbox" />
-                <span>Auto Mark</span>
-              </label>
+          <div class="space-y-2">
+            <label class="block text-sm text-gray-300">Auto Mark Cost</label>
+            <UInput v-model="autoMarkCost" type="number" min="0" class="w-full" />
+          </div>
+        </div>
+
+        <p v-if="bingoMessage" class="text-sm text-gray-300">
+          {{ bingoMessage }}
+        </p>
+      </div>
+
+      <div v-if="bingoLoading" class="text-gray-400">Loading games...</div>
+
+      <div
+        v-else-if="!currentGame.game"
+        class="rounded-lg border border-dashed border-gray-700 p-6 text-gray-400"
+      >
+        <span v-if="isAdmin">
+          No bingo games created yet. Create one to get started!
+        </span>
+        <span v-else>No live bingo games available right now.</span>
+      </div>
+
+      <div
+        v-else
+        :key="currentGame.game.id"
+        class="space-y-6 rounded-lg bg-gray-800 p-6 shadow-sm"
+      >
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div class="space-y-2">
+            <div class="flex items-center justify-between gap-4">
+              <p class="text-lg font-semibold">Current Game</p>
+              <p v-if="isActive" class="text-sm text-green-400">
+                💎 {{ currentGame.game.payout }}
+              </p>
             </div>
+            <div class="flex items-center justify-between gap-4 text-sm text-gray-400">
+              <p>Status: {{ currentGame.game.status }}</p>
+              <USwitch
+                v-if="isActive"
+                v-model="isRunning"
+                label="Auto Draw"
+                @update:model-value="
+                  (val: boolean) => (val ? start() : stopAutoDraw())
+                "
+              />
+            </div>
+          </div>
 
-            <p class="text-xs text-gray-400 mt-2">
-              Expected Cost - Working:
+          <div v-if="isAdmin" class="flex items-start gap-3">
+            <UInput
+              v-if="isLobby"
+              v-model.number="currentGame.game.payout"
+              type="number"
+              class="w-24 rounded border border-gray-600 bg-gray-900 p-1 text-sm text-white"
+              placeholder="Payout"
+            />
+
+            <UButton
+              v-if="isLobby && currentGame.contestants.length > 1"
+              size="sm"
+              color="primary"
+              :class="
+                allReady
+                  ? 'ring-4 ring-green-500 animate-pulse shadow-lg shadow-green-500/30'
+                  : ''
+              "
+              @click="
+                handleStartBingoGame(
+                  currentGame.game.id,
+                  currentGame.game.payout || 0
+                )
+              "
+            >
+              Start
+            </UButton>
+          </div>
+        </div>
+
+        <div v-if="isAdmin && isLobby" class="space-y-4 rounded-lg bg-gray-700 p-5">
+          <h3 class="text-sm font-semibold text-gray-100">Issue Join Code</h3>
+
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <UInput
+              v-model="newContestant.username"
+              placeholder="Username"
+              size="sm"
+              class="w-full border border-gray-600 bg-gray-900 text-white"
+            />
+            <UInput
+              v-model.number="newContestant.numCards"
+              type="number"
+              min="1"
+              placeholder="Cards"
+              size="sm"
+              class="w-full border border-gray-600 bg-gray-900 text-white"
+            />
+
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <input v-model="newContestant.freeSpace" type="checkbox" />
+              <span>Free Space</span>
+            </label>
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <input v-model="newContestant.autoMark" type="checkbox" />
+              <span>Auto Mark</span>
+            </label>
+          </div>
+
+          <p class="text-xs text-gray-400">
+            Expected Cost:
+            {{
+              calculateCost(
+                newContestant.numCards || 0,
+                newContestant.freeSpace || false,
+                newContestant.autoMark
+              )
+            }}
+            diamonds
+          </p>
+
+          <UButton
+            class="w-full"
+            size="sm"
+            color="primary"
+            @click="handleIssueCode(currentGame.game.id)"
+          >
+            Generate Code
+          </UButton>
+
+          <p v-if="lastIssuedCode" class="text-xs text-green-400">
+            Code issued: {{ lastIssuedCode }} for {{ lastContestantUsername }}
+          </p>
+        </div>
+
+        <BingoGameControl
+          v-if="isAdmin && currentGame.game"
+          :game-status="currentGame.game.status"
+          :game-id="gameIdRef"
+          :draws="currentGame.draws"
+          :contestants="currentGame.contestants"
+          :loading="currentGame.loading"
+          :auto-draw-running="isRunning"
+          :ready-ids="getReadyIds()"
+          @draw="onDraw"
+          @reload-game="handleReloadGame"
+          @stop="onStop(gameIdRef)"
+          @remove-contestant="handleRemoveContestant"
+        />
+
+        <div v-else class="space-y-3 rounded-lg bg-gray-700 p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-xs text-gray-300">
+              Expected Cost:
               {{
                 calculateCost(
-                  newContestant.numCards || 0,
-                  newContestant.freeSpace || false,
-                  newContestant.autoMark
+                  loggedInContestant.numCards || 0,
+                  loggedInContestant.freeSpace,
+                  loggedInContestant.autoMark
                 )
               }}
               diamonds
             </p>
-
             <UButton
-              class="mt-2 w-full"
               size="sm"
               color="primary"
-              @click="handleIssueCode(currentGame.game.id)"
+              class="order-3 w-full sm:order-2 sm:w-auto"
+              @click="handleSelfJoinCurrentGame()"
             >
-              Generate Code
+              Join
             </UButton>
-
-            <p v-if="lastIssuedCode" class="text-xs text-green-400 mt-2">
-              Code issued: {{ lastIssuedCode }} for {{ lastContestantUsername }}
-            </p>
+            <UInput
+              v-model.number="loggedInContestant.numCards"
+              :disabled="!!loggedInContestant.code"
+              type="number"
+              min="1"
+              placeholder="Cards"
+              size="sm"
+              class="order-2 w-full text-white sm:order-3 sm:w-24"
+            />
           </div>
 
-          <!-- Admin control panel -->
-
-          <!-- in this, do the actions do something to state that is bad? things
-          things arent being updated  -->
-          <BingoGameControl
-            v-if="isAdmin && currentGame.game"
-            :game-status="currentGame.game.status"
-            :game-id="gameIdRef"
-            :draws="currentGame.draws"
-            :contestants="currentGame.contestants"
-            :loading="currentGame.loading"
-            :auto-draw-running="isRunning"
-            :ready-ids="getReadyIds()"
-            @draw="onDraw"
-            @reload-game="handleReloadGame"
-            @stop="onStop(gameIdRef)"
-            @remove-contestant="handleRemoveContestant"
-          />
-
-          <!-- Player control -->
-          <div v-else class="flex flex-col gap-2 mt-2">
-            <div class="flex justify-between">
-              <!-- FIX THIS -->
-
-              <p class="text-xs text-gray-400 mt-2">
-                Expected Cost:
-                {{
-                  calculateCost(
-                    loggedInContestant.numCards || 0,
-                    loggedInContestant.freeSpace,
-                    loggedInContestant.autoMark
-                  )
-                }}
-                diamonds
-              </p>
-
-              <UButton
-                size="sm"
-                color="primary"
-                @click="handleSelfJoinCurrentGame()"
-              >
-                Join
-              </UButton>
-              <UInput
-                v-model.number="loggedInContestant.numCards"
+          <div class="flex flex-wrap gap-4 text-xs text-gray-300">
+            <label class="flex items-center gap-2">
+              <input
+                v-model="loggedInContestant.freeSpace"
                 :disabled="!!loggedInContestant.code"
-                type="number"
-                min="1"
-                placeholder="Cards"
-                size="sm"
-                class="text-white"
+                type="checkbox"
               />
-            </div>
-            <div class="flex gap-2 justify-start">
-              <label class="flex items-center text-xs text-gray-300 space-x-1">
-                <input
-                  v-model="loggedInContestant.freeSpace"
-                  :disabled="!!loggedInContestant.code"
-                  type="checkbox"
-                />
-                <span>Free Space</span>
-              </label>
-              <label class="flex items-center text-xs text-gray-300 space-x-1">
-                <input
-                  v-model="loggedInContestant.autoMark"
-                  :disabled="!!loggedInContestant.code"
-                  type="checkbox"
-                />
-                <span>Auto Mark</span>
-              </label>
-            </div>
-            <div v-if="findGameCode(currentGame.game.id)" class="flex">
-              Bingo Code: {{ findGameCode(profile?.id) }}
-            </div>
+              <span>Free Space</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input
+                v-model="loggedInContestant.autoMark"
+                :disabled="!!loggedInContestant.code"
+                type="checkbox"
+              />
+              <span>Auto Mark</span>
+            </label>
           </div>
+
+          <p v-if="findGameCode(currentGame.game.id)" class="text-xs text-gray-200">
+            Bingo Code: {{ findGameCode(profile?.id) }}
+          </p>
         </div>
       </div>
-      <section v-if="isAdmin">
-        <h2 class="text-xl font-bold mb-2">Recent Bingo Winners</h2>
+    </section>
+
+    <section v-if="isAdmin" class="space-y-6">
+      <div class="space-y-4 rounded-lg bg-gray-800 p-6 shadow-sm">
+        <h2 class="text-xl font-semibold">Recent Bingo Winners</h2>
 
         <div v-if="recentResultsLoading" class="text-gray-400">
           Loading results...
@@ -783,31 +781,54 @@ const getReadyIds = () =>
           No results yet.
         </div>
 
-        <ul v-else class="space-y-2">
-          <li
-            v-for="res in recentResults"
-            :key="res.id"
-            class="p-2 bg-gray-800 rounded text-sm flex justify-between"
+        <template v-else>
+          <ul class="space-y-3">
+            <li
+              v-for="res in recentResults"
+              :key="res.id"
+              class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-gray-900 px-4 py-3 text-sm"
+            >
+              <span>{{ res.username || res.contestant_id }}</span>
+              <span class="text-green-400">{{ res.payout }} 💎</span>
+              <span class="text-gray-400">
+                {{ new Date(res.created_at).toLocaleString() }}
+              </span>
+            </li>
+          </ul>
+
+          <div
+            v-if="recentResultsTotal > 0"
+            class="flex flex-col gap-3 pt-3 sm:flex-row sm:items-center sm:justify-between"
           >
-            <span>{{ res.username || res.contestant_id }}</span>
-            <span class="text-green-400">{{ res.payout }} 💎</span>
-            <span class="text-gray-400">{{
-              new Date(res.created_at).toLocaleString()
-            }}</span>
-          </li>
-        </ul>
-      </section>
-      <BingoAdminTool
-        v-if="isAdmin"
-        :base-card-cost="baseCardCost"
-        :free-space-cost="freeSpaceCost"
-        :auto-mark-cost="autoMarkCost"
-        :preset-name="selectedPricingPreset?.name ?? ''"
-        :preset-payout-percentage="
-          selectedPricingPreset?.payoutPercentage ?? null
-        "
-        @create-preset="handleCreatePricingPreset"
-      />
+            <p v-if="recentResultsRangeText" class="text-xs text-gray-400">
+              Showing {{ recentResultsRangeText }}
+            </p>
+
+            <UPagination
+              v-if="recentResultsTotal > recentResultsPageSize"
+              :page="recentResultsPage"
+              :items-per-page="recentResultsPageSize"
+              :total="recentResultsTotal"
+              :disabled="recentResultsLoading"
+              size="xs"
+              @update:page="handleRecentResultsPageChange"
+            />
+          </div>
+        </template>
+      </div>
+
+      <div class="rounded-lg bg-gray-800 p-6 shadow-sm">
+        <BingoAdminTool
+          :base-card-cost="baseCardCost"
+          :free-space-cost="freeSpaceCost"
+          :auto-mark-cost="autoMarkCost"
+          :preset-name="selectedPricingPreset?.name ?? ''"
+          :preset-payout-percentage="
+            selectedPricingPreset?.payoutPercentage ?? null
+          "
+          @create-preset="handleCreatePricingPreset"
+        />
+      </div>
     </section>
   </main>
 </template>

@@ -280,6 +280,9 @@ export const useBingo = (): UseBingo => {
 
     const recentResults = ref<any[]>([]);
     const recentResultsLoading = ref(true);
+    const recentResultsPage = ref(1);
+    const recentResultsPageSize = ref(10);
+    const recentResultsTotal = ref(0);
 
     const totalContestantCards = computed(() =>
       state.contestants.reduce(
@@ -291,11 +294,30 @@ export const useBingo = (): UseBingo => {
     const channels: Record<string, RealtimeChannel> = {};
     let lobbyChannel: RealtimeChannel | null = null;
 
-    const fetchRecentResults = async () => {
+    const fetchRecentResults = async (page = recentResultsPage.value) => {
       recentResultsLoading.value = true;
       try {
-        const data = await $fetch<any>("/api/bingo/results/recent");
-        recentResults.value = data;
+        const response = await $fetch<{ data: any[]; total: number; page: number; pageSize: number }>(
+          "/api/bingo/results/recent",
+          {
+            query: {
+              page,
+              pageSize: recentResultsPageSize.value,
+            },
+          }
+        );
+
+        recentResults.value = response?.data ?? [];
+        recentResultsTotal.value = response?.total ?? recentResults.value.length;
+        if (typeof response?.page === "number") {
+          recentResultsPage.value = response.page;
+        }
+        if (
+          typeof response?.pageSize === "number" &&
+          response.pageSize !== recentResultsPageSize.value
+        ) {
+          recentResultsPageSize.value = response.pageSize;
+        }
       } catch (err) {
         console.error("Failed to fetch results", err);
       } finally {
@@ -508,6 +530,9 @@ export const useBingo = (): UseBingo => {
       allReady,
       recentResults,
       recentResultsLoading,
+      recentResultsPage,
+      recentResultsPageSize,
+      recentResultsTotal,
       hydrate,
       refresh: refreshState,
       loadLatestGame,
