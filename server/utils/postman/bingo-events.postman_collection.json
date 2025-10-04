@@ -1,0 +1,149 @@
+{
+  "info": {
+    "name": "AFTA Bingo Events Workflow",
+    "_postman_id": "bingo-events-workflow",
+    "description": "Full workflow for Bingo Events and Participants with sample data",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Workflow: Bingo Event",
+      "item": [
+        {
+          "name": "1. Create Event",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bible Study Bingo Night\",\n  \"payout\": 10000,\n  \"min_cards\": 2,\n  \"event_date\": \"2025-10-15T20:00:00Z\",\n  \"flyer_url\": \"https://example.com/flyer.png\",\n  \"free_space_cost\": 50,\n  \"auto_mark_cost\": 100\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/bingo/events",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "bingo", "events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set(\"eventId\", jsonData.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Get All Events",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/api/bingo/events",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "bingo", "events"]
+            }
+          }
+        },
+        {
+          "name": "3. Add Participant",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"{{eventId}}\",\n  \"user_id\": null,\n  \"card_amount\": 3,\n  \"free_space_enabled\": false,\n  \"auto_mark_enabled\": false,\n  \"status\": \"pending\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/bingo/events/{{eventId}}/participants",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "bingo", "events", "{{eventId}}", "participants"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set(\"participantId\", jsonData.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Update Participant (Mark Paid + Enable Options)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"paid\",\n  \"free_space_enabled\": true,\n  \"auto_mark_enabled\": true\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/bingo/events/{{eventId}}/participants/{{participantId}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "bingo", "events", "{{eventId}}", "participants", "{{participantId}}"]
+            }
+          }
+        },
+        {
+          "name": "5. Get Participants",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/api/bingo/events/{{eventId}}/participants",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "bingo", "events", "{{eventId}}", "participants"]
+            }
+          }
+        },
+        {
+          "name": "6. Delete Participant",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "http://localhost:3000/api/bingo/events/{{eventId}}/participants/{{participantId}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "bingo", "events", "{{eventId}}", "participants", "{{participantId}}"]
+            }
+          }
+        },
+        {
+          "name": "7. Delete Event",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "http://localhost:3000/api/bingo/events/{{eventId}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "bingo", "events", "{{eventId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "eventId", "value": "" },
+    { "key": "participantId", "value": "" }
+  ]
+}

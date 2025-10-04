@@ -4,12 +4,12 @@ import ActivePoll from "~/components/polls/ActivePoll.vue";
 import { usePollAdmin } from "~/composables/usePollAdmin";
 import AnimatedList from "~/components/vue-bits/AnimatedList.vue";
 import { useResponsiveImage } from "#imports";
+import ScrollVelocity from "../vue-bits/TextAnimations/ScrollVelocity/ScrollVelocity.vue";
 
 /* ▸ open / closed state for dropdown */
 const open = ref(false);
 
 const { activePolls, refreshPolls } = usePollAdmin();
-import ScrollVelocity from "../vue-bits/TextAnimations/ScrollVelocity/ScrollVelocity.vue";
 </script>
 <template>
   <!-- Wrapper keeps card + dropdown grouped -->
@@ -17,8 +17,8 @@ import ScrollVelocity from "../vue-bits/TextAnimations/ScrollVelocity/ScrollVelo
     <!-- Main card -->
 
     <SectionCard
-      objectFit="cover"
-      objectPosition="bottom center"
+      object-fit="cover"
+      object-position="bottom center"
       class="h-[190px] bg-black"
     >
       <ScrollVelocity
@@ -34,8 +34,8 @@ import ScrollVelocity from "../vue-bits/TextAnimations/ScrollVelocity/ScrollVelo
     </SectionCard>
     <template #content>
       <AnimatedList
-        :displayScrollbar="false"
-        className="w-[200px]"
+        :display-scrollbar="false"
+        class-name="w-[200px]"
         :items="activePolls"
       >
         <template #default="{ item: poll }">

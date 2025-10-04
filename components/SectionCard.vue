@@ -2,9 +2,9 @@
   <div
     role="button"
     tabindex="0"
+    class="section-card"
     @click="handleClick"
     @keydown.enter.space.prevent="handleClick"
-    class="section-card"
   >
     <!-- ─── image overlay (optional) ──────────────────────────── -->
     <img

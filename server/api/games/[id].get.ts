@@ -1,7 +1,7 @@
 // import type { Database } from "~/types/supabase"; // generated file
 import { serverSupabaseClient } from "#supabase/server";
 import type { H3Event } from "h3";
-import { Database } from "~/types/supabase";
+import type { Database } from "~/types/supabase";
 
 type GameRow = Database["public"]["Tables"]["games"]["Row"];
 type GamePlayerRow = Database["public"]["Tables"]["game_players"]["Row"];

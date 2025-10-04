@@ -50,7 +50,7 @@ const save = async (): Promise<void> => {
     <p v-if="errorMsg" class="text-red-400 text-sm mt-2">{{ errorMsg }}</p>
 
     <template #actions>
-      <UButton :loading="saving" @click="save" color="primary">Save</UButton>
+      <UButton :loading="saving" color="primary" @click="save">Save</UButton>
     </template>
   </BaseModal>
 </template>

@@ -7,7 +7,7 @@ interface Profile {
   role: "admin" | "user";
 }
 export default defineNuxtRouteMiddleware(async (to) => {
-  if (process.server) return;
+  if (import.meta.server) return;
 
   const supabase = useSupabaseClient();
   const user = useSupabaseUser();

@@ -7,14 +7,14 @@ const open = ref(false);
   <UCollapsible v-model:open="open">
     <!-- Main card -->
 
-    <SectionCard objectFit="cover" objectPosition="center" class="h-[190px]">
+    <SectionCard object-fit="cover" object-position="center" class="h-[190px]">
       <h2 class="text-2xl text-black font-bold mb-1">Events Section</h2>
 
       <Threads
         :color="[1, 1, 1]"
         :amplitude="1"
         :distance="0"
-        :enableMouseInteraction="false"
+        :enable-mouse-interaction="false"
       />
     </SectionCard>
     <template #content>

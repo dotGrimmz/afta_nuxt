@@ -22,8 +22,8 @@
         <span
           v-for="spanIndex in calculatedCopies[index] || 15"
           :key="spanIndex"
-          :class="`flex-shrink-0 ${className}`"
           :ref="spanIndex === 1 ? (el) => setCopyRef(el, index) : undefined"
+          :class="`flex-shrink-0 ${className}`"
         >
           {{ text }}&nbsp;
         </span>

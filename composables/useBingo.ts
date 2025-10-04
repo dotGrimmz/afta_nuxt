@@ -1,4 +1,6 @@
+import { computed, reactive, ref } from "vue";
 import type { Database } from "~/types/supabase";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import type {
   GameStateResponse,
@@ -14,6 +16,10 @@ import type {
   ClientGameState,
   IssueJoinCodeResponse,
   BingoContestantRow,
+  DashboardController,
+  DashboardControllerOptions,
+  DashboardGameState,
+  LobbyPresence,
 } from "~/types/bingo";
 
 export const useBingo = (): UseBingo => {
@@ -77,14 +83,12 @@ export const useBingo = (): UseBingo => {
     gameId: string,
     payout: number | undefined | string
   ): Promise<BingoGameRow | undefined> => {
-    console.log("payout in start game call function in composable", payout);
     try {
       const { game } = await $fetch(`/api/bingo/games/${gameId}/start`, {
         method: "POST",
         body: { payout },
       });
 
-      console.log("game from:", game);
       const gameNarrow = narrowGame(game);
       await refresh();
 
@@ -167,7 +171,6 @@ export const useBingo = (): UseBingo => {
     const data = await $fetch<GameStateResponse>(
       `/api/bingo/games/${gameId}/state`
     );
-    console.log("data from get state, should have winners array", data);
     return {
       game: narrowGame(data.game),
       draws: data.draws.map((d: { number: any }) => d.number),
@@ -189,7 +192,11 @@ export const useBingo = (): UseBingo => {
     contestantId?: string | undefined
   ): Promise<IssueJoinCodeResponse | undefined> => {
     try {
-      const { contestant, code, cards } = await $fetch(
+      const { contestant, code, cards } = await $fetch<{
+        contestant: BingoContestantRow;
+        code: string;
+        cards: BingoCard[];
+      }>(
         `/api/bingo/games/${gameId}/add-contestant`,
         {
           method: "POST",
@@ -197,8 +204,7 @@ export const useBingo = (): UseBingo => {
         }
       );
 
-      //@ts-ignore
-      return { contestant, code, cards };
+      return { contestant, code, cards } as IssueJoinCodeResponse;
     } catch (err: any) {
       console.error("Failed to issue join code:", err);
     }
@@ -231,7 +237,6 @@ export const useBingo = (): UseBingo => {
         method: "POST",
         body: { cardId, contestantId, username, payout },
       });
-      console.log({ response });
       return response as CallBingoResponse;
     } catch (err: any) {
       console.error("Failed to call bingo:", err);
@@ -255,13 +260,298 @@ export const useBingo = (): UseBingo => {
     }
   };
 
+  const createDashboardController = (
+    options?: DashboardControllerOptions
+  ): DashboardController => {
+    const state = reactive<DashboardGameState>({
+      game: null,
+      draws: [],
+      candidates: [],
+      contestants: [],
+      loading: false,
+    });
+
+    const players = ref<LobbyPresence[]>([]);
+    const allReady = computed(
+      () =>
+        players.value.length > 0 &&
+        players.value.every((p) => p.ready === true)
+    );
+
+    const recentResults = ref<any[]>([]);
+    const recentResultsLoading = ref(true);
+    const recentResultsPage = ref(1);
+    const recentResultsPageSize = ref(10);
+    const recentResultsTotal = ref(0);
+
+    const totalContestantCards = computed(() =>
+      state.contestants.reduce(
+        (total, contestant) => total + (contestant.num_cards ?? 0),
+        0
+      )
+    );
+
+    const channels: Record<string, RealtimeChannel> = {};
+    let lobbyChannel: RealtimeChannel | null = null;
+
+    const fetchRecentResults = async (page = recentResultsPage.value) => {
+      recentResultsLoading.value = true;
+      try {
+        const response = await $fetch<{ data: any[]; total: number; page: number; pageSize: number }>(
+          "/api/bingo/results/recent",
+          {
+            query: {
+              page,
+              pageSize: recentResultsPageSize.value,
+            },
+          }
+        );
+
+        recentResults.value = response?.data ?? [];
+        recentResultsTotal.value = response?.total ?? recentResults.value.length;
+        if (typeof response?.page === "number") {
+          recentResultsPage.value = response.page;
+        }
+        if (
+          typeof response?.pageSize === "number" &&
+          response.pageSize !== recentResultsPageSize.value
+        ) {
+          recentResultsPageSize.value = response.pageSize;
+        }
+      } catch (err) {
+        console.error("Failed to fetch results", err);
+      } finally {
+        recentResultsLoading.value = false;
+      }
+    };
+
+    const applyState = (data: ClientGameState) => {
+      if (!data.game) return;
+      state.game = data.game;
+      state.draws.splice(0, state.draws.length, ...data.draws);
+      state.candidates.splice(0, state.candidates.length, ...data.candidates);
+      state.contestants.splice(
+        0,
+        state.contestants.length,
+        ...data.contestants
+      );
+    };
+
+    const hydrate = async (gameId: string) => {
+      state.loading = true;
+      try {
+        const data = await getState(gameId);
+        applyState(data);
+      } finally {
+        state.loading = false;
+      }
+    };
+
+    const refreshState = async (gameId: string) => {
+      state.loading = true;
+      try {
+        const data = await getState(gameId);
+        applyState(data);
+      } finally {
+        state.loading = false;
+      }
+    };
+
+    const subscribeToContestants = (gameId: string) => {
+      if (channels.contestants) return;
+      channels.contestants = supabase
+        .channel(`bingo_contestants_${gameId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "bingo_contestants",
+            filter: `game_id=eq.${gameId}`,
+          },
+          (payload) => {
+            const contestant = payload.new as ContestantType;
+            state.contestants = [...state.contestants, contestant];
+          }
+        )
+        .subscribe();
+    };
+
+    const subscribeToResults = (gameId: string) => {
+      if (channels.results) return;
+      channels.results = supabase
+        .channel(`bingo_results_${gameId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "bingo_results",
+            filter: `game_id=eq.${gameId}`,
+          },
+          async (payload) => {
+            const confirmed = payload?.new as BingoResultRow;
+            if (options?.onResult) {
+              options.onResult(confirmed);
+            }
+            await fetchRecentResults();
+          }
+        )
+        .subscribe();
+    };
+
+    const subscribeToGame = (gameId: string) => {
+      if (channels.game) return;
+      channels.game = supabase
+        .channel(`bingo_games_${gameId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "bingo_games",
+            filter: `id=eq.${gameId}`,
+          },
+          (payload) => {
+            const updated = payload.new as BingoGameRow;
+            state.game = narrowGame(updated);
+          }
+        )
+        .subscribe();
+    };
+
+    const subscribeToDraws = (gameId: string) => {
+      if (channels.draws) return;
+      channels.draws = supabase
+        .channel(`bingo_draws_${gameId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "bingo_draws",
+            filter: `game_id=eq.${gameId}`,
+          },
+          (payload) => {
+            const row =
+              payload.new as Database["public"]["Tables"]["bingo_draws"]["Row"];
+            if (!state.draws.includes(row.number)) {
+              state.draws.push(row.number);
+            }
+          }
+        )
+        .subscribe();
+    };
+
+    const setupLobbyChannel = (gameId: string) => {
+      if (lobbyChannel) {
+        supabase.removeChannel(lobbyChannel);
+        lobbyChannel = null;
+      }
+      lobbyChannel = supabase.channel(`lobby:${gameId}`, {
+        config: { presence: {} },
+      });
+      lobbyChannel
+        .on("presence", { event: "sync" }, () => {
+          const stateMap = lobbyChannel!.presenceState();
+          const entries = Object.values(stateMap) as Array<any>;
+          const flat = entries.flat() as Array<LobbyPresence>;
+          players.value = flat.map((entry) => ({
+            user_id: String(entry.user_id),
+            username: entry.username,
+            ready: !!entry.ready,
+          }));
+        })
+        .subscribe();
+    };
+
+    const subscribe = (gameId: string) => {
+      subscribeToGame(gameId);
+      subscribeToDraws(gameId);
+      subscribeToContestants(gameId);
+      subscribeToResults(gameId);
+      setupLobbyChannel(gameId);
+    };
+
+    const unsubscribe = () => {
+      Object.values(channels).forEach((ch) => supabase.removeChannel(ch));
+      for (const key of Object.keys(channels)) {
+        Reflect.deleteProperty(channels, key);
+      }
+      if (lobbyChannel) {
+        supabase.removeChannel(lobbyChannel);
+        lobbyChannel = null;
+      }
+    };
+
+    const loadLatestGame = async (): Promise<BingoGameRow | undefined> => {
+      const game = await loadGame();
+      if (!game) return undefined;
+      state.game = game;
+      await hydrate(game.id);
+      return game;
+    };
+
+    const removeContestant = async (contestantId: string) => {
+      const gameId = state.game?.id;
+      if (!gameId) return;
+      try {
+        await supabase
+          .from("bingo_cards")
+          .delete()
+          .eq("contestant_id", contestantId)
+          .eq("game_id", gameId);
+
+        await supabase
+          .from("bingo_contestants")
+          .delete()
+          .eq("id", contestantId)
+          .eq("game_id", gameId);
+
+        const updatedContestants = await getContestants(gameId);
+        if (!updatedContestants) return;
+        state.contestants = updatedContestants;
+      } catch (err) {
+        console.error("Error removing contestant:", err);
+      }
+    };
+
+    const findGameCode = (profileId: string | undefined) => {
+      if (!profileId) return;
+      const contestant = state.contestants.find(
+        (entry) => entry.user_id === profileId
+      );
+      return contestant?.code ?? undefined;
+    };
+
+    return {
+      state,
+      players,
+      allReady,
+      recentResults,
+      recentResultsLoading,
+      recentResultsPage,
+      recentResultsPageSize,
+      recentResultsTotal,
+      hydrate,
+      refresh: refreshState,
+      loadLatestGame,
+      fetchRecentResults,
+      subscribe,
+      unsubscribe,
+      removeContestant,
+      findGameCode,
+      totalContestantCards,
+    };
+  };
+
   return {
+    games,
     loading,
     creating,
     message,
     refresh,
     createGame,
-    //@ts-ignore
     startGame,
     stopGame,
     drawNumber,
@@ -274,5 +564,6 @@ export const useBingo = (): UseBingo => {
     getState,
 
     loadGame,
+    createDashboardController,
   } satisfies UseBingo;
 };
