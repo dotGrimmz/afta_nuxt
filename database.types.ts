@@ -222,6 +222,15 @@ export type Database = {
           min_players: number
           payout: number
           status: string
+          mode: string
+          total_rounds: number
+          strategy_draws_per_round: number
+          strategy_draw_interval_seconds: number
+          strategy_intermission_seconds: number
+          strategy_first_place_points: number
+          strategy_second_place_points: number
+          strategy_third_place_points: number
+          strategy_required_winners: number
           winner_id: string | null
           winner_username: string | null
         }
@@ -232,6 +241,15 @@ export type Database = {
           min_players?: number
           payout?: number
           status?: string
+          mode?: string
+          total_rounds?: number
+          strategy_draws_per_round?: number
+          strategy_draw_interval_seconds?: number
+          strategy_intermission_seconds?: number
+          strategy_first_place_points?: number
+          strategy_second_place_points?: number
+          strategy_third_place_points?: number
+          strategy_required_winners?: number
           winner_id?: string | null
           winner_username?: string | null
         }
@@ -242,6 +260,15 @@ export type Database = {
           min_players?: number
           payout?: number
           status?: string
+          mode?: string
+          total_rounds?: number
+          strategy_draws_per_round?: number
+          strategy_draw_interval_seconds?: number
+          strategy_intermission_seconds?: number
+          strategy_first_place_points?: number
+          strategy_second_place_points?: number
+          strategy_third_place_points?: number
+          strategy_required_winners?: number
           winner_id?: string | null
           winner_username?: string | null
         }
@@ -306,6 +333,130 @@ export type Database = {
             columns: ["game_id"]
             isOneToOne: true
             referencedRelation: "bingo_games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bingo_rounds: {
+        Row: {
+          id: string
+          game_id: string
+          round_number: number
+          status: Database["public"]["Enums"]["bingo_round_status"]
+          draws_per_round: number
+          draw_interval_seconds: number
+          started_at: string | null
+          ended_at: string | null
+          intermission_ends_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          game_id: string
+          round_number: number
+          status?: Database["public"]["Enums"]["bingo_round_status"]
+          draws_per_round?: number
+          draw_interval_seconds?: number
+          started_at?: string | null
+          ended_at?: string | null
+          intermission_ends_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          game_id?: string
+          round_number?: number
+          status?: Database["public"]["Enums"]["bingo_round_status"]
+          draws_per_round?: number
+          draw_interval_seconds?: number
+          started_at?: string | null
+          ended_at?: string | null
+          intermission_ends_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bingo_rounds_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "bingo_games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bingo_scores: {
+        Row: {
+          created_at: string
+          event_id: string
+          game_id: string | null
+          round_id: string | null
+          contestant_id: string
+          points_awarded: number
+          total_after_round: number
+          position: number | null
+          metadata: Json
+          id: string
+          award_order: number | null
+          is_bonus: boolean
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          game_id?: string | null
+          round_id?: string | null
+          contestant_id: string
+          points_awarded?: number
+          total_after_round?: number
+          position?: number | null
+          metadata?: Json
+          id?: string
+          award_order?: number | null
+          is_bonus?: boolean
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          game_id?: string | null
+          round_id?: string | null
+          contestant_id?: string
+          points_awarded?: number
+          total_after_round?: number
+          position?: number | null
+          metadata?: Json
+          id?: string
+          award_order?: number | null
+          is_bonus?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bingo_scores_contestant_id_fkey"
+            columns: ["contestant_id"]
+            isOneToOne: false
+            referencedRelation: "bingo_contestants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bingo_scores_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "bingo_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bingo_scores_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "bingo_games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bingo_scores_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: false
+            referencedRelation: "bingo_rounds"
             referencedColumns: ["id"]
           },
         ]
@@ -761,6 +912,7 @@ export type Database = {
       }
     }
     Enums: {
+      bingo_round_status: "pending" | "active" | "cooldown" | "completed"
       game_status: "lobby" | "live" | "ended"
       round_status: "hidden" | "shown" | "locked" | "scored"
     }

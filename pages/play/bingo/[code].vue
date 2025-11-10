@@ -8,6 +8,8 @@ import type {
   BingoResultRow,
   CallBingoResponse,
   ContestantType,
+  StrategyLeaderboardEntry,
+  StrategyScoreHistoryRow,
 } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { checkBingoClient } from "~/utils/bingo/checkBingoClient";
@@ -21,7 +23,8 @@ const router = useRouter();
 
 const supabase = useSupabaseClient<Database>();
 
-const { joinGame, getState, callBingo, narrowGame } = useBingo();
+const { joinGame, getState, callBingo, narrowGame, getStrategyScores } =
+  useBingo();
 
 const contestant = ref<ContestantType | null>(null);
 const cards = ref<BingoCard[]>([]);
@@ -47,6 +50,164 @@ const contestants = ref<ContestantType[]>([]);
 
 const autoMarkEnabled = computed(() => !!cards.value[0]?.auto_mark_enabled);
 const freeSpaceEneabled = computed(() => cards.value[0].free_space);
+const strategyScoreLoading = ref(true);
+const strategyPoints = ref(0);
+const strategyRank = ref<number | null>(null);
+const strategyRecentAward = ref<string | null>(null);
+const strategyEventId = ref<string | null>(null);
+const strategyHistory = ref<StrategyScoreHistoryRow[]>([]);
+const strategyLeaderboard = ref<StrategyLeaderboardEntry[]>([]);
+const isStrategyMode = computed(() => currentGame.value?.mode === "strategy");
+const strategyRoundLabel = computed(() => {
+  if (!isStrategyMode.value) return "";
+  if (!currentGame.value) return "Lobby";
+  if (currentGame.value.status === "lobby") return "Lobby";
+  if (currentGame.value.status === "ended") return "Game Over";
+  const drawCount = draws.value.length;
+  if (!drawCount) return "Awaiting draws";
+  const approxRound = Math.max(1, Math.ceil(drawCount / 5));
+  return `Round ${approxRound}`;
+});
+const personalStrategyHistory = computed(() => {
+  if (!isStrategyMode.value || !contestant.value) return [];
+  return strategyHistory.value
+    .filter((row) => row.contestant_id === contestant.value?.id)
+    .slice(0, 3);
+});
+
+const gameModeLabel = computed(() =>
+  currentGame.value?.mode === "strategy" ? "Strategy" : "Classic"
+);
+
+const resetStrategyState = () => {
+  strategyPoints.value = 0;
+  strategyRank.value = null;
+  strategyRecentAward.value = null;
+  strategyEventId.value = null;
+  strategyHistory.value = [];
+  strategyLeaderboard.value = [];
+  strategyScoreLoading.value = false;
+};
+
+const fetchStrategyEventId = async (gameId: string): Promise<string | null> => {
+  try {
+    const { data, error } = await supabase
+      .from("bingo_events")
+      .select("id")
+      .eq("game_id", gameId)
+      .maybeSingle();
+    if (error) {
+      console.error("Failed to fetch event for strategy scores:", error.message);
+      return null;
+    }
+    return data?.id ?? null;
+  } catch (err) {
+    console.error("Failed to fetch strategy event:", err);
+    return null;
+  }
+};
+
+const hydrateStrategyScores = async (
+  gameId: string,
+  contestantId: string
+) => {
+  if (!isStrategyMode.value) {
+    resetStrategyState();
+    return;
+  }
+  strategyScoreLoading.value = true;
+  try {
+    const response = await getStrategyScores({ gameId, limit: 250 });
+    if (!response) return;
+    const sorted = [...(response.leaderboard ?? [])].sort(
+      (a, b) => b.totalPoints - a.totalPoints
+    );
+    strategyLeaderboard.value = sorted;
+    strategyHistory.value = response.history ?? [];
+    const entryIndex = sorted.findIndex(
+      (entry) => entry.contestantId === contestantId
+    );
+    strategyPoints.value =
+      entryIndex >= 0 ? sorted[entryIndex].totalPoints : 0;
+    strategyRank.value = entryIndex >= 0 ? entryIndex + 1 : null;
+    const latestForContestant = response.history.find(
+      (row) => row.contestant_id === contestantId
+    );
+    strategyRecentAward.value = latestForContestant
+      ? `+${latestForContestant.points_awarded} pts · ${new Date(
+          latestForContestant.created_at
+        ).toLocaleTimeString()}`
+      : null;
+  } catch (err) {
+    console.error("Failed to load strategy scores:", err);
+  } finally {
+    strategyScoreLoading.value = false;
+  }
+};
+
+const applyScoreRowToParticipantState = (row: StrategyScoreHistoryRow) => {
+  if (!isStrategyMode.value) return;
+  strategyHistory.value = [
+    { ...row },
+    ...strategyHistory.value.filter((existing) => existing.id !== row.id),
+  ].slice(0, 50);
+
+  const leaderboardCopy = [...strategyLeaderboard.value];
+  const existingIndex = leaderboardCopy.findIndex(
+    (entry) => entry.contestantId === row.contestant_id
+  );
+
+  if (existingIndex >= 0) {
+    leaderboardCopy[existingIndex] = {
+      ...leaderboardCopy[existingIndex],
+      totalPoints: row.total_after_round,
+      lastScoreId: row.id,
+      lastRoundId: row.round_id,
+      lastUpdate: row.created_at,
+    };
+  } else {
+    leaderboardCopy.push({
+      contestantId: row.contestant_id,
+      username: null,
+      code: null,
+      totalPoints: row.total_after_round,
+      lastScoreId: row.id,
+      lastRoundId: row.round_id,
+      lastUpdate: row.created_at,
+      position: row.position ?? null,
+      metadata: row.metadata ?? {},
+    });
+  }
+
+  leaderboardCopy.sort((a, b) => b.totalPoints - a.totalPoints);
+  strategyLeaderboard.value = leaderboardCopy;
+
+  if (row.contestant_id === contestant.value?.id) {
+    strategyPoints.value = row.total_after_round;
+    const newRank =
+      leaderboardCopy.findIndex(
+        (entry) => entry.contestantId === row.contestant_id
+      ) + 1;
+    strategyRank.value = newRank > 0 ? newRank : null;
+    strategyRecentAward.value = `+${row.points_awarded} pts · moments ago`;
+    const metadata =
+      typeof row.metadata === "object" && row.metadata
+        ? (row.metadata as Record<string, any>)
+        : {};
+    if ($toast) {
+      $toast.success(`+${row.points_awarded} pts`, {
+        timeout: 2500,
+        icon: "i-heroicons-sparkles-20-solid",
+        description:
+          typeof metadata.notes === "string"
+            ? metadata.notes
+            : row.round_id
+            ? `Round ${row.round_id}`
+            : "Strategy Bingo",
+      });
+    }
+  }
+};
 
 // the point of this is if the user has auto mark enabled from the cards object
 // if autoMarkenabled is true, we give the option to toggle is via a swtich
@@ -204,6 +365,14 @@ onMounted(async () => {
       disableInitialDrawAnimation.value = false;
     }
 
+    if (currentGame.value?.mode === "strategy") {
+      await hydrateStrategyScores(gameId, result.contestant.id);
+      strategyEventId.value = await fetchStrategyEventId(gameId);
+      subscribeToScores(gameId);
+    } else {
+      resetStrategyState();
+    }
+
     // subscribe after hydration
     subscribeToDraws(gameId);
     subscribeToResults(gameId);
@@ -297,6 +466,26 @@ const subscribeToContestants = (gameId: string) => {
       (payload) => {
         const newContestant = payload.new as ContestantType;
         contestants.value = [...contestants.value, newContestant];
+      }
+    )
+    .subscribe();
+  subscriptions.push(channel);
+};
+
+const subscribeToScores = (gameId: string) => {
+  const channel = supabase
+    .channel(`bingo_scores_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "bingo_scores",
+        filter: `game_id=eq.${gameId}`,
+      },
+      (payload) => {
+        const newScore = payload.new as StrategyScoreHistoryRow;
+        applyScoreRowToParticipantState(newScore);
       }
     )
     .subscribe();
@@ -575,7 +764,12 @@ onUnmounted(() => {
           <h1 class="text-2xl font-bold">
             Welcome, {{ contestant?.username || contestant?.id.slice(0, 6) }}
           </h1>
-          <div class="flex">
+          <div class="flex items-center gap-3">
+            <span
+              class="text-[10px] uppercase tracking-[0.35em] rounded-full border border-white/20 px-3 py-1 text-gray-200"
+            >
+              Mode: {{ gameModeLabel }}
+            </span>
             <UButton
               label="Home"
               size="sm"
@@ -597,6 +791,47 @@ onUnmounted(() => {
           <div class="flex flex-col items-end">
             <p>Prize: {{ winnerPayout }} 💎</p>
             <USwitch v-model="ready" label="Ready Play" />
+          </div>
+        </div>
+
+        <div
+          v-if="isStrategyMode && contestant && currentGame"
+          class="grid gap-3 mb-4 md:grid-cols-3"
+        >
+          <div class="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
+              Strategy Points
+            </p>
+            <p class="text-3xl font-semibold text-white">
+              <USkeleton v-if="strategyScoreLoading" class="h-7 w-20" />
+              <span v-else>{{ strategyPoints }}</span>
+            </p>
+            <p class="text-xs text-gray-400">
+              Rank {{ strategyRank ?? "—" }}
+            </p>
+          </div>
+          <div class="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
+              Current Round
+            </p>
+            <p class="text-xl font-semibold text-emerald-300">
+              {{ strategyRoundLabel }}
+            </p>
+            <p class="text-xs text-gray-400">
+              {{ draws.length }} numbers drawn
+            </p>
+          </div>
+          <div class="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
+              Latest Bonus
+            </p>
+            <p class="text-lg font-semibold text-white">
+              <span v-if="strategyRecentAward">{{ strategyRecentAward }}</span>
+              <span v-else>No bonus yet</span>
+            </p>
+            <p class="text-xs text-gray-400">
+              Event {{ strategyEventId ?? "—" }}
+            </p>
           </div>
         </div>
         <!-- draws - I want to animate in and out each of these items --->
@@ -634,6 +869,26 @@ onUnmounted(() => {
             :restore-marks="restoreMarks"
           />
         </div>
+        <div
+          v-if="isStrategyMode && personalStrategyHistory.length"
+          class="rounded-lg border border-white/10 bg-white/5 p-4 mb-4"
+        >
+          <p class="text-xs uppercase tracking-[0.3em] text-gray-400 mb-2">
+            Your Strategy Timeline
+          </p>
+          <ul class="space-y-2 text-sm text-white">
+            <li
+              v-for="row in personalStrategyHistory"
+              :key="row.id"
+              class="flex items-center justify-between"
+            >
+              <span>+{{ row.points_awarded }} pts</span>
+              <span class="text-xs text-gray-400">
+                {{ new Date(row.created_at).toLocaleTimeString() }}
+              </span>
+            </li>
+          </ul>
+        </div>
         <!-- Cards grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
           <div
@@ -644,6 +899,12 @@ onUnmounted(() => {
               'ring-4 ring-green-500': checkBingo({ grid: card.grid, draws }),
             }"
           >
+            <span
+              v-if="isStrategyMode"
+              class="absolute right-3 top-3 rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-emerald-200"
+            >
+              Strategy
+            </span>
             <BingoCard
               ref="bingoCardEl"
               :card="card"

@@ -6,7 +6,9 @@ import { useAutoDraw } from "~/composables/useAutoDraw";
 import type {
   BingoCard,
   ContestantType,
+  GameMode,
   IssueJoinCodeResponse,
+  StrategyScoreHistoryRow,
   UseBingo,
 } from "~/types/bingo";
 import type {
@@ -17,6 +19,18 @@ import type {
 const supabase = useSupabaseClient<Database>();
 const { profile, isAdmin } = useProfile();
 const router = useRouter();
+const { $toast } = useNuxtApp();
+const currentGameModeDraft = ref<GameMode>("classic");
+const gameModeOptions = [
+  {
+    label: "Classic · single winner",
+    value: "classic",
+  },
+  {
+    label: "Strategy · multi-round scoring",
+    value: "strategy",
+  },
+];
 
 const {
   loading: bingoLoading,
@@ -29,6 +43,7 @@ const {
   issueJoinCode,
   getContestants,
   refresh: refreshBingo,
+  recordStrategyScore,
   createDashboardController,
 } = useBingo() as UseBingo;
 const gameIdRef = computed(() => currentGame.game?.id ?? "");
@@ -118,6 +133,11 @@ const {
   removeContestant,
   findGameCode,
   totalContestantCards,
+  strategyHistory,
+  strategyLeaderboard,
+  strategyScoresLoading,
+  fetchStrategyScores,
+  setStrategySource,
 } = createDashboardController({
   onResult: (confirmed) => {
     if (confirmed.username && confirmed.contestant_id && isAdmin.value) {
@@ -128,7 +148,19 @@ const {
       );
     }
   },
+  onStrategyScore: (score) => {
+    if (isAdmin.value) {
+      handleStrategyScoreToast(score);
+    }
+  },
 });
+
+const isStrategyMode = computed(
+  () => currentGame.game?.mode === "strategy"
+);
+const showStrategyAdminPanel = computed(
+  () => isAdmin.value && isStrategyMode.value
+);
 
 const recentResultsRangeText = computed(() => {
   if (!recentResultsTotal.value) return "";
@@ -137,11 +169,291 @@ const recentResultsRangeText = computed(() => {
   const end = Math.min(
     recentResultsTotal.value,
     recentResultsPage.value * recentResultsPageSize.value
-  );
+      );
 
   return `${start}-${end} of ${recentResultsTotal.value}`;
 });
 
+const strategyFilters = reactive({
+  eventId: "",
+  gameId: "",
+  limit: 200,
+});
+const strategyForm = reactive({
+  contestantId: "",
+  pointsAwarded: 10,
+  roundId: "",
+  position: "",
+  metadataNotes: "",
+});
+const strategyFormSubmitting = ref(false);
+const strategyFormMessage = ref<string | null>(null);
+const strategyFormMessageType = ref<"success" | "error" | null>(null);
+
+const strategyContestantOptions = computed(() =>
+  currentGame.contestants.map((contestant) => ({
+    label: `${contestant.username} (${contestant.code})`,
+    value: contestant.id,
+  }))
+);
+
+const sortedStrategyLeaderboard = computed(() =>
+  [...strategyLeaderboard.value].sort(
+    (a, b) => b.totalPoints - a.totalPoints
+  )
+);
+const strategyBadges = computed<
+  Record<string, { rank: number; points: number }> | undefined
+>(() => {
+  if (!isStrategyMode.value) return undefined;
+  const map: Record<string, { rank: number; points: number }> = {};
+  sortedStrategyLeaderboard.value.forEach((entry, index) => {
+    map[entry.contestantId] = {
+      rank: index + 1,
+      points: entry.totalPoints,
+    };
+  });
+  return map;
+});
+const limitedStrategyHistory = computed(() =>
+  strategyHistory.value.slice(0, 8)
+);
+
+const ensureStrategyEventForGame = async (gameId: string | null | undefined) => {
+  if (!gameId || strategyFilters.eventId) return;
+  try {
+    const { data, error } = await supabase
+      .from("bingo_events")
+      .select("id")
+      .eq("game_id", gameId)
+      .maybeSingle();
+    if (error) {
+      console.error("Failed to find bingo event for game:", error.message);
+      return;
+    }
+    if (data?.id) {
+      strategyFilters.eventId = data.id;
+    }
+  } catch (err) {
+    console.error("Failed to map game to event:", err);
+  }
+};
+
+watch(
+  () => currentGame.contestants.length,
+  (len) => {
+    if (!isStrategyMode.value) {
+      strategyForm.contestantId = "";
+      return;
+    }
+    if (len > 0 && !strategyForm.contestantId) {
+      strategyForm.contestantId = currentGame.contestants[0].id;
+    }
+  },
+  { immediate: true }
+);
+
+const handleApplyStrategySource = async () => {
+  if (!isStrategyMode.value) {
+    strategyFormMessage.value = "Switch the current game to Strategy mode first.";
+    strategyFormMessageType.value = "error";
+    return;
+  }
+  if (!strategyFilters.eventId && !strategyFilters.gameId) {
+    strategyFormMessage.value =
+      "Provide an event ID or game ID to load Strategy Bingo scores.";
+    strategyFormMessageType.value = "error";
+    return;
+  }
+  strategyFormMessage.value = null;
+  strategyFormMessageType.value = null;
+
+  await setStrategySource({
+    eventId: strategyFilters.eventId || undefined,
+    gameId: strategyFilters.gameId || undefined,
+    limit: strategyFilters.limit,
+  });
+};
+
+const handleClearStrategySource = async () => {
+  strategyFilters.eventId = "";
+  strategyFilters.gameId = "";
+  await setStrategySource();
+};
+
+const handleRefreshStrategyScores = async () => {
+  if (!isStrategyMode.value) return;
+  if (!strategyFilters.eventId && !strategyFilters.gameId) return;
+  await fetchStrategyScores({
+    eventId: strategyFilters.eventId || undefined,
+    gameId: strategyFilters.gameId || undefined,
+    limit: strategyFilters.limit,
+  });
+};
+
+const handleStrategyScoreToast = (score: StrategyScoreHistoryRow) => {
+  if (!$toast) return;
+  const contestant =
+    currentGame.contestants.find((c) => c.id === score.contestant_id) ?? null;
+  const metadata =
+    typeof score.metadata === "object" && score.metadata
+      ? (score.metadata as Record<string, any>)
+      : {};
+  const descriptor =
+    typeof metadata.notes === "string"
+      ? metadata.notes
+      : score.round_id
+      ? `Round ${score.round_id}`
+      : "Strategy Bingo";
+
+  $toast.success(`${contestant?.username ?? "Contestant"} +${score.points_awarded} pts`, {
+    timeout: 2500,
+    icon: "i-heroicons-sparkles-20-solid",
+    description: descriptor,
+  });
+};
+
+const handleRecordStrategyScore = async () => {
+  strategyFormMessage.value = null;
+  strategyFormMessageType.value = null;
+
+  if (!isStrategyMode.value) {
+    strategyFormMessage.value =
+      "Switch the game to Strategy mode to record points.";
+    strategyFormMessageType.value = "error";
+    return;
+  }
+  if (!strategyFilters.eventId) {
+    strategyFormMessage.value = "Event ID is required to record a score.";
+    strategyFormMessageType.value = "error";
+    return;
+  }
+  if (!strategyForm.contestantId) {
+    strategyFormMessage.value = "Select a contestant to award points.";
+    strategyFormMessageType.value = "error";
+    return;
+  }
+
+  const parsedPoints = Number(strategyForm.pointsAwarded);
+  if (!Number.isFinite(parsedPoints)) {
+    strategyFormMessage.value = "Enter a numeric point value.";
+    strategyFormMessageType.value = "error";
+    return;
+  }
+
+  strategyFormSubmitting.value = true;
+  try {
+    await recordStrategyScore({
+      eventId: strategyFilters.eventId,
+      contestantId: strategyForm.contestantId,
+      pointsAwarded: parsedPoints,
+      gameId:
+        strategyFilters.gameId || currentGame.game?.id || undefined,
+      roundId: strategyForm.roundId || undefined,
+      position: strategyForm.position
+        ? Number(strategyForm.position)
+        : undefined,
+      metadata: strategyForm.metadataNotes
+        ? { notes: strategyForm.metadataNotes }
+        : {},
+    });
+
+    strategyFormMessage.value = "Score recorded.";
+    strategyFormMessageType.value = "success";
+
+    strategyForm.pointsAwarded = 0;
+    strategyForm.roundId = "";
+    strategyForm.position = "";
+    strategyForm.metadataNotes = "";
+
+    await handleRefreshStrategyScores();
+  } catch (err: any) {
+    strategyFormMessage.value =
+      err?.statusMessage ||
+      err?.message ||
+      "Failed to record score.";
+    strategyFormMessageType.value = "error";
+  } finally {
+    strategyFormSubmitting.value = false;
+  }
+};
+
+const handleCurrentGameModeChange = async (mode: GameMode) => {
+  if (!currentGame.game || currentGame.game.mode === mode) return;
+  try {
+    await $fetch(`/api/bingo/games/${currentGame.game.id}/mode`, {
+      method: "PATCH",
+      body: { mode },
+    });
+    currentGame.game.mode = mode;
+    if (mode !== "strategy") {
+      await handleClearStrategySource();
+    } else {
+      await ensureStrategyEventForGame(currentGame.game.id);
+      await setStrategySource({
+        eventId: strategyFilters.eventId || undefined,
+        gameId: currentGame.game.id,
+        limit: strategyFilters.limit,
+      });
+    }
+  } catch (err: any) {
+    $toast?.error(err?.statusMessage || err?.message || "Failed to update mode");
+    currentGameModeDraft.value = currentGame.game.mode;
+  }
+};
+
+watch(
+  () => currentGame.game?.mode,
+  (mode) => {
+    if (!mode) {
+      currentGameModeDraft.value = "classic";
+      return;
+    }
+    currentGameModeDraft.value = mode;
+  },
+  { immediate: true }
+);
+
+watch(
+  () => [currentGame.game?.id, currentGame.game?.mode] as const,
+  async ([gameId, mode]) => {
+    if (!isAdmin.value) return;
+    if (!gameId || mode !== "strategy") {
+      await handleClearStrategySource();
+      return;
+    }
+    strategyFilters.gameId = gameId;
+    if (!strategyFilters.eventId) {
+      await ensureStrategyEventForGame(gameId);
+    }
+    await setStrategySource({
+      eventId: strategyFilters.eventId || undefined,
+      gameId: strategyFilters.gameId || undefined,
+      limit: strategyFilters.limit,
+    });
+  },
+  { immediate: true }
+);
+
+const strategyAutoRoundLabel = computed(() => {
+  if (!isStrategyMode.value) return "";
+  const drawCount = currentGame.draws.length;
+  if (!drawCount) return "";
+  const approxRound = Math.max(1, Math.ceil(drawCount / 5));
+  return `Round ${approxRound}`;
+});
+
+watch(
+  () => strategyAutoRoundLabel.value,
+  (label) => {
+    if (!isStrategyMode.value) return;
+    if (!label) return;
+    if (!strategyForm.roundId || strategyForm.roundId.startsWith("Round ")) {
+      strategyForm.roundId = label;
+    }
+  },
+  { immediate: true }
+);
 const handleRecentResultsPageChange = (page: number) => {
   if (recentResultsPage.value !== page) {
     recentResultsPage.value = page;
@@ -519,6 +831,41 @@ const getReadyIds = () =>
         <h1 class="text-3xl font-semibold">Bingo Games</h1>
       </header>
 
+      <div
+        v-if="isAdmin"
+        class="space-y-3 rounded-lg border border-white/10 bg-gray-900/70 p-4 shadow-sm"
+      >
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p class="text-sm font-semibold text-white">Current Game Mode</p>
+            <p class="text-xs text-gray-400">
+              Adjust the lobby game before it starts. New games default to Classic unless changed later.
+            </p>
+          </div>
+          <div class="w-full sm:w-64">
+            <USelect
+              v-if="isLobby && currentGame.game"
+              v-model="currentGameModeDraft"
+              :items="gameModeOptions"
+              placeholder="Current game mode"
+              @update:model-value="handleCurrentGameModeChange"
+            />
+            <UInput
+              v-else
+              :model-value="currentGame.game?.mode ?? 'classic'"
+              disabled
+              size="sm"
+            />
+          </div>
+        </div>
+        <p class="text-xs text-gray-400">
+          <span class="font-semibold text-emerald-300">Strategy</span> enables
+          multi-round scoring and XP tracking, while
+          <span class="font-semibold text-blue-300">Classic</span> ends after the
+          first verified bingo.
+        </p>
+      </div>
+
       <BingoAdminPricingControls
         v-if="isAdmin"
         v-model:selected-preset-id="selectedPricingPresetId"
@@ -560,6 +907,11 @@ const getReadyIds = () =>
             </div>
             <div class="flex items-center justify-between gap-4 text-sm text-gray-400">
               <p>Status: {{ currentGame.game.status }}</p>
+              <span
+                class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em]"
+              >
+                Mode: {{ currentGame.game.mode }}
+              </span>
               <USwitch
                 v-if="isActive"
                 v-model="isRunning"
@@ -660,11 +1012,13 @@ const getReadyIds = () =>
           v-if="isAdmin && currentGame.game"
           :game-status="currentGame.game.status"
           :game-id="gameIdRef"
+          :mode="currentGame.game.mode"
           :draws="currentGame.draws"
           :contestants="currentGame.contestants"
           :loading="currentGame.loading"
           :auto-draw-running="isRunning"
           :ready-ids="getReadyIds()"
+          :strategy-badges="strategyBadges"
           @draw="onDraw"
           @reload-game="handleReloadGame"
           @stop="onStop(gameIdRef)"
@@ -739,6 +1093,234 @@ const getReadyIds = () =>
         :range-label="recentResultsRangeText"
         @page-change="handleRecentResultsPageChange"
       />
+
+      <div v-if="showStrategyAdminPanel" class="grid gap-6 lg:grid-cols-2">
+        <div class="space-y-4 rounded-lg bg-gray-800 p-6 shadow-sm">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="text-lg font-semibold text-white">
+                Strategy Bingo Leaderboard
+              </p>
+              <p class="text-xs text-gray-400">
+                Load standings by event or live game.
+              </p>
+            </div>
+            <div class="flex gap-2">
+              <UButton
+                size="xs"
+                color="primary"
+                variant="soft"
+                @click="handleApplyStrategySource"
+              >
+                Load
+              </UButton>
+              <UButton
+                size="xs"
+                color="gray"
+                variant="soft"
+                @click="handleClearStrategySource"
+              >
+                Clear
+              </UButton>
+              <UButton
+                size="xs"
+                color="gray"
+                variant="ghost"
+                icon="i-heroicons-arrow-path"
+                @click="handleRefreshStrategyScores"
+              />
+            </div>
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-2">
+            <UInput
+              v-model="strategyFilters.eventId"
+              size="sm"
+              placeholder="Event ID"
+            />
+            <UInput
+              v-model="strategyFilters.gameId"
+              size="sm"
+              placeholder="Game ID"
+            />
+          </div>
+
+          <div class="rounded-lg border border-white/10 bg-black/20">
+            <div class="flex items-center justify-between border-b border-white/5 px-4 py-3">
+              <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
+                Leaderboard
+              </p>
+              <span class="text-xs text-gray-400">
+                {{ sortedStrategyLeaderboard.length }} players
+              </span>
+            </div>
+
+            <div v-if="strategyScoresLoading" class="px-4 py-6 text-sm text-gray-400">
+              Loading strategy scores...
+            </div>
+            <div
+              v-else-if="!sortedStrategyLeaderboard.length"
+              class="px-4 py-6 text-sm text-gray-400"
+            >
+              No strategy scores yet. Load an event to begin tracking.
+            </div>
+            <ul v-else class="divide-y divide-white/5">
+              <li
+                v-for="(entry, index) in sortedStrategyLeaderboard"
+                :key="entry.lastScoreId"
+                class="flex items-center justify-between px-4 py-3 text-sm"
+              >
+                <div class="flex items-center gap-4">
+                  <span class="text-xs text-gray-400">#{{ index + 1 }}</span>
+                  <div>
+                    <p class="font-medium text-white">
+                      {{ entry.username || entry.contestantId }}
+                    </p>
+                    <p class="text-xs text-gray-400">
+                      {{ entry.code || "no code" }}
+                    </p>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <p class="text-lg font-semibold text-emerald-300">
+                    {{ entry.totalPoints }}
+                  </p>
+                  <p class="text-[10px] uppercase tracking-[0.2em] text-gray-400">
+                    pts
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <div class="space-y-3 rounded-lg border border-white/10 bg-black/40 p-4">
+            <div class="flex items-center justify-between">
+              <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
+                Recent History
+              </p>
+              <span class="text-xs text-gray-500">
+                Showing {{ limitedStrategyHistory.length }} of
+                {{ strategyHistory.length }}
+              </span>
+            </div>
+
+            <div v-if="!limitedStrategyHistory.length" class="text-sm text-gray-400">
+              No rounds recorded yet.
+            </div>
+            <ul v-else class="space-y-2">
+              <li
+                v-for="row in limitedStrategyHistory"
+                :key="row.id"
+                class="flex items-center justify-between rounded-md bg-white/5 px-3 py-2 text-xs"
+              >
+                <div>
+                  <p class="font-semibold text-white">
+                    {{ row.contestant?.username || row.contestant_id }}
+                  </p>
+                  <p class="text-[10px] uppercase tracking-[0.2em] text-gray-400">
+                    {{ row.points_awarded }} pts · {{ new Date(row.created_at).toLocaleString() }}
+                  </p>
+                </div>
+                <span class="text-[10px] text-gray-400">
+                  {{ row.metadata?.notes || "Round " + (row.round_id || "n/a") }}
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="space-y-4 rounded-lg bg-gray-800 p-6 shadow-sm">
+          <div>
+            <p class="text-lg font-semibold text-white">
+              Record Strategy Points
+            </p>
+            <p class="text-xs text-gray-400">
+              Link points to an event and contestant; scores stream to the leaderboard above.
+            </p>
+          </div>
+
+          <div class="space-y-3">
+            <label class="text-xs uppercase tracking-[0.3em] text-gray-400">
+              Contestant
+            </label>
+            <select
+              v-model="strategyForm.contestantId"
+              class="w-full rounded-md border border-white/20 bg-black/20 px-3 py-2 text-sm text-white"
+            >
+              <option value="" disabled>Select contestant</option>
+              <option
+                v-for="option in strategyContestantOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+            <p v-if="!currentGame.contestants.length" class="text-xs text-gray-400">
+              Add contestants to the current game to award Strategy points.
+            </p>
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-2">
+            <UInput
+              v-model.number="strategyForm.pointsAwarded"
+              type="number"
+              min="0"
+              label="Points"
+              size="sm"
+            />
+            <UInput
+              v-model="strategyForm.roundId"
+              label="Round ID"
+              size="sm"
+              placeholder="Optional"
+            />
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-2">
+            <UInput
+              v-model="strategyFilters.eventId"
+              label="Event ID"
+              size="sm"
+              placeholder="Required"
+            />
+            <UInput
+              v-model="strategyForm.position"
+              label="Position"
+              size="sm"
+              placeholder="Optional"
+            />
+          </div>
+
+          <UTextarea
+            v-model="strategyForm.metadataNotes"
+            label="Notes"
+            placeholder="Optional notes (stored in metadata)"
+            :rows="3"
+          />
+
+          <div
+            v-if="strategyFormMessage"
+            :class="[
+              'rounded-md px-3 py-2 text-sm',
+              strategyFormMessageType === 'success'
+                ? 'bg-emerald-500/10 text-emerald-300'
+                : 'bg-rose-500/10 text-rose-300',
+            ]"
+          >
+            {{ strategyFormMessage }}
+          </div>
+
+          <UButton
+            class="w-full"
+            color="primary"
+            :loading="strategyFormSubmitting"
+            @click="handleRecordStrategyScore"
+          >
+            Record Points
+          </UButton>
+        </div>
+      </div>
 
       <div class="rounded-lg bg-gray-800 p-6 shadow-sm">
         <BingoAdminTool

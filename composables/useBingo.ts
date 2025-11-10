@@ -13,6 +13,7 @@ import type {
   UseBingo,
   BaseGameRow,
   GameStatus,
+  GameMode,
   ClientGameState,
   IssueJoinCodeResponse,
   BingoContestantRow,
@@ -20,13 +21,22 @@ import type {
   DashboardControllerOptions,
   DashboardGameState,
   LobbyPresence,
+  BingoScoreRow,
+  StrategyLeaderboardEntry,
+  StrategyScoreFilters,
+  StrategyScoreHistoryRow,
+  StrategyScorePayload,
 } from "~/types/bingo";
 
 export const useBingo = (): UseBingo => {
   const supabase = useSupabaseClient<Database>();
   const narrowGame = (row: BaseGameRow): BingoGameRow => {
     // compile-time narrowing; no runtime check per your preference
-    return { ...row, status: row.status as GameStatus } as BingoGameRow;
+    return {
+      ...row,
+      status: row.status as GameStatus,
+      mode: (row.mode as GameMode) ?? "classic",
+    } as BingoGameRow;
   };
   // Hydrated list of games
   const {
@@ -50,13 +60,16 @@ export const useBingo = (): UseBingo => {
   const creating = ref(false);
   const message = ref("");
 
-  const createGame = async (): Promise<BingoGameRow | undefined> => {
+  const createGame = async (
+    mode: GameMode = "classic"
+  ): Promise<BingoGameRow | undefined> => {
     creating.value = true;
     try {
       const { data, error } = await supabase
         .from("bingo_games")
         .insert({
           status: "lobby",
+          mode,
         })
         .select()
         .single();
@@ -244,6 +257,55 @@ export const useBingo = (): UseBingo => {
     }
   };
 
+  const getStrategyScores = async (
+    filters: StrategyScoreFilters
+  ): Promise<{
+    history: StrategyScoreHistoryRow[];
+    leaderboard: StrategyLeaderboardEntry[];
+  } | null> => {
+    if (!filters.eventId && !filters.gameId) {
+      console.warn(
+        "[getStrategyScores] eventId or gameId is required to fetch scores."
+      );
+      return null;
+    }
+
+    try {
+      return await $fetch<{
+        history: StrategyScoreHistoryRow[];
+        leaderboard: StrategyLeaderboardEntry[];
+      }>("/api/bingo/strategy/scores", {
+        query: {
+          ...(filters.eventId ? { eventId: filters.eventId } : {}),
+          ...(filters.gameId ? { gameId: filters.gameId } : {}),
+          ...(filters.limit ? { limit: filters.limit } : {}),
+        },
+      });
+    } catch (err) {
+      console.error("Failed to fetch strategy scores:", err);
+      return null;
+    }
+  };
+
+  const recordStrategyScore = async (
+    payload: StrategyScorePayload
+  ): Promise<BingoScoreRow | undefined> => {
+    try {
+      const { score } = await $fetch<{ score: BingoScoreRow }>(
+        "/api/bingo/strategy/scores",
+        {
+          method: "POST",
+          body: payload,
+        }
+      );
+
+      return score;
+    } catch (err) {
+      console.error("Failed to record strategy score:", err);
+      throw err;
+    }
+  };
+
   const loadGame = async (): Promise<BingoGameRow | undefined> => {
     try {
       const { data } = await supabase
@@ -284,6 +346,15 @@ export const useBingo = (): UseBingo => {
     const recentResultsPageSize = ref(10);
     const recentResultsTotal = ref(0);
 
+    const strategyHistory = ref<StrategyScoreHistoryRow[]>([]);
+    const strategyLeaderboard = ref<StrategyLeaderboardEntry[]>([]);
+    const strategyScoresLoading = ref(false);
+    const strategySource = reactive<StrategyScoreFilters>({
+      eventId: options?.strategySource?.eventId,
+      gameId: options?.strategySource?.gameId,
+      limit: options?.strategySource?.limit ?? 200,
+    });
+
     const totalContestantCards = computed(() =>
       state.contestants.reduce(
         (total, contestant) => total + (contestant.num_cards ?? 0),
@@ -323,6 +394,83 @@ export const useBingo = (): UseBingo => {
       } finally {
         recentResultsLoading.value = false;
       }
+    };
+
+    const fetchStrategyScores = async (
+      filters: StrategyScoreFilters = strategySource
+    ) => {
+      if (!filters.eventId && !filters.gameId) {
+        strategyHistory.value = [];
+        strategyLeaderboard.value = [];
+        return;
+      }
+
+      strategyScoresLoading.value = true;
+      try {
+        const data = await getStrategyScores(filters);
+        if (!data) return;
+        strategyHistory.value = data.history ?? [];
+        strategyLeaderboard.value = data.leaderboard ?? [];
+      } catch (err) {
+        console.error("Failed to fetch strategy scores:", err);
+      } finally {
+        strategyScoresLoading.value = false;
+      }
+    };
+
+    const removeStrategyChannel = () => {
+      if (channels.strategyScores) {
+        supabase.removeChannel(channels.strategyScores);
+        delete channels.strategyScores;
+      }
+    };
+
+    const subscribeToStrategyScores = (filters: StrategyScoreFilters) => {
+      removeStrategyChannel();
+
+      const filterClause = filters.eventId
+        ? `event_id=eq.${filters.eventId}`
+        : filters.gameId
+        ? `game_id=eq.${filters.gameId}`
+        : null;
+
+      if (!filterClause) return;
+
+      channels.strategyScores = supabase
+        .channel(`bingo_scores_${filters.eventId ?? filters.gameId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "bingo_scores",
+            filter: filterClause,
+          },
+          async (payload) => {
+            const inserted = payload.new as StrategyScoreHistoryRow;
+            if (options?.onStrategyScore) {
+              options.onStrategyScore(inserted);
+            }
+            await fetchStrategyScores(filters);
+          }
+        )
+        .subscribe();
+    };
+
+    const setStrategySource = async (filters?: StrategyScoreFilters) => {
+      strategySource.eventId = filters?.eventId;
+      strategySource.gameId = filters?.gameId;
+      strategySource.limit = filters?.limit ?? strategySource.limit;
+
+      if (!strategySource.eventId && !strategySource.gameId) {
+        removeStrategyChannel();
+        strategyHistory.value = [];
+        strategyLeaderboard.value = [];
+        return;
+      }
+
+      await fetchStrategyScores(strategySource);
+      subscribeToStrategyScores(strategySource);
     };
 
     const applyState = (data: ClientGameState) => {
@@ -524,6 +672,12 @@ export const useBingo = (): UseBingo => {
       return contestant?.code ?? undefined;
     };
 
+    if (strategySource.eventId || strategySource.gameId) {
+      setStrategySource({ ...strategySource });
+    } else if (options?.strategySource) {
+      setStrategySource(options.strategySource);
+    }
+
     return {
       state,
       players,
@@ -537,6 +691,11 @@ export const useBingo = (): UseBingo => {
       refresh: refreshState,
       loadLatestGame,
       fetchRecentResults,
+      strategyHistory,
+      strategyLeaderboard,
+      strategyScoresLoading,
+      fetchStrategyScores,
+      setStrategySource,
       subscribe,
       unsubscribe,
       removeContestant,
@@ -560,6 +719,8 @@ export const useBingo = (): UseBingo => {
     issueJoinCode,
     getContestants,
     callBingo,
+    recordStrategyScore,
+    getStrategyScores,
     narrowGame,
     getState,
 

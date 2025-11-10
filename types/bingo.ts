@@ -6,8 +6,11 @@ import type { ComputedRef, Ref } from "vue";
 /** ── DB row aliases (exactly as Supabase generates) ───────────────────────── */
 export type BaseGameRow = Database["public"]["Tables"]["bingo_games"]["Row"];
 
-export type BingoGameRow = Omit<BaseGameRow, "status"> & {
+export type GameMode = "classic" | "strategy";
+
+export type BingoGameRow = Omit<BaseGameRow, "status" | "mode"> & {
   status: GameStatus;
+  mode: GameMode;
 
   payout?: number | null;
   winner_id?: string | null;
@@ -20,10 +23,52 @@ export type BingoContestantRow =
   Database["public"]["Tables"]["bingo_contestants"]["Row"];
 export type BingoCardRow = Database["public"]["Tables"]["bingo_cards"]["Row"];
 export type BingoDrawRow = Database["public"]["Tables"]["bingo_draws"]["Row"];
+export type BingoRoundRow =
+  Database["public"]["Tables"]["bingo_rounds"]["Row"];
 export type BingoResultRow =
   Database["public"]["Tables"]["bingo_results"]["Row"] & {
     username: string;
   };
+export type BingoScoreRow =
+  Database["public"]["Tables"]["bingo_scores"]["Row"];
+export type StrategyScoreHistoryRow = BingoScoreRow & {
+  contestant?: Pick<
+    Database["public"]["Tables"]["bingo_contestants"]["Row"],
+    "username" | "code" | "user_id"
+  > | null;
+};
+export type StrategyLeaderboardEntry = {
+  contestantId: string;
+  username: string | null;
+  code: string | null;
+  totalPoints: number;
+  lastScoreId: string;
+  lastRoundId: string | null;
+  lastUpdate: string;
+  position: number | null;
+  metadata: Database["public"]["Tables"]["bingo_scores"]["Row"]["metadata"];
+};
+export type StrategyScoreFilters = {
+  eventId?: string;
+  gameId?: string;
+  limit?: number;
+};
+export type StrategyBadgeMap = Record<
+  string,
+  {
+    rank: number;
+    points: number;
+  }
+>;
+export type StrategyScorePayload = {
+  eventId: string;
+  contestantId: string;
+  pointsAwarded: number;
+  gameId?: string | null;
+  roundId?: string | null;
+  position?: number | null;
+  metadata?: Database["public"]["Tables"]["bingo_scores"]["Row"]["metadata"];
+};
 /** ── Grid shape used in-app ───────────────────────────────────────────────── */
 export type BingoCardGrid = {
   numbers: number[][];
@@ -105,6 +150,8 @@ export type IssueJoinCodeResponse = {
 
 export type DashboardControllerOptions = {
   onResult?: (result: BingoResultRow) => void;
+  strategySource?: StrategyScoreFilters;
+  onStrategyScore?: (score: StrategyScoreHistoryRow) => void;
 };
 
 export type DashboardController = {
@@ -120,6 +167,11 @@ export type DashboardController = {
   refresh: (gameId: string) => Promise<void>;
   loadLatestGame: () => Promise<BingoGameRow | undefined>;
   fetchRecentResults: (page?: number) => Promise<void>;
+  strategyHistory: Ref<StrategyScoreHistoryRow[]>;
+  strategyLeaderboard: Ref<StrategyLeaderboardEntry[]>;
+  strategyScoresLoading: Ref<boolean>;
+  fetchStrategyScores: (filters?: StrategyScoreFilters) => Promise<void>;
+  setStrategySource: (filters?: StrategyScoreFilters) => Promise<void>;
   subscribe: (gameId: string) => void;
   unsubscribe: () => void;
   removeContestant: (contestantId: string) => Promise<void>;
@@ -135,7 +187,7 @@ export interface UseBingo {
 
   refresh: () => Promise<void>;
 
-  createGame: () => Promise<BingoGameRow | undefined>;
+  createGame: (mode?: GameMode) => Promise<BingoGameRow | undefined>;
   startGame: (
     gameId: string,
     payout: number | string | undefined
@@ -173,6 +225,15 @@ export interface UseBingo {
     username?: string | null,
     payout?: string | number
   ) => Promise<CallBingoResponse>;
+  recordStrategyScore: (
+    payload: StrategyScorePayload
+  ) => Promise<BingoScoreRow | undefined>;
+  getStrategyScores: (
+    filters: StrategyScoreFilters
+  ) => Promise<{
+    history: StrategyScoreHistoryRow[];
+    leaderboard: StrategyLeaderboardEntry[];
+  } | null>;
   narrowGame: (row: BaseGameRow) => BingoGameRow;
   loadGame: () => Promise<BingoGameRow | undefined>;
   createDashboardController: (
