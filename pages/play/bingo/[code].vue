@@ -18,6 +18,7 @@ import type { WatchStopHandle } from "vue";
 import { useBingoStorage } from "~/composables/useBingoStorage";
 import DrawBalls from "~/components/bingo/DrawBalls.vue";
 import { formatStrategyAwardLabel } from "~/utils/strategy/formatAward";
+import { computeStrategyPayout } from "~/utils/strategy/payout";
 
 const route = useRoute();
 const router = useRouter();
@@ -66,10 +67,13 @@ const nextStrategyRound = computed(() =>
   strategyRounds.value.find((round) => round.status === "pending")
 );
 const isStrategyMode = computed(() => currentGame.value?.mode === "strategy");
-const completedStrategyRounds = computed(() =>
-  strategyRounds.value.filter((round) => round.status === "completed").length
+const completedStrategyRounds = computed(
+  () =>
+    strategyRounds.value.filter((round) => round.status === "completed").length
 );
-const totalStrategyRounds = computed(() => currentGame.value?.total_rounds ?? null);
+const totalStrategyRounds = computed(
+  () => currentGame.value?.total_rounds ?? null
+);
 const strategyRoundLabel = computed(() => {
   if (!isStrategyMode.value) return "";
   if (!currentGame.value) return "Lobby";
@@ -96,10 +100,10 @@ const strategyRoundProgressText = computed(() => {
     activeNumber ??
     nextNumber ??
     (currentGame.value?.status === "ended"
-      ? total ?? completed
+      ? (total ?? completed)
       : completed
-      ? completed + 1
-      : null);
+        ? completed + 1
+        : null);
   if (!total) {
     return inferred ? `Round ${inferred}` : "";
   }
@@ -118,6 +122,86 @@ const strategyDrawLimitLabel = computed(() => {
     return limit ? `${limit} draws` : "Limited";
   }
   return "Unlimited";
+});
+const strategyPayoutResult = computed(() => {
+  if (!isStrategyMode.value) return null;
+  const game = currentGame.value;
+  if (!game) return null;
+  const baseCost = game.payout ?? 0;
+  if (!baseCost) return null;
+  const splitsRaw = [
+    game.strategy_first_place_points ?? 0,
+    game.strategy_second_place_points ?? 0,
+    game.strategy_third_place_points ?? 0,
+  ];
+  const splitTotal = splitsRaw.reduce((sum, value) => sum + value, 0);
+  if (splitTotal <= 0) return null;
+  const cardsSold = Math.max(contestants.value.length || 0, 3);
+  return computeStrategyPayout({
+    currency: "diamond",
+    cardCost: baseCost,
+    cardsSold,
+    housePercent: 0.1,
+    splits: {
+      first: splitsRaw[0] / splitTotal,
+      second: splitsRaw[1] / splitTotal,
+      third: splitsRaw[2] / splitTotal,
+    },
+    exchangeRate: 12.5,
+    conversionFee: 0.0025,
+  });
+});
+const formatGold = (value: number | undefined) =>
+  typeof value === "number" && Number.isFinite(value)
+    ? value.toLocaleString()
+    : "—";
+const strategyPlacements = computed(() => {
+  if (!isStrategyMode.value) return [];
+  return [...strategyLeaderboard.value]
+    .sort((a, b) => b.totalPoints - a.totalPoints)
+    .slice(0, 3);
+});
+const participantStrategyPlacement = computed(() => {
+  if (!isStrategyMode.value || !contestant.value) return null;
+  const idx = strategyPlacements.value.findIndex(
+    (entry) => entry.contestantId === contestant.value?.id
+  );
+  return idx >= 0 ? idx + 1 : null;
+});
+const getPlacementPayout = (placement: number): number | null => {
+  if (!strategyPayoutResult || typeof strategyPayoutResult.value !== "object") {
+    return null;
+  }
+  const result = strategyPayoutResult.value;
+  if (!result || "error" in result) return null;
+  if (placement === 1) return result.payouts.first;
+  if (placement === 2) return result.payouts.second;
+  if (placement === 3) return result.payouts.third;
+  return null;
+};
+const strategyPayoutPreview = computed(() => {
+  if (!currentGame.value || !isStrategyMode.value) return null;
+  const game = currentGame.value;
+  const splits = {
+    first: game.strategy_first_place_points,
+    second: game.strategy_second_place_points,
+    third: game.strategy_third_place_points,
+  };
+  const splitTotal = splits.first + splits.second + splits.third;
+  if (splitTotal <= 0) return null;
+  return computeStrategyPayout({
+    currency: "diamond",
+    cardCost: game.payout ?? 0,
+    cardsSold: totalContestantCards.value || game.min_players || 3,
+    housePercent: game.strategy_required_winners > 1 ? 0.05 : 0.1,
+    splits: {
+      first: splits.first / splitTotal,
+      second: splits.second / splitTotal,
+      third: splits.third / splitTotal,
+    },
+    exchangeRate: 12.5,
+    conversionFee: 0.0025,
+  });
 });
 const strategyTimeRemaining = computed(() => {
   if (!activeStrategyRound.value) return "";
@@ -172,7 +256,10 @@ const fetchStrategyEventId = async (gameId: string): Promise<string | null> => {
       .eq("game_id", gameId)
       .maybeSingle();
     if (error) {
-      console.error("Failed to fetch event for strategy scores:", error.message);
+      console.error(
+        "Failed to fetch event for strategy scores:",
+        error.message
+      );
       return null;
     }
     return data?.id ?? null;
@@ -182,10 +269,7 @@ const fetchStrategyEventId = async (gameId: string): Promise<string | null> => {
   }
 };
 
-const hydrateStrategyScores = async (
-  gameId: string,
-  contestantId: string
-) => {
+const hydrateStrategyScores = async (gameId: string, contestantId: string) => {
   if (!isStrategyMode.value) {
     resetStrategyState();
     return;
@@ -916,7 +1000,7 @@ onUnmounted(() => {
 
         <div
           v-if="isStrategyMode && contestant && currentGame"
-          class="grid gap-3 mb-4 md:grid-cols-4"
+          class="grid gap-3 mb-4 sm:grid-cols-2 lg:grid-cols-5"
         >
           <div class="rounded-lg border border-white/10 bg-white/5 p-4">
             <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
@@ -926,9 +1010,7 @@ onUnmounted(() => {
               <USkeleton v-if="strategyScoreLoading" class="h-7 w-20" />
               <span v-else>{{ strategyPoints }}</span>
             </p>
-            <p class="text-xs text-gray-400">
-              Rank {{ strategyRank ?? "—" }}
-            </p>
+            <p class="text-xs text-gray-400">Rank {{ strategyRank ?? "—" }}</p>
           </div>
           <div class="rounded-lg border border-white/10 bg-white/5 p-4">
             <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
@@ -964,6 +1046,32 @@ onUnmounted(() => {
               Event {{ strategyEventId ?? "—" }}
             </p>
           </div>
+          <div class="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
+              Payout Preview
+            </p>
+            <template
+              v-if="strategyPayoutResult && !('error' in strategyPayoutResult)"
+            >
+              <ul class="space-y-1 text-sm text-white">
+                <li>
+                  🥇 {{ formatGold(strategyPayoutResult.payouts.first) }} gold
+                </li>
+                <li>
+                  🥈 {{ formatGold(strategyPayoutResult.payouts.second) }} gold
+                </li>
+                <li>
+                  🥉 {{ formatGold(strategyPayoutResult.payouts.third) }} gold
+                </li>
+              </ul>
+              <p class="text-[11px] text-gray-400">
+                Subject to cards sold & house cut
+              </p>
+            </template>
+            <template v-else>
+              <p class="text-sm text-gray-400">Waiting for payout data…</p>
+            </template>
+          </div>
         </div>
         <!-- draws - I want to animate in and out each of these items --->
         <div class="p-4">
@@ -972,8 +1080,8 @@ onUnmounted(() => {
               currentGame?.status === "lobby"
                 ? "Waiting to Start"
                 : gameEnded
-                ? "Game Ended"
-                : "Draws"
+                  ? "Game Ended"
+                  : "Draws"
             }}
           </h2>
 
@@ -989,9 +1097,7 @@ onUnmounted(() => {
             <div class="flex flex-col gap-2 text-sm text-gray-400">
               <p
                 v-if="
-                  isStrategyMode &&
-                  hasStrategyDrawLimit &&
-                  activeStrategyRound
+                  isStrategyMode && hasStrategyDrawLimit && activeStrategyRound
                 "
               >
                 Target draws: {{ activeStrategyRound.draws_per_round }}
@@ -1077,35 +1183,106 @@ onUnmounted(() => {
         </div>
 
         <!-- Winner / Game Over -->
-        <div
-          v-if="gameEnded"
-          class="p-4 rounded text-center mt-6"
-          :class="
-            winnerId === contestant?.id
-              ? 'bg-green-700 text-white'
-              : 'bg-red-700 text-white'
-          "
-        >
-          <template v-if="isWinner">
-            🎉 Congratulations {{ winnerName }} — You Won!
-            <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
-              Prize: {{ winnerPayout }} 💎
+        <div v-if="gameEnded" class="p-4 rounded text-center mt-6">
+          <template v-if="isStrategyMode">
+            <div
+              :class="
+                participantStrategyPlacement
+                  ? 'bg-emerald-600/20 border border-emerald-400 text-white'
+                  : 'bg-red-700/30 border border-red-400 text-white'
+              "
+              class="p-4 rounded space-y-3"
+            >
+              <template v-if="participantStrategyPlacement">
+                <p class="text-xl font-semibold">
+                  🏆 You placed
+                  {{
+                    participantStrategyPlacement === 1
+                      ? "1st"
+                      : participantStrategyPlacement === 2
+                      ? "2nd"
+                      : "3rd"
+                  }}
+                  in Strategy Bingo!
+                </p>
+                <p class="text-lg">
+                  Payout:
+                  {{
+                    formatGold(
+                      getPlacementPayout(participantStrategyPlacement)
+                    )
+                  }}
+                  gold
+                </p>
+                <p class="text-sm text-gray-200">
+                  Total Points:
+                  {{
+                    strategyPlacements[participantStrategyPlacement - 1]
+                      ?.totalPoints ?? "—"
+                  }}
+                </p>
+              </template>
+              <template v-else>
+                <p class="text-xl font-semibold">❌ Game Over</p>
+                <p class="text-sm text-gray-100">
+                  The winners list is below — better luck next time!
+                </p>
+                <div class="grid gap-2 text-left text-sm">
+                  <div
+                    v-for="(entry, index) in strategyPlacements"
+                    :key="entry.contestantId"
+                    class="flex items-center justify-between rounded bg-white/10 px-3 py-2"
+                  >
+                    <span>
+                      {{ ["🥇", "🥈", "🥉"][index] }}
+                      {{ entry.username || entry.contestantId }}
+                    </span>
+                    <span>
+                      {{ formatGold(getPlacementPayout(index + 1)) }} gold
+                    </span>
+                  </div>
+                </div>
+                <UButton
+                  size="sm"
+                  class="text-center mt-2"
+                  color="primary"
+                  @click="enterAnotherCode"
+                  >Enter Another Code
+                </UButton>
+              </template>
             </div>
           </template>
           <template v-else>
-            <div class="flex flex-col gap-2">
-              <span>❌ Game Over — Give it another shot!.</span>
+            <div
+              class="rounded text-center"
+              :class="
+                winnerId === contestant?.id
+                  ? 'bg-green-700 text-white'
+                  : 'bg-red-700 text-white'
+              "
+            >
+              <template v-if="isWinner">
+                🎉 Congratulations {{ winnerName }} — You Won!
+                <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
+                  Prize: {{ winnerPayout }} 💎
+                </div>
+              </template>
+              <template v-else>
+                <div class="flex flex-col gap-2 p-4">
+                  <span>❌ Game Over — Give it another shot!</span>
 
-              <UButton
-                size="sm"
-                class="text-center"
-                color="primary"
-                @click="enterAnotherCode"
-                >Enter Another Code
-              </UButton>
-            </div>
-            <div v-if="isWinner" class="mt-2 text-sm">
-              Prize: {{ winnerPayout }} 💎
+                  <UButton
+                    size="sm"
+                    class="text-center"
+                    color="primary"
+                    @click="enterAnotherCode"
+                    >Enter Another Code
+                  </UButton>
+                </div>
+                <div v-if="winnerPayout !== null" class="mt-2 text-sm">
+                  Prize: {{ winnerPayout }} 💎
+                </div>
+              </template>
             </div>
           </template>
         </div>
@@ -1121,7 +1298,9 @@ onUnmounted(() => {
 .start-flash-leave-active,
 .end-flash-enter-active,
 .end-flash-leave-active {
-  transition: opacity 0.4s ease, transform 0.4s ease;
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease;
 }
 
 .start-flash-enter-from,

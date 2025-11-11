@@ -18,6 +18,7 @@ import type {
   PricingPresetDraft,
 } from "~/composables/useBingoPricingPresets";
 import { formatStrategyAwardLabel } from "~/utils/strategy/formatAward";
+import { computeStrategyPayout } from "~/utils/strategy/payout";
 
 type PatternBonusOption = {
   id: string;
@@ -173,6 +174,8 @@ const drawLimitModeOptions = [
 
 const DRAW_LIMIT_MIN = 30;
 const DRAW_LIMIT_MAX = 75;
+const DEFAULT_EXCHANGE_RATE = 12.5;
+const DEFAULT_CONVERSION_FEE = 0.0025;
 
 const {
   loading: bingoLoading,
@@ -185,7 +188,6 @@ const {
   issueJoinCode,
   getContestants,
   refresh: refreshBingo,
-  recordStrategyScore,
   createDashboardController,
 } = useBingo() as UseBingo;
 
@@ -287,6 +289,91 @@ const strategyConfigBonusForm = reactive(createBonusFormState());
 const strategyConfigMessage = ref<string | null>(null);
 const strategyConfigMessageType = ref<"success" | "error" | null>(null);
 const strategyConfigSaving = ref(false);
+const strategyFormMessage = ref<string | null>(null);
+const strategyFormMessageType = ref<"success" | "error" | null>(null);
+
+const payoutConfig = reactive({
+  currency: "diamond" as "gold" | "diamond",
+  cardCost: 2000,
+  cardsSold: 3,
+  housePercent: 0.1,
+  exchangeRate: DEFAULT_EXCHANGE_RATE,
+  conversionFee: DEFAULT_CONVERSION_FEE,
+});
+
+const payoutSplitInputs = reactive({
+  first: 60,
+  second: 25,
+  third: 15,
+});
+const payoutCascadeEnabled = ref(true);
+const payoutCascadeFirstPercent = ref(60);
+
+const cascadeSplits = computed(() => {
+  const base = Math.max(payoutCascadeFirstPercent.value, 1);
+  const second = base / 2;
+  const third = second / 2;
+  const total = base + second + third;
+  return {
+    first: base / total,
+    second: second / total,
+    third: third / total,
+  };
+});
+
+const payoutSplits = computed(() => ({
+  first: payoutCascadeEnabled.value
+    ? cascadeSplits.value.first
+    : Math.max(payoutSplitInputs.first, 0) / 100,
+  second: payoutCascadeEnabled.value
+    ? cascadeSplits.value.second
+    : Math.max(payoutSplitInputs.second, 0) / 100,
+  third: payoutCascadeEnabled.value
+    ? cascadeSplits.value.third
+    : Math.max(payoutSplitInputs.third, 0) / 100,
+}));
+
+const payoutSplitTotal = computed(
+  () =>
+    (payoutCascadeEnabled.value
+      ? 100
+      : payoutSplitInputs.first +
+        payoutSplitInputs.second +
+        payoutSplitInputs.third)
+);
+
+const payoutCardsSold = computed(() =>
+  Math.max(payoutConfig.cardsSold, totalContestantCards.value, 0)
+);
+
+const payoutPreview = computed(() =>
+  computeStrategyPayout({
+    currency: payoutConfig.currency,
+    cardCost: payoutConfig.cardCost,
+    cardsSold: Math.max(payoutCardsSold.value, 0),
+    housePercent: payoutConfig.housePercent,
+    splits: payoutSplits.value,
+    exchangeRate: payoutConfig.exchangeRate,
+    conversionFee: payoutConfig.conversionFee,
+  })
+);
+
+const payoutPreviewError = computed(() =>
+  "error" in payoutPreview.value ? payoutPreview.value.error : null
+);
+
+const payoutPreviewData = computed(() =>
+  "error" in payoutPreview.value ? null : payoutPreview.value
+);
+
+const formatGoldAmount = (value: number | undefined) =>
+  typeof value === "number" && Number.isFinite(value)
+    ? value.toLocaleString()
+    : "—";
+const formatPercent = (fraction: number | undefined) =>
+  typeof fraction === "number" && Number.isFinite(fraction)
+    ? `${Math.round(fraction * 1000) / 10}%`
+    : "—";
 
 const syncStrategyConfigForm = () => {
   const game = currentGame.game;
@@ -520,24 +607,6 @@ const strategyFilters = reactive({
   gameId: "",
   limit: 200,
 });
-const strategyForm = reactive({
-  contestantId: "",
-  pointsAwarded: 10,
-  roundId: "",
-  position: "",
-  metadataNotes: "",
-});
-const strategyFormSubmitting = ref(false);
-const strategyFormMessage = ref<string | null>(null);
-const strategyFormMessageType = ref<"success" | "error" | null>(null);
-
-const strategyContestantOptions = computed(() =>
-  currentGame.contestants.map((contestant) => ({
-    label: `${contestant.username} (${contestant.code})`,
-    value: contestant.id,
-  }))
-);
-
 const sortedStrategyLeaderboard = computed(() =>
   [...strategyLeaderboard.value].sort(
     (a, b) => b.totalPoints - a.totalPoints
@@ -586,20 +655,6 @@ const ensureStrategyEventForGame = async (gameId: string | null | undefined) => 
     console.error("Failed to map game to event:", err);
   }
 };
-
-watch(
-  () => currentGame.contestants.length,
-  (len) => {
-    if (!isStrategyMode.value) {
-      strategyForm.contestantId = "";
-      return;
-    }
-    if (len > 0 && !strategyForm.contestantId) {
-      strategyForm.contestantId = currentGame.contestants[0].id;
-    }
-  },
-  { immediate: true }
-);
 
 const handleApplyStrategySource = async () => {
   if (!isStrategyMode.value) {
@@ -651,71 +706,6 @@ const handleStrategyScoreToast = (score: StrategyScoreHistoryRow) => {
     icon: "i-heroicons-sparkles-20-solid",
     description: score.round_id ? `Round ${score.round_id}` : "Strategy Bingo",
   });
-};
-
-const handleRecordStrategyScore = async () => {
-  strategyFormMessage.value = null;
-  strategyFormMessageType.value = null;
-
-  if (!isStrategyMode.value) {
-    strategyFormMessage.value =
-      "Switch the game to Strategy mode to record points.";
-    strategyFormMessageType.value = "error";
-    return;
-  }
-  if (!strategyFilters.eventId) {
-    strategyFormMessage.value = "Event ID is required to record a score.";
-    strategyFormMessageType.value = "error";
-    return;
-  }
-  if (!strategyForm.contestantId) {
-    strategyFormMessage.value = "Select a contestant to award points.";
-    strategyFormMessageType.value = "error";
-    return;
-  }
-
-  const parsedPoints = Number(strategyForm.pointsAwarded);
-  if (!Number.isFinite(parsedPoints)) {
-    strategyFormMessage.value = "Enter a numeric point value.";
-    strategyFormMessageType.value = "error";
-    return;
-  }
-
-  strategyFormSubmitting.value = true;
-  try {
-    await recordStrategyScore({
-      eventId: strategyFilters.eventId,
-      contestantId: strategyForm.contestantId,
-      pointsAwarded: parsedPoints,
-      gameId:
-        strategyFilters.gameId || currentGame.game?.id || undefined,
-      roundId: strategyForm.roundId || undefined,
-      position: strategyForm.position
-        ? Number(strategyForm.position)
-        : undefined,
-      metadata: strategyForm.metadataNotes
-        ? { notes: strategyForm.metadataNotes }
-        : {},
-    });
-
-    strategyFormMessage.value = "Score recorded.";
-    strategyFormMessageType.value = "success";
-
-    strategyForm.pointsAwarded = 0;
-    strategyForm.roundId = "";
-    strategyForm.position = "";
-    strategyForm.metadataNotes = "";
-
-    await handleRefreshStrategyScores();
-  } catch (err: any) {
-    strategyFormMessage.value =
-      err?.statusMessage ||
-      err?.message ||
-      "Failed to record score.";
-    strategyFormMessageType.value = "error";
-  } finally {
-    strategyFormSubmitting.value = false;
-  }
 };
 
 const handleStartStrategyAutomation = async () => {
@@ -812,25 +802,6 @@ watch(
   { immediate: true }
 );
 
-const strategyAutoRoundLabel = computed(() => {
-  if (!isStrategyMode.value) return "";
-  const drawCount = currentGame.draws.length;
-  if (!drawCount) return "";
-  const approxRound = Math.max(1, Math.ceil(drawCount / 5));
-  return `Round ${approxRound}`;
-});
-
-watch(
-  () => strategyAutoRoundLabel.value,
-  (label) => {
-    if (!isStrategyMode.value) return;
-    if (!label) return;
-    if (!strategyForm.roundId || strategyForm.roundId.startsWith("Round ")) {
-      strategyForm.roundId = label;
-    }
-  },
-  { immediate: true }
-);
 const handleRecentResultsPageChange = (page: number) => {
   if (recentResultsPage.value !== page) {
     recentResultsPage.value = page;
@@ -1037,6 +1008,33 @@ const {
   findPresetById,
   roundPayoutToNearestTen,
 } = useBingoPricingPresets();
+
+watch(
+  baseCardCost,
+  (value) => {
+    if (payoutConfig.currency === "diamond") {
+      payoutConfig.cardCost = value;
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => payoutConfig.currency,
+  (currency) => {
+    if (currency === "diamond") {
+      payoutConfig.cardCost = baseCardCost.value;
+    }
+  }
+);
+
+watch(
+  totalContestantCards,
+  (count) => {
+    payoutConfig.cardsSold = Math.max(count, 3);
+  },
+  { immediate: true }
+);
 
 const computePresetPayout = (preset: PricingPreset | undefined) => {
   if (!preset) return null;
@@ -1399,6 +1397,156 @@ const getReadyIds = () =>
                   min="1"
                   size="xs"
                 />
+              </div>
+            </div>
+          </div>
+          <div
+            v-if="selectedGameMode === 'strategy'"
+            class="space-y-3 rounded-lg border border-white/10 bg-black/20 p-4"
+          >
+            <div class="flex flex-col gap-1">
+              <p class="text-sm font-semibold text-white">Payout Strategy Preview</p>
+              <p class="text-xs text-gray-400">
+                Estimate first/second/third payouts using current card pricing and split percentages.
+              </p>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <USelect
+                v-model="payoutConfig.currency"
+                :items="[
+                  { label: 'Diamonds', value: 'diamond' },
+                  { label: 'Gold', value: 'gold' },
+                ]"
+                size="sm"
+                label="Currency"
+              />
+              <UInput
+                v-model.number="payoutConfig.cardCost"
+                :label="`Card Cost (${payoutConfig.currency === 'diamond' ? 'diamonds' : 'gold'})`"
+                type="number"
+                min="0"
+                size="sm"
+              />
+              <UInput
+                v-model.number="payoutConfig.cardsSold"
+                label="Assumed Cards Sold"
+                type="number"
+                min="3"
+                size="sm"
+              />
+              <UInput
+                v-model.number="payoutConfig.housePercent"
+                label="House Cut (0-1)"
+                type="number"
+                min="0"
+                max="0.9"
+                step="0.01"
+                size="sm"
+              />
+              <div class="col-span-full flex items-center justify-between rounded border border-white/10 bg-white/5 p-3">
+                <div>
+                  <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
+                    Cascading Split
+                  </p>
+                  <p class="text-[11px] text-gray-400">
+                    Auto halves the share for 2nd and 3rd place, then normalizes to 100%.
+                  </p>
+                </div>
+                <USwitch v-model="payoutCascadeEnabled" />
+              </div>
+              <div
+                v-if="payoutCascadeEnabled"
+                class="col-span-full grid gap-3 sm:grid-cols-2"
+              >
+                <UInput
+                  v-model.number="payoutCascadeFirstPercent"
+                  label="Base 1st Place %"
+                  type="number"
+                  min="10"
+                  max="90"
+                  size="sm"
+                />
+                <div class="rounded border border-white/10 bg-black/10 p-3 text-xs text-gray-300">
+                  <p>Resulting splits:</p>
+                  <p>🥇 {{ formatPercent(cascadeSplits.value.first) }}</p>
+                  <p>🥈 {{ formatPercent(cascadeSplits.value.second) }}</p>
+                  <p>🥉 {{ formatPercent(cascadeSplits.value.third) }}</p>
+                </div>
+              </div>
+              <UInput
+                v-model.number="payoutSplitInputs.first"
+                label="1st Place %"
+                type="number"
+                min="0"
+                max="100"
+                size="sm"
+                :disabled="payoutCascadeEnabled"
+              />
+              <UInput
+                v-model.number="payoutSplitInputs.second"
+                label="2nd Place %"
+                type="number"
+                min="0"
+                max="100"
+                size="sm"
+                :disabled="payoutCascadeEnabled"
+              />
+              <UInput
+                v-model.number="payoutSplitInputs.third"
+                label="3rd Place %"
+                type="number"
+                min="0"
+                max="100"
+                size="sm"
+                :disabled="payoutCascadeEnabled"
+              />
+              <UInput
+                v-model.number="payoutConfig.exchangeRate"
+                label="Exchange Rate (gold/diamond)"
+                type="number"
+                min="0"
+                step="0.1"
+                size="sm"
+              />
+            </div>
+            <p class="text-[11px] text-gray-500">
+              Split total: {{ payoutSplitTotal }}% · Conversion fee {{ (payoutConfig.conversionFee * 100).toFixed(2) }}%.
+            </p>
+            <div
+              v-if="payoutPreviewError"
+              class="rounded border border-red-400 bg-red-500/10 px-3 py-2 text-xs text-red-200"
+            >
+              {{ payoutPreviewError }}
+            </div>
+            <div
+              v-else
+              class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm text-gray-200"
+            >
+              <div class="rounded border border-white/10 bg-white/5 p-3">
+                <p class="text-xs uppercase tracking-[0.3em] text-gray-400">Spendable</p>
+                <p class="text-lg font-semibold text-white">
+                  {{ formatGoldAmount(payoutPreviewData?.spendable) }} gold
+                </p>
+                <p class="text-[11px] text-gray-400">
+                  Per card: {{ payoutPreviewData?.notes?.perCard }}
+                </p>
+              </div>
+              <div class="rounded border border-white/10 bg-white/5 p-3">
+                <p class="text-xs uppercase tracking-[0.3em] text-gray-400">House Take</p>
+                <p class="text-lg font-semibold text-white">
+                  {{ formatGoldAmount(payoutPreviewData?.houseTake) }} gold
+                </p>
+                <p class="text-[11px] text-gray-400">
+                  Prize pool: {{ formatGoldAmount(payoutPreviewData?.prizePool) }} gold
+                </p>
+              </div>
+              <div class="rounded border border-white/10 bg-white/5 p-3">
+                <p class="text-xs uppercase tracking-[0.3em] text-gray-400">Payouts</p>
+                <ul class="space-y-1 text-[13px]">
+                  <li>🥇 {{ formatGoldAmount(payoutPreviewData?.payouts?.first) }}</li>
+                  <li>🥈 {{ formatGoldAmount(payoutPreviewData?.payouts?.second) }}</li>
+                  <li>🥉 {{ formatGoldAmount(payoutPreviewData?.payouts?.third) }}</li>
+                </ul>
               </div>
             </div>
           </div>
@@ -2060,97 +2208,6 @@ const getReadyIds = () =>
           </div>
         </div>
 
-        <div class="space-y-4 rounded-lg bg-gray-800 p-6 shadow-sm">
-          <div>
-            <p class="text-lg font-semibold text-white">
-              Record Strategy Points
-            </p>
-            <p class="text-xs text-gray-400">
-              Link points to an event and contestant; scores stream to the leaderboard above.
-            </p>
-          </div>
-
-          <div class="space-y-3">
-            <label class="text-xs uppercase tracking-[0.3em] text-gray-400">
-              Contestant
-            </label>
-            <select
-              v-model="strategyForm.contestantId"
-              class="w-full rounded-md border border-white/20 bg-black/20 px-3 py-2 text-sm text-white"
-            >
-              <option value="" disabled>Select contestant</option>
-              <option
-                v-for="option in strategyContestantOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-            <p v-if="!currentGame.contestants.length" class="text-xs text-gray-400">
-              Add contestants to the current game to award Strategy points.
-            </p>
-          </div>
-
-          <div class="grid gap-3 sm:grid-cols-2">
-            <UInput
-              v-model.number="strategyForm.pointsAwarded"
-              type="number"
-              min="0"
-              label="Points"
-              size="sm"
-            />
-            <UInput
-              v-model="strategyForm.roundId"
-              label="Round ID"
-              size="sm"
-              placeholder="Optional"
-            />
-          </div>
-
-          <div class="grid gap-3 sm:grid-cols-2">
-            <UInput
-              v-model="strategyFilters.eventId"
-              label="Event ID"
-              size="sm"
-              placeholder="Required"
-            />
-            <UInput
-              v-model="strategyForm.position"
-              label="Position"
-              size="sm"
-              placeholder="Optional"
-            />
-          </div>
-
-          <UTextarea
-            v-model="strategyForm.metadataNotes"
-            label="Notes"
-            placeholder="Optional notes (stored in metadata)"
-            :rows="3"
-          />
-
-          <div
-            v-if="strategyFormMessage"
-            :class="[
-              'rounded-md px-3 py-2 text-sm',
-              strategyFormMessageType === 'success'
-                ? 'bg-emerald-500/10 text-emerald-300'
-                : 'bg-rose-500/10 text-rose-300',
-            ]"
-          >
-            {{ strategyFormMessage }}
-          </div>
-
-          <UButton
-            class="w-full"
-            color="primary"
-            :loading="strategyFormSubmitting"
-            @click="handleRecordStrategyScore"
-          >
-            Record Points
-          </UButton>
-        </div>
       </div>
 
       <div class="rounded-lg bg-gray-800 p-6 shadow-sm">
