@@ -2,13 +2,7 @@ import { serverSupabaseClient } from "#supabase/server";
 import type { Database } from "~/types/supabase";
 import type { StrategyLeaderboardEntry } from "~/types/bingo";
 
-type ScoreRow =
-  Database["public"]["Tables"]["bingo_scores"]["Row"] & {
-    contestant?: Pick<
-      Database["public"]["Tables"]["bingo_contestants"]["Row"],
-      "username" | "code" | "user_id"
-    > | null;
-  };
+type ScoreRow = Database["public"]["Tables"]["bingo_scores"]["Row"];
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -41,12 +35,7 @@ export default defineEventHandler(async (event) => {
       total_after_round,
       position,
       metadata,
-      created_at,
-      contestant:bingo_contestants (
-        username,
-        code,
-        user_id
-      )
+      created_at
     `
     )
     .order("created_at", { ascending: false })
@@ -70,15 +59,46 @@ export default defineEventHandler(async (event) => {
   }
 
   const history = (data ?? []) as ScoreRow[];
+  const contestantIds = Array.from(
+    new Set(history.map((row) => row.contestant_id).filter(Boolean))
+  ) as string[];
+
+  const contestantLookup: Record<
+    string,
+    Pick<
+      Database["public"]["Tables"]["bingo_contestants"]["Row"],
+      "username" | "code" | "user_id"
+    >
+  > = {};
+
+  if (contestantIds.length) {
+    const { data: contestants, error: contestantsError } = await client
+      .from("bingo_contestants")
+      .select("id, username, code, user_id")
+      .in("id", contestantIds);
+
+    if (contestantsError) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: contestantsError.message,
+      });
+    }
+
+    for (const contestant of contestants ?? []) {
+      contestantLookup[contestant.id] = contestant;
+    }
+  }
+
   const leaderboardMap = new Map<string, StrategyLeaderboardEntry>();
 
   for (const row of history) {
     if (leaderboardMap.has(row.contestant_id)) continue;
+    const contestant = contestantLookup[row.contestant_id ?? ""] ?? null;
 
     leaderboardMap.set(row.contestant_id, {
       contestantId: row.contestant_id,
-      username: row.contestant?.username ?? null,
-      code: row.contestant?.code ?? null,
+      username: contestant?.username ?? null,
+      code: contestant?.code ?? null,
       totalPoints: row.total_after_round,
       lastScoreId: row.id,
       lastRoundId: row.round_id,

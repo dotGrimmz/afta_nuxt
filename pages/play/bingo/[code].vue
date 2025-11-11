@@ -57,16 +57,52 @@ const strategyRecentAward = ref<string | null>(null);
 const strategyEventId = ref<string | null>(null);
 const strategyHistory = ref<StrategyScoreHistoryRow[]>([]);
 const strategyLeaderboard = ref<StrategyLeaderboardEntry[]>([]);
+const strategyRounds = ref<BingoRoundRow[]>([]);
+const activeStrategyRound = computed(() =>
+  strategyRounds.value.find((round) => round.status === "active")
+);
+const nextStrategyRound = computed(() =>
+  strategyRounds.value.find((round) => round.status === "pending")
+);
 const isStrategyMode = computed(() => currentGame.value?.mode === "strategy");
 const strategyRoundLabel = computed(() => {
   if (!isStrategyMode.value) return "";
   if (!currentGame.value) return "Lobby";
   if (currentGame.value.status === "lobby") return "Lobby";
   if (currentGame.value.status === "ended") return "Game Over";
+  if (activeStrategyRound.value) {
+    return `Round ${activeStrategyRound.value.round_number} · ${activeStrategyRound.value.status}`;
+  }
+  if (nextStrategyRound.value) {
+    return `Round ${nextStrategyRound.value.round_number} incoming`;
+  }
   const drawCount = draws.value.length;
   if (!drawCount) return "Awaiting draws";
   const approxRound = Math.max(1, Math.ceil(drawCount / 5));
   return `Round ${approxRound}`;
+});
+const strategyTimeRemaining = computed(() => {
+  if (!activeStrategyRound.value) return "";
+  if (
+    activeStrategyRound.value.status === "active" &&
+    activeStrategyRound.value.started_at
+  ) {
+    return `Started ${new Date(
+      activeStrategyRound.value.started_at
+    ).toLocaleTimeString()}`;
+  }
+  if (
+    activeStrategyRound.value.status === "cooldown" &&
+    activeStrategyRound.value.intermission_ends_at
+  ) {
+    const ms =
+      new Date(activeStrategyRound.value.intermission_ends_at).getTime() -
+      Date.now();
+    if (ms > 0) {
+      return `Next round in ${Math.ceil(ms / 1000)}s`;
+    }
+  }
+  return "";
 });
 const personalStrategyHistory = computed(() => {
   if (!isStrategyMode.value || !contestant.value) return [];
@@ -86,6 +122,7 @@ const resetStrategyState = () => {
   strategyEventId.value = null;
   strategyHistory.value = [];
   strategyLeaderboard.value = [];
+  strategyRounds.value = [];
   strategyScoreLoading.value = false;
 };
 
@@ -143,6 +180,15 @@ const hydrateStrategyScores = async (
   } finally {
     strategyScoreLoading.value = false;
   }
+};
+
+const fetchStrategyRounds = async (gameId: string) => {
+  const { data: rounds } = await supabase
+    .from("bingo_rounds")
+    .select("*")
+    .eq("game_id", gameId)
+    .order("round_number", { ascending: true });
+  strategyRounds.value = (rounds ?? []) as BingoRoundRow[];
 };
 
 const applyScoreRowToParticipantState = (row: StrategyScoreHistoryRow) => {
@@ -368,7 +414,9 @@ onMounted(async () => {
     if (currentGame.value?.mode === "strategy") {
       await hydrateStrategyScores(gameId, result.contestant.id);
       strategyEventId.value = await fetchStrategyEventId(gameId);
+      await fetchStrategyRounds(gameId);
       subscribeToScores(gameId);
+      subscribeToRounds(gameId);
     } else {
       resetStrategyState();
     }
@@ -486,6 +534,30 @@ const subscribeToScores = (gameId: string) => {
       (payload) => {
         const newScore = payload.new as StrategyScoreHistoryRow;
         applyScoreRowToParticipantState(newScore);
+      }
+    )
+    .subscribe();
+  subscriptions.push(channel);
+};
+
+const subscribeToRounds = (gameId: string) => {
+  const channel = supabase
+    .channel(`bingo_rounds_${gameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "bingo_rounds",
+        filter: `game_id=eq.${gameId}`,
+      },
+      async () => {
+        const { data } = await supabase
+          .from("bingo_rounds")
+          .select("*")
+          .eq("game_id", gameId)
+          .order("round_number", { ascending: true });
+        strategyRounds.value = (data ?? []) as BingoRoundRow[];
       }
     )
     .subscribe();
@@ -818,7 +890,7 @@ onUnmounted(() => {
               {{ strategyRoundLabel }}
             </p>
             <p class="text-xs text-gray-400">
-              {{ draws.length }} numbers drawn
+              {{ strategyTimeRemaining || `${draws.length} draws so far` }}
             </p>
           </div>
           <div class="rounded-lg border border-white/10 bg-white/5 p-4">
@@ -855,10 +927,17 @@ onUnmounted(() => {
               :disable-initial-animation="disableInitialDrawAnimation"
               class="flex-grow"
             />
-            <!-- "All" button that toggles modal -->
-            <UButton type="button" @click="showBingoModal = true">
-              All
-            </UButton>
+            <div class="flex flex-col gap-2 text-sm text-gray-400">
+              <p v-if="isStrategyMode && activeStrategyRound">
+                Target draws: {{ activeStrategyRound.draws_per_round }}
+              </p>
+              <p v-if="isStrategyMode && strategyTimeRemaining">
+                {{ strategyTimeRemaining }}
+              </p>
+              <UButton size="sm" type="button" @click="showBingoModal = true">
+                View all
+              </UButton>
+            </div>
           </div>
 
           <BingoModal

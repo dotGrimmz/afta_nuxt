@@ -170,8 +170,12 @@ export type DashboardController = {
   strategyHistory: Ref<StrategyScoreHistoryRow[]>;
   strategyLeaderboard: Ref<StrategyLeaderboardEntry[]>;
   strategyScoresLoading: Ref<boolean>;
+  strategyRounds: Ref<BingoRoundRow[]>;
+  strategyRoundsLoading: Ref<boolean>;
   fetchStrategyScores: (filters?: StrategyScoreFilters) => Promise<void>;
   setStrategySource: (filters?: StrategyScoreFilters) => Promise<void>;
+  fetchStrategyRounds: (gameId: string) => Promise<void>;
+  startStrategyAutomation: (gameId: string) => Promise<void>;
   subscribe: (gameId: string) => void;
   unsubscribe: () => void;
   removeContestant: (contestantId: string) => Promise<void>;
@@ -234,6 +238,7 @@ export interface UseBingo {
     history: StrategyScoreHistoryRow[];
     leaderboard: StrategyLeaderboardEntry[];
   } | null>;
+  startStrategyAutomation: (gameId: string) => Promise<void>;
   narrowGame: (row: BaseGameRow) => BingoGameRow;
   loadGame: () => Promise<BingoGameRow | undefined>;
   createDashboardController: (

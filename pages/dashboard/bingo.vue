@@ -20,6 +20,7 @@ const supabase = useSupabaseClient<Database>();
 const { profile, isAdmin } = useProfile();
 const router = useRouter();
 const { $toast } = useNuxtApp();
+const selectedGameMode = ref<GameMode>("classic");
 const currentGameModeDraft = ref<GameMode>("classic");
 const gameModeOptions = [
   {
@@ -60,11 +61,21 @@ const {
 const isLobby = computed(() => currentGame.game?.status === "lobby");
 const isActive = computed(() => currentGame.game?.status === "active");
 
+const strategyDefaults = reactive({
+  first: 50,
+  second: 30,
+  third: 10,
+  requiredWinners: 1,
+});
+
 const handleCreateBingoGame = async () => {
   bingoLoading.value = true;
 
   try {
-    const gameInitialized = await createBingoGame();
+    const gameInitialized = await createBingoGame(
+      selectedGameMode.value,
+      selectedGameMode.value === "strategy" ? strategyDefaults : undefined
+    );
     if (gameInitialized) {
       unsubscribeFromGameState();
       currentGame.game = gameInitialized;
@@ -136,8 +147,12 @@ const {
   strategyHistory,
   strategyLeaderboard,
   strategyScoresLoading,
+  strategyRounds,
+  strategyRoundsLoading,
   fetchStrategyScores,
   setStrategySource,
+  fetchStrategyRounds,
+  startStrategyAutomation,
 } = createDashboardController({
   onResult: (confirmed) => {
     if (confirmed.username && confirmed.contestant_id && isAdmin.value) {
@@ -160,6 +175,18 @@ const isStrategyMode = computed(
 );
 const showStrategyAdminPanel = computed(
   () => isAdmin.value && isStrategyMode.value
+);
+const strategyAutomationRunning = computed(() =>
+  strategyRounds.value.some((round) => round.status === "active")
+);
+const activeStrategyRound = computed(() =>
+  strategyRounds.value.find((round) => round.status === "active")
+);
+const canStartStrategyAutomation = computed(
+  () =>
+    isStrategyMode.value &&
+    currentGame.game?.status === "active" &&
+    !strategyAutomationRunning.value
 );
 
 const recentResultsRangeText = computed(() => {
@@ -377,6 +404,43 @@ const handleRecordStrategyScore = async () => {
     strategyFormSubmitting.value = false;
   }
 };
+
+const handleStartStrategyAutomation = async () => {
+  const gameId = currentGame.game?.id;
+  if (!gameId) return;
+  try {
+    await startStrategyAutomation(gameId);
+    await fetchStrategyRounds(gameId);
+    strategyFormMessage.value = "Strategy automation started.";
+    strategyFormMessageType.value = "success";
+  } catch (err: any) {
+    strategyFormMessage.value =
+      err?.statusMessage || err?.message || "Failed to start automation.";
+    strategyFormMessageType.value = "error";
+  }
+};
+
+watch(
+  () => [currentGame.game?.id, currentGame.game?.mode] as const,
+  async ([gameId, mode]) => {
+    if (!isAdmin.value) return;
+    if (!gameId || mode !== "strategy") {
+      await handleClearStrategySource();
+      return;
+    }
+    strategyFilters.gameId = gameId;
+    if (!strategyFilters.eventId) {
+      await ensureStrategyEventForGame(gameId);
+    }
+    await setStrategySource({
+      eventId: strategyFilters.eventId || undefined,
+      gameId: strategyFilters.gameId || undefined,
+      limit: strategyFilters.limit,
+    });
+    await fetchStrategyRounds(gameId);
+  },
+  { immediate: true }
+);
 
 const handleCurrentGameModeChange = async (mode: GameMode) => {
   if (!currentGame.game || currentGame.game.mode === mode) return;
@@ -833,13 +897,62 @@ const getReadyIds = () =>
 
       <div
         v-if="isAdmin"
-        class="space-y-3 rounded-lg border border-white/10 bg-gray-900/70 p-4 shadow-sm"
+        class="space-y-6 rounded-lg border border-white/10 bg-gray-900/70 p-4 shadow-sm"
       >
-        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div class="space-y-3">
+          <div>
+            <p class="text-sm font-semibold text-white">Next Game Mode</p>
+            <p class="text-xs text-gray-400">
+              Choose how the next game should behave. Strategy mode lets you configure default point values before creation.
+            </p>
+          </div>
+          <div class="w-full sm:w-64">
+            <USelect
+              v-model="selectedGameMode"
+              :items="gameModeOptions"
+              placeholder="Select next game mode"
+            />
+          </div>
+          <div
+            v-if="selectedGameMode === 'strategy'"
+            class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <UInput
+              v-model.number="strategyDefaults.first"
+              label="1st Place Points"
+              type="number"
+              size="sm"
+              min="0"
+            />
+            <UInput
+              v-model.number="strategyDefaults.second"
+              label="2nd Place Points"
+              type="number"
+              size="sm"
+              min="0"
+            />
+            <UInput
+              v-model.number="strategyDefaults.third"
+              label="3rd Place Points"
+              type="number"
+              size="sm"
+              min="0"
+            />
+            <UInput
+              v-model.number="strategyDefaults.requiredWinners"
+              label="Winners Per Round"
+              type="number"
+              size="sm"
+              min="1"
+            />
+          </div>
+        </div>
+
+        <div class="space-y-3">
           <div>
             <p class="text-sm font-semibold text-white">Current Game Mode</p>
             <p class="text-xs text-gray-400">
-              Adjust the lobby game before it starts. New games default to Classic unless changed later.
+              You can only switch modes while the game is in the lobby.
             </p>
           </div>
           <div class="w-full sm:w-64">
@@ -858,6 +971,7 @@ const getReadyIds = () =>
             />
           </div>
         </div>
+
         <p class="text-xs text-gray-400">
           <span class="font-semibold text-emerald-300">Strategy</span> enables
           multi-round scoring and XP tracking, while
@@ -1095,6 +1209,66 @@ const getReadyIds = () =>
       />
 
       <div v-if="showStrategyAdminPanel" class="grid gap-6 lg:grid-cols-2">
+        <div class="space-y-4 rounded-lg bg-gray-800 p-6 shadow-sm lg:col-span-2">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p class="text-lg font-semibold text-white">Strategy Automation</p>
+              <p class="text-xs text-gray-400">
+                Manage automatic rounds, draws, and scoring for the current game.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <UButton
+                v-if="canStartStrategyAutomation"
+                size="sm"
+                color="primary"
+                @click="handleStartStrategyAutomation"
+              >
+                Start Automation
+              </UButton>
+              <UBadge
+                v-else
+                size="sm"
+                class="uppercase tracking-[0.3em]"
+                :color="strategyAutomationRunning ? 'green' : 'gray'"
+              >
+                {{ strategyAutomationRunning ? "Running" : "Idle" }}
+              </UBadge>
+            </div>
+          </div>
+
+          <div v-if="strategyRoundsLoading" class="text-sm text-gray-400">
+            Loading rounds...
+          </div>
+          <div v-else-if="!strategyRounds.length" class="text-sm text-gray-400">
+            Rounds will appear here once the game enters Strategy mode.
+          </div>
+          <ul v-else class="space-y-2">
+            <li
+              v-for="round in strategyRounds"
+              :key="round.id"
+              class="flex items-center justify-between rounded border border-white/10 bg-black/30 px-3 py-2 text-sm"
+              :class="{
+                'border-emerald-400 text-emerald-200': round.status === 'active',
+                'opacity-60': round.status === 'completed',
+              }"
+            >
+              <div>
+                <p class="font-semibold">
+                  Round {{ round.round_number }} · {{ round.status }}
+                </p>
+                <p class="text-xs text-gray-400" v-if="round.started_at">
+                  Started: {{ new Date(round.started_at).toLocaleTimeString() }}
+                </p>
+                <p class="text-xs text-gray-400" v-else>Pending start</p>
+              </div>
+              <div class="text-right text-xs text-gray-400">
+                <p>Draws: {{ round.draws_per_round }}</p>
+                <p>Interval: {{ round.draw_interval_seconds }}s</p>
+              </div>
+            </li>
+          </ul>
+        </div>
         <div class="space-y-4 rounded-lg bg-gray-800 p-6 shadow-sm">
           <div class="flex items-center justify-between gap-3">
             <div>

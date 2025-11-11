@@ -8,6 +8,7 @@ import type {
   BingoCard,
   BingoGameRow,
   BingoDrawRow,
+  BingoRoundRow,
   JoinGameResponse,
   CallBingoResponse,
   UseBingo,
@@ -61,7 +62,13 @@ export const useBingo = (): UseBingo => {
   const message = ref("");
 
   const createGame = async (
-    mode: GameMode = "classic"
+    mode: GameMode = "classic",
+    strategyPoints?: {
+      first?: number;
+      second?: number;
+      third?: number;
+      requiredWinners?: number;
+    }
   ): Promise<BingoGameRow | undefined> => {
     creating.value = true;
     try {
@@ -70,6 +77,10 @@ export const useBingo = (): UseBingo => {
         .insert({
           status: "lobby",
           mode,
+          strategy_first_place_points: strategyPoints?.first,
+          strategy_second_place_points: strategyPoints?.second,
+          strategy_third_place_points: strategyPoints?.third,
+          strategy_required_winners: strategyPoints?.requiredWinners,
         })
         .select()
         .single();
@@ -305,6 +316,17 @@ export const useBingo = (): UseBingo => {
       throw err;
     }
   };
+  const startStrategyAutomation = async (gameId: string) => {
+    try {
+      await $fetch(`/api/bingo/games/${gameId}/strategy/start`, {
+        method: "POST",
+      });
+      message.value = "Strategy automation started.";
+    } catch (err: any) {
+      console.error("Failed to start strategy automation:", err);
+      throw err;
+    }
+  };
 
   const loadGame = async (): Promise<BingoGameRow | undefined> => {
     try {
@@ -349,6 +371,8 @@ export const useBingo = (): UseBingo => {
     const strategyHistory = ref<StrategyScoreHistoryRow[]>([]);
     const strategyLeaderboard = ref<StrategyLeaderboardEntry[]>([]);
     const strategyScoresLoading = ref(false);
+    const strategyRounds = ref<BingoRoundRow[]>([]);
+    const strategyRoundsLoading = ref(false);
     const strategySource = reactive<StrategyScoreFilters>({
       eventId: options?.strategySource?.eventId,
       gameId: options?.strategySource?.gameId,
@@ -418,6 +442,22 @@ export const useBingo = (): UseBingo => {
       }
     };
 
+    const fetchStrategyRounds = async (gameId?: string) => {
+      const targetGameId = gameId ?? state.game?.id;
+      if (!targetGameId) return;
+      strategyRoundsLoading.value = true;
+      try {
+        const data = await $fetch<{
+          rounds: BingoRoundRow[];
+        }>(`/api/bingo/games/${targetGameId}/strategy/state`);
+        strategyRounds.value = data.rounds ?? [];
+      } catch (err) {
+        console.error("Failed to fetch strategy rounds:", err);
+      } finally {
+        strategyRoundsLoading.value = false;
+      }
+    };
+
     const removeStrategyChannel = () => {
       if (channels.strategyScores) {
         supabase.removeChannel(channels.strategyScores);
@@ -472,6 +512,24 @@ export const useBingo = (): UseBingo => {
       await fetchStrategyScores(strategySource);
       subscribeToStrategyScores(strategySource);
     };
+    const subscribeToStrategyRounds = (gameId: string) => {
+      if (channels.strategyRounds) return;
+      channels.strategyRounds = supabase
+        .channel(`bingo_rounds_${gameId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "bingo_rounds",
+            filter: `game_id=eq.${gameId}`,
+          },
+          async () => {
+            await fetchStrategyRounds(gameId);
+          }
+        )
+        .subscribe();
+    };
 
     const applyState = (data: ClientGameState) => {
       if (!data.game) return;
@@ -483,6 +541,11 @@ export const useBingo = (): UseBingo => {
         state.contestants.length,
         ...data.contestants
       );
+      if (data.game.mode === "strategy") {
+        fetchStrategyRounds(data.game.id);
+      } else {
+        strategyRounds.value = [];
+      }
     };
 
     const hydrate = async (gameId: string) => {
@@ -618,6 +681,10 @@ export const useBingo = (): UseBingo => {
       subscribeToDraws(gameId);
       subscribeToContestants(gameId);
       subscribeToResults(gameId);
+      if (state.game?.mode === "strategy") {
+        subscribeToStrategyRounds(gameId);
+        fetchStrategyRounds(gameId);
+      }
       setupLobbyChannel(gameId);
     };
 
@@ -694,8 +761,12 @@ export const useBingo = (): UseBingo => {
       strategyHistory,
       strategyLeaderboard,
       strategyScoresLoading,
+      strategyRounds,
+      strategyRoundsLoading,
       fetchStrategyScores,
       setStrategySource,
+      fetchStrategyRounds,
+      startStrategyAutomation,
       subscribe,
       unsubscribe,
       removeContestant,
@@ -718,11 +789,12 @@ export const useBingo = (): UseBingo => {
     joinGame,
     issueJoinCode,
     getContestants,
-    callBingo,
-    recordStrategyScore,
-    getStrategyScores,
-    narrowGame,
-    getState,
+  callBingo,
+  recordStrategyScore,
+  getStrategyScores,
+  startStrategyAutomation,
+  narrowGame,
+  getState,
 
     loadGame,
     createDashboardController,
