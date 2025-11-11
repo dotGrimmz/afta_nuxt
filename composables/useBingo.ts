@@ -27,7 +27,10 @@ import type {
   StrategyScoreFilters,
   StrategyScoreHistoryRow,
   StrategyScorePayload,
+  StrategyBonusRules,
 } from "~/types/bingo";
+
+const STRATEGY_MAX_DRAWS = 75;
 
 export const useBingo = (): UseBingo => {
   const supabase = useSupabaseClient<Database>();
@@ -68,10 +71,24 @@ export const useBingo = (): UseBingo => {
       second?: number;
       third?: number;
       requiredWinners?: number;
+      totalRounds?: number;
+      drawLimitMode?: "unlimited" | "limited";
+      drawLimitValue?: number;
+      bonusRules?: StrategyBonusRules;
     }
   ): Promise<BingoGameRow | undefined> => {
     creating.value = true;
     try {
+      const drawLimitEnabled = strategyPoints?.drawLimitMode === "limited";
+      const rawLimit = strategyPoints?.drawLimitValue ?? null;
+      const normalizedLimit =
+        drawLimitEnabled && typeof rawLimit === "number"
+          ? Math.max(30, Math.min(rawLimit, STRATEGY_MAX_DRAWS))
+          : null;
+      const effectiveLimit = drawLimitEnabled
+        ? normalizedLimit ?? 30
+        : STRATEGY_MAX_DRAWS;
+
       const { data, error } = await supabase
         .from("bingo_games")
         .insert({
@@ -81,6 +98,11 @@ export const useBingo = (): UseBingo => {
           strategy_second_place_points: strategyPoints?.second,
           strategy_third_place_points: strategyPoints?.third,
           strategy_required_winners: strategyPoints?.requiredWinners,
+          total_rounds: strategyPoints?.totalRounds,
+          strategy_draw_limit_enabled: drawLimitEnabled,
+          strategy_draw_limit: drawLimitEnabled ? effectiveLimit : null,
+          strategy_draws_per_round: effectiveLimit,
+          strategy_bonus_rules: strategyPoints?.bonusRules,
         })
         .select()
         .single();

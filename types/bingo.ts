@@ -11,6 +11,7 @@ export type GameMode = "classic" | "strategy";
 export type BingoGameRow = Omit<BaseGameRow, "status" | "mode"> & {
   status: GameStatus;
   mode: GameMode;
+  strategy_bonus_rules: StrategyBonusRules | null;
 
   payout?: number | null;
   winner_id?: string | null;
@@ -68,6 +69,28 @@ export type StrategyScorePayload = {
   roundId?: string | null;
   position?: number | null;
   metadata?: Database["public"]["Tables"]["bingo_scores"]["Row"]["metadata"];
+};
+
+export type StrategyPatternRule = {
+  points: number;
+  label?: string | null;
+};
+
+export type StrategyComboRule = {
+  points: number;
+  window?: number | null;
+  label?: string | null;
+};
+
+export type StrategyBonusRules = {
+  patterns?: Record<string, StrategyPatternRule | undefined>;
+  combo?: StrategyComboRule | null;
+};
+
+export type StrategyPatternMatch = {
+  id: string;
+  label: string;
+  points: number;
 };
 /** ── Grid shape used in-app ───────────────────────────────────────────────── */
 export type BingoCardGrid = {
@@ -191,7 +214,19 @@ export interface UseBingo {
 
   refresh: () => Promise<void>;
 
-  createGame: (mode?: GameMode) => Promise<BingoGameRow | undefined>;
+  createGame: (
+    mode?: GameMode,
+    strategyPoints?: {
+      first?: number;
+      second?: number;
+      third?: number;
+      requiredWinners?: number;
+      totalRounds?: number;
+      drawLimitMode?: "unlimited" | "limited";
+      drawLimitValue?: number;
+      bonusRules?: StrategyBonusRules;
+    }
+  ) => Promise<BingoGameRow | undefined>;
   startGame: (
     gameId: string,
     payout: number | string | undefined

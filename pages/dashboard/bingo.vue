@@ -4,10 +4,12 @@ import BaseModal from "~/components/BaseModal.vue";
 import { useAutoDraw } from "~/composables/useAutoDraw";
 
 import type {
+  BingoGameRow,
   BingoCard,
   ContestantType,
   GameMode,
   IssueJoinCodeResponse,
+  StrategyBonusRules,
   StrategyScoreHistoryRow,
   UseBingo,
 } from "~/types/bingo";
@@ -15,8 +17,133 @@ import type {
   PricingPreset,
   PricingPresetDraft,
 } from "~/composables/useBingoPricingPresets";
+import { formatStrategyAwardLabel } from "~/utils/strategy/formatAward";
+
+type PatternBonusOption = {
+  id: string;
+  label: string;
+  description: string;
+  defaultPoints: number;
+};
+
+const PATTERN_BONUS_OPTIONS: PatternBonusOption[] = [
+  {
+    id: "fourCorners",
+    label: "Four Corners",
+    description: "Card wins + bonus when all four corners are marked.",
+    defaultPoints: 5,
+  },
+  {
+    id: "x",
+    label: "X Pattern",
+    description: "Award extra points when both diagonals are completed.",
+    defaultPoints: 15,
+  },
+];
+
+const COMBO_BONUS_OPTION = {
+  id: "combo",
+  label: "Back-to-back Winner",
+  description: "Bonus for contestants who win consecutive rounds.",
+  defaultPoints: 10,
+  defaultWindow: 1,
+};
+
+type StrategyBonusForm = {
+  patterns: Record<
+    string,
+    {
+      id: string;
+      label: string;
+      description: string;
+      enabled: boolean;
+      points: number;
+    }
+  >;
+  combo: {
+    enabled: boolean;
+    points: number;
+    window: number;
+    label: string;
+    description: string;
+  };
+};
+
+const createBonusFormState = (
+  rules?: StrategyBonusRules | null
+): StrategyBonusForm => {
+  const form: StrategyBonusForm = {
+    patterns: {},
+    combo: {
+      enabled: false,
+      points: COMBO_BONUS_OPTION.defaultPoints,
+      window: COMBO_BONUS_OPTION.defaultWindow,
+      label: COMBO_BONUS_OPTION.label,
+      description: COMBO_BONUS_OPTION.description,
+    },
+  };
+
+  for (const option of PATTERN_BONUS_OPTIONS) {
+    const patternRule = rules?.patterns?.[option.id];
+    form.patterns[option.id] = {
+      id: option.id,
+      label: option.label,
+      description: option.description,
+      enabled: !!patternRule && (patternRule.points ?? 0) > 0,
+      points: patternRule?.points ?? option.defaultPoints,
+    };
+  }
+
+  if (rules?.combo && (rules.combo.points ?? 0) > 0) {
+    form.combo.enabled = true;
+    form.combo.points = rules.combo.points ?? COMBO_BONUS_OPTION.defaultPoints;
+    form.combo.window = rules.combo.window ?? COMBO_BONUS_OPTION.defaultWindow;
+    form.combo.label = rules.combo.label ?? COMBO_BONUS_OPTION.label;
+  }
+
+  return form;
+};
+
+const serializeBonusForm = (form: StrategyBonusForm): StrategyBonusRules => {
+  const patterns: StrategyBonusRules["patterns"] = {};
+  for (const [id, config] of Object.entries(form.patterns)) {
+    if (config.enabled && config.points > 0) {
+      patterns![id] = {
+        points: config.points,
+        label: config.label,
+      };
+    }
+  }
+
+  const combo =
+    form.combo.enabled && form.combo.points > 0
+      ? {
+          points: form.combo.points,
+          window: form.combo.window,
+          label: form.combo.label,
+        }
+      : undefined;
+
+  return {
+    patterns: Object.keys(patterns ?? {}).length ? patterns : undefined,
+    combo,
+  };
+};
+
+const applyBonusRulesToForm = (
+  target: StrategyBonusForm,
+  rules?: StrategyBonusRules | null
+) => {
+  const next = createBonusFormState(rules);
+  for (const key of Object.keys(next.patterns)) {
+    Object.assign(target.patterns[key], next.patterns[key]);
+  }
+  Object.assign(target.combo, next.combo);
+};
 
 const supabase = useSupabaseClient<Database>();
+const patternBonusOptions = PATTERN_BONUS_OPTIONS;
+const comboBonusOption = COMBO_BONUS_OPTION;
 const { profile, isAdmin } = useProfile();
 const router = useRouter();
 const { $toast } = useNuxtApp();
@@ -33,6 +160,20 @@ const gameModeOptions = [
   },
 ];
 
+const drawLimitModeOptions = [
+  {
+    label: "Unlimited · stop after winners",
+    value: "unlimited",
+  },
+  {
+    label: "Limit draws per round",
+    value: "limited",
+  },
+];
+
+const DRAW_LIMIT_MIN = 30;
+const DRAW_LIMIT_MAX = 75;
+
 const {
   loading: bingoLoading,
   creating: bingoCreating,
@@ -47,84 +188,6 @@ const {
   recordStrategyScore,
   createDashboardController,
 } = useBingo() as UseBingo;
-const gameIdRef = computed(() => currentGame.game?.id ?? "");
-const {
-  start,
-  stop: stopAutoDraw,
-  isRunning,
-} = useAutoDraw({
-  gameId: gameIdRef,
-  drawFn: onDraw,
-  getDraws: () => currentGame.draws,
-});
-
-const isLobby = computed(() => currentGame.game?.status === "lobby");
-const isActive = computed(() => currentGame.game?.status === "active");
-
-const strategyDefaults = reactive({
-  first: 50,
-  second: 30,
-  third: 10,
-  requiredWinners: 1,
-});
-
-const handleCreateBingoGame = async () => {
-  bingoLoading.value = true;
-
-  try {
-    const gameInitialized = await createBingoGame(
-      selectedGameMode.value,
-      selectedGameMode.value === "strategy" ? strategyDefaults : undefined
-    );
-    if (gameInitialized) {
-      unsubscribeFromGameState();
-      currentGame.game = gameInitialized;
-      await hydrateGameState(gameInitialized.id);
-      subscribeToGameState(gameInitialized.id);
-      await fetchRecentResults();
-    }
-  } catch (e: any) {
-    bingoMessage.value = e.message;
-  } finally {
-    bingoLoading.value = false;
-  }
-};
-const newContestant = reactive({
-  username: "",
-  numCards: 1,
-  freeSpace: true,
-  autoMark: true,
-});
-
-const loggedInContestant = reactive({
-  username: profile.value?.username,
-  numCards: 1,
-  freeSpace: true,
-  autoMark: true,
-  code: "",
-});
-const lastIssuedCode = ref<string | null>(null);
-const lastContestantUsername = ref<string | null>(null);
-const overlay = useOverlay();
-
-const modal = overlay.create(BaseModal);
-const open = async (
-  username: string,
-  winner_id: string,
-  payout: string | number
-) => {
-  const instance = modal.open({
-    winner_id,
-    payout,
-    winner_username: username,
-  });
-
-  const shouldRefresh = await instance.result;
-
-  if (shouldRefresh) {
-    refreshBingo();
-  }
-};
 
 const {
   state: currentGame,
@@ -169,6 +232,257 @@ const {
     }
   },
 });
+
+const gameIdRef = computed(() => currentGame.game?.id ?? "");
+const {
+  start,
+  stop: stopAutoDraw,
+  isRunning,
+} = useAutoDraw({
+  gameId: gameIdRef,
+  drawFn: onDraw,
+  getDraws: () => currentGame.draws,
+});
+
+const isLobby = computed(() => currentGame.game?.status === "lobby");
+const isActive = computed(() => currentGame.game?.status === "active");
+
+const strategyDefaults = reactive({
+  first: 50,
+  second: 30,
+  third: 10,
+  requiredWinners: 1,
+  totalRounds: 3,
+});
+const strategyDrawLimitDefaults = reactive({
+  mode: "unlimited" as "unlimited" | "limited",
+  value: 45,
+});
+const strategyBonusDefaultsForm = reactive(
+  createBonusFormState({
+    patterns: {
+      fourCorners: { points: 5, label: "Four Corners" },
+      x: { points: 15, label: "X Pattern" },
+    },
+    combo: {
+      points: COMBO_BONUS_OPTION.defaultPoints,
+      window: COMBO_BONUS_OPTION.defaultWindow,
+      label: COMBO_BONUS_OPTION.label,
+    },
+  })
+);
+
+const strategyConfigForm = reactive({
+  first: strategyDefaults.first,
+  second: strategyDefaults.second,
+  third: strategyDefaults.third,
+  requiredWinners: strategyDefaults.requiredWinners,
+  totalRounds: strategyDefaults.totalRounds,
+});
+const strategyConfigDrawLimitForm = reactive({
+  mode: "unlimited" as "unlimited" | "limited",
+  value: 45,
+});
+const strategyConfigBonusForm = reactive(createBonusFormState());
+const strategyConfigMessage = ref<string | null>(null);
+const strategyConfigMessageType = ref<"success" | "error" | null>(null);
+const strategyConfigSaving = ref(false);
+
+const syncStrategyConfigForm = () => {
+  const game = currentGame.game;
+  if (!game || game.mode !== "strategy") return;
+  strategyConfigForm.first = game.strategy_first_place_points ?? strategyDefaults.first;
+  strategyConfigForm.second =
+    game.strategy_second_place_points ?? strategyDefaults.second;
+  strategyConfigForm.third =
+    game.strategy_third_place_points ?? strategyDefaults.third;
+  strategyConfigForm.requiredWinners =
+    game.strategy_required_winners ?? strategyDefaults.requiredWinners;
+  strategyConfigForm.totalRounds =
+    game.total_rounds ?? strategyDefaults.totalRounds;
+  applyBonusRulesToForm(
+    strategyConfigBonusForm,
+    game.strategy_bonus_rules ?? {
+      patterns: {
+        fourCorners: { points: 5, label: "Four Corners" },
+        x: { points: 15, label: "X Pattern" },
+      },
+      combo: {
+        points: COMBO_BONUS_OPTION.defaultPoints,
+        window: COMBO_BONUS_OPTION.defaultWindow,
+        label: COMBO_BONUS_OPTION.label,
+      },
+    }
+  );
+  if (game.strategy_draw_limit_enabled) {
+    strategyConfigDrawLimitForm.mode = "limited";
+    strategyConfigDrawLimitForm.value =
+      game.strategy_draw_limit ??
+      Math.max(DRAW_LIMIT_MIN, strategyConfigDrawLimitForm.value);
+  } else {
+    strategyConfigDrawLimitForm.mode = "unlimited";
+    strategyConfigDrawLimitForm.value =
+      game.strategy_draw_limit ?? strategyDrawLimitDefaults.value;
+  }
+};
+
+watch(
+  () => currentGame.game,
+  () => {
+    syncStrategyConfigForm();
+  },
+  { immediate: true }
+);
+
+const handleCreateBingoGame = async () => {
+  bingoLoading.value = true;
+
+  try {
+    if (
+      selectedGameMode.value === "strategy" &&
+      strategyDrawLimitDefaults.mode === "limited"
+    ) {
+      if (
+        typeof strategyDrawLimitDefaults.value !== "number" ||
+        strategyDrawLimitDefaults.value < DRAW_LIMIT_MIN
+      ) {
+        bingoMessage.value = `Draw limit must be at least ${DRAW_LIMIT_MIN} draws.`;
+        return;
+      }
+      if (strategyDrawLimitDefaults.value > DRAW_LIMIT_MAX) {
+        strategyDrawLimitDefaults.value = DRAW_LIMIT_MAX;
+      }
+    }
+
+    const strategyPayload =
+      selectedGameMode.value === "strategy"
+        ? {
+            first: strategyDefaults.first,
+            second: strategyDefaults.second,
+            third: strategyDefaults.third,
+            requiredWinners: strategyDefaults.requiredWinners,
+            totalRounds: strategyDefaults.totalRounds,
+            drawLimitMode: strategyDrawLimitDefaults.mode,
+            drawLimitValue: strategyDrawLimitDefaults.value,
+            bonusRules: serializeBonusForm(strategyBonusDefaultsForm),
+          }
+        : undefined;
+    const gameInitialized = await createBingoGame(
+      selectedGameMode.value,
+      strategyPayload
+    );
+    if (gameInitialized) {
+      unsubscribeFromGameState();
+      currentGame.game = gameInitialized;
+      await hydrateGameState(gameInitialized.id);
+      subscribeToGameState(gameInitialized.id);
+      await fetchRecentResults();
+    }
+  } catch (e: any) {
+    bingoMessage.value = e.message;
+  } finally {
+    bingoLoading.value = false;
+  }
+};
+
+const handleUpdateStrategyConfig = async () => {
+  if (!isLobby.value || !isStrategyMode.value) {
+    strategyConfigMessage.value =
+      "Strategy settings are only editable in the lobby.";
+    strategyConfigMessageType.value = "error";
+    return;
+  }
+
+  const gameId = currentGame.game?.id;
+  if (!gameId) return;
+
+  strategyConfigSaving.value = true;
+  strategyConfigMessage.value = null;
+  strategyConfigMessageType.value = null;
+
+  try {
+    if (
+      strategyConfigDrawLimitForm.mode === "limited" &&
+      (typeof strategyConfigDrawLimitForm.value !== "number" ||
+        strategyConfigDrawLimitForm.value < DRAW_LIMIT_MIN)
+    ) {
+      throw new Error(
+        `Draw limit must be at least ${DRAW_LIMIT_MIN} draws.`
+      );
+    }
+    if (
+      strategyConfigDrawLimitForm.mode === "limited" &&
+      strategyConfigDrawLimitForm.value > DRAW_LIMIT_MAX
+    ) {
+      strategyConfigDrawLimitForm.value = DRAW_LIMIT_MAX;
+    }
+
+    const response = await $fetch<{ game: BingoGameRow }>(
+      `/api/bingo/games/${gameId}/strategy-config`,
+      {
+        method: "PATCH",
+        body: {
+          firstPlacePoints: strategyConfigForm.first,
+          secondPlacePoints: strategyConfigForm.second,
+          thirdPlacePoints: strategyConfigForm.third,
+          requiredWinners: strategyConfigForm.requiredWinners,
+          totalRounds: strategyConfigForm.totalRounds,
+          drawLimitMode: strategyConfigDrawLimitForm.mode,
+          drawLimitValue: strategyConfigDrawLimitForm.value,
+          bonusRules: serializeBonusForm(strategyConfigBonusForm),
+        },
+      }
+    );
+    currentGame.game = response.game;
+    syncStrategyConfigForm();
+    strategyConfigMessage.value = "Strategy settings updated.";
+    strategyConfigMessageType.value = "success";
+  } catch (err: any) {
+    strategyConfigMessage.value =
+      err?.statusMessage ||
+      err?.message ||
+      "Failed to update strategy settings.";
+    strategyConfigMessageType.value = "error";
+  } finally {
+    strategyConfigSaving.value = false;
+  }
+};
+const newContestant = reactive({
+  username: "",
+  numCards: 1,
+  freeSpace: true,
+  autoMark: true,
+});
+
+const loggedInContestant = reactive({
+  username: profile.value?.username,
+  numCards: 1,
+  freeSpace: true,
+  autoMark: true,
+  code: "",
+});
+const lastIssuedCode = ref<string | null>(null);
+const lastContestantUsername = ref<string | null>(null);
+const overlay = useOverlay();
+
+const modal = overlay.create(BaseModal);
+const open = async (
+  username: string,
+  winner_id: string,
+  payout: string | number
+) => {
+  const instance = modal.open({
+    winner_id,
+    payout,
+    winner_username: username,
+  });
+
+  const shouldRefresh = await instance.result;
+
+  if (shouldRefresh) {
+    refreshBingo();
+  }
+};
 
 const isStrategyMode = computed(
   () => currentGame.game?.mode === "strategy"
@@ -246,6 +560,13 @@ const limitedStrategyHistory = computed(() =>
   strategyHistory.value.slice(0, 8)
 );
 
+const describeStrategyHistoryRow = (row: StrategyScoreHistoryRow): string =>
+  formatStrategyAwardLabel({
+    points: row.points_awarded,
+    metadata: row.metadata,
+    fallback: row.round_id ? `Round ${row.round_id}` : "Strategy Bingo",
+  });
+
 const ensureStrategyEventForGame = async (gameId: string | null | undefined) => {
   if (!gameId || strategyFilters.eventId) return;
   try {
@@ -322,21 +643,13 @@ const handleStrategyScoreToast = (score: StrategyScoreHistoryRow) => {
   if (!$toast) return;
   const contestant =
     currentGame.contestants.find((c) => c.id === score.contestant_id) ?? null;
-  const metadata =
-    typeof score.metadata === "object" && score.metadata
-      ? (score.metadata as Record<string, any>)
-      : {};
-  const descriptor =
-    typeof metadata.notes === "string"
-      ? metadata.notes
-      : score.round_id
-      ? `Round ${score.round_id}`
-      : "Strategy Bingo";
+  const label = describeStrategyHistoryRow(score);
+  const title = contestant?.username ? `${contestant.username} · ${label}` : label;
 
-  $toast.success(`${contestant?.username ?? "Contestant"} +${score.points_awarded} pts`, {
+  $toast.success(title, {
     timeout: 2500,
     icon: "i-heroicons-sparkles-20-solid",
-    description: descriptor,
+    description: score.round_id ? `Round ${score.round_id}` : "Strategy Bingo",
   });
 };
 
@@ -915,36 +1228,179 @@ const getReadyIds = () =>
           </div>
           <div
             v-if="selectedGameMode === 'strategy'"
-            class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
           >
-            <UInput
-              v-model.number="strategyDefaults.first"
-              label="1st Place Points"
-              type="number"
-              size="sm"
-              min="0"
-            />
-            <UInput
-              v-model.number="strategyDefaults.second"
-              label="2nd Place Points"
-              type="number"
-              size="sm"
-              min="0"
-            />
-            <UInput
-              v-model.number="strategyDefaults.third"
-              label="3rd Place Points"
-              type="number"
-              size="sm"
-              min="0"
-            />
-            <UInput
-              v-model.number="strategyDefaults.requiredWinners"
-              label="Winners Per Round"
-              type="number"
-              size="sm"
-              min="1"
-            />
+            <label class="space-y-1 text-xs font-semibold text-gray-300">
+              <span>1st Place Points</span>
+              <UInput
+                v-model.number="strategyDefaults.first"
+                type="number"
+                size="sm"
+                min="0"
+                placeholder="Points for first winner"
+              />
+              <p class="text-[11px] font-normal text-gray-500">
+                Awarded to the first confirmed contestant each round.
+              </p>
+            </label>
+            <label class="space-y-1 text-xs font-semibold text-gray-300">
+              <span>2nd Place Points</span>
+              <UInput
+                v-model.number="strategyDefaults.second"
+                type="number"
+                size="sm"
+                min="0"
+                placeholder="Points for second winner"
+              />
+              <p class="text-[11px] font-normal text-gray-500">
+                Only applies when a second winner is confirmed.
+              </p>
+            </label>
+            <label class="space-y-1 text-xs font-semibold text-gray-300">
+              <span>3rd Place Points</span>
+              <UInput
+                v-model.number="strategyDefaults.third"
+                type="number"
+                size="sm"
+                min="0"
+                placeholder="Points for third winner"
+              />
+              <p class="text-[11px] font-normal text-gray-500">
+                Optional bonus for third confirmations.
+              </p>
+            </label>
+            <label class="space-y-1 text-xs font-semibold text-gray-300">
+              <span>Winners Per Round</span>
+              <UInput
+                v-model.number="strategyDefaults.requiredWinners"
+                type="number"
+                size="sm"
+                min="1"
+                placeholder="Number of winners needed"
+              />
+              <p class="text-[11px] font-normal text-gray-500">
+                Rounds end once this many contestants win.
+              </p>
+            </label>
+            <label class="space-y-1 text-xs font-semibold text-gray-300 sm:col-span-2">
+              <span>Total Rounds</span>
+              <UInput
+                v-model.number="strategyDefaults.totalRounds"
+                type="number"
+                size="sm"
+                min="1"
+                placeholder="How many rounds per game"
+              />
+              <p class="text-[11px] font-normal text-gray-500">
+                Determines how many rounds automation will schedule.
+              </p>
+            </label>
+          </div>
+          <div
+            v-if="selectedGameMode === 'strategy'"
+            class="space-y-3 rounded-lg border border-white/10 bg-black/20 p-4"
+          >
+            <div class="flex flex-col gap-1">
+              <p class="text-sm font-semibold text-white">Round Draw Limit</p>
+              <p class="text-xs text-gray-400">
+                Default behavior ends a round after the required winners call bingo. Enable a draw limit to stop after a fixed number of draws (minimum {{ DRAW_LIMIT_MIN }}).
+              </p>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <USelect
+                v-model="strategyDrawLimitDefaults.mode"
+                :items="drawLimitModeOptions"
+                size="sm"
+                placeholder="Draw limit mode"
+              />
+              <UInput
+                v-if="strategyDrawLimitDefaults.mode === 'limited'"
+                v-model.number="strategyDrawLimitDefaults.value"
+                type="number"
+                size="sm"
+                :min="DRAW_LIMIT_MIN"
+                :max="DRAW_LIMIT_MAX"
+                placeholder="e.g. 45 draws"
+                label="Max Draws"
+              />
+            </div>
+          </div>
+          <div
+            v-if="selectedGameMode === 'strategy'"
+            class="space-y-3 rounded-lg border border-white/10 bg-black/20 p-4"
+          >
+            <div class="flex flex-col gap-1">
+              <p class="text-sm font-semibold text-white">Auto Bonus Checks</p>
+              <p class="text-xs text-gray-400">
+                Toggle which bonus patterns the auto-marker should detect during a round.
+              </p>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2">
+              <div
+                v-for="pattern in patternBonusOptions"
+                :key="pattern.id"
+                class="space-y-2 rounded-md border border-white/10 bg-white/5 p-3"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <div>
+                    <p class="text-sm font-semibold text-white">
+                      {{ pattern.label }}
+                    </p>
+                    <p class="text-xs text-gray-400">
+                      {{ pattern.description }}
+                    </p>
+                  </div>
+                  <USwitch
+                    v-model="strategyBonusDefaultsForm.patterns[pattern.id].enabled"
+                    aria-label="Toggle pattern bonus"
+                  />
+                </div>
+                <UInput
+                  v-if="strategyBonusDefaultsForm.patterns[pattern.id].enabled"
+                  v-model.number="strategyBonusDefaultsForm.patterns[pattern.id].points"
+                  size="xs"
+                  type="number"
+                  min="1"
+                  :placeholder="`Bonus points for ${pattern.label}`"
+                  label="Bonus Points"
+                />
+              </div>
+            </div>
+            <div class="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+              <div class="flex items-center justify-between gap-2">
+                <div>
+                  <p class="text-sm font-semibold text-white">
+                    {{ comboBonusOption.label }}
+                  </p>
+                  <p class="text-xs text-gray-400">
+                    {{ comboBonusOption.description }}
+                  </p>
+                </div>
+                <USwitch
+                  v-model="strategyBonusDefaultsForm.combo.enabled"
+                  aria-label="Toggle combo bonus"
+                />
+              </div>
+              <div
+                v-if="strategyBonusDefaultsForm.combo.enabled"
+                class="grid gap-3 sm:grid-cols-2"
+              >
+                <UInput
+                  v-model.number="strategyBonusDefaultsForm.combo.points"
+                  label="Bonus Points"
+                  type="number"
+                  min="1"
+                  size="xs"
+                />
+                <UInput
+                  v-model.number="strategyBonusDefaultsForm.combo.window"
+                  label="Consecutive Wins Window"
+                  type="number"
+                  min="1"
+                  size="xs"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1122,6 +1578,204 @@ const getReadyIds = () =>
           </p>
         </div>
 
+        <div
+          v-if="isAdmin && isLobby && isStrategyMode"
+          class="space-y-4 rounded-lg bg-gray-700 p-5"
+        >
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-gray-100">
+              Strategy Settings
+            </h3>
+            <span class="text-xs text-gray-400">
+              Total Rounds: {{ currentGame.game?.total_rounds }}
+            </span>
+          </div>
+          <p class="text-xs text-gray-400">
+            Update round pacing and points before starting the game.
+          </p>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label class="space-y-1 text-xs font-semibold text-gray-200">
+              <span>1st Place Points</span>
+              <UInput
+                v-model.number="strategyConfigForm.first"
+                type="number"
+                min="0"
+                size="sm"
+                placeholder="First winner payout"
+              />
+              <p class="text-[11px] font-normal text-gray-400">
+                Base score for the fastest bingo each round.
+              </p>
+            </label>
+            <label class="space-y-1 text-xs font-semibold text-gray-200">
+              <span>2nd Place Points</span>
+              <UInput
+                v-model.number="strategyConfigForm.second"
+                type="number"
+                min="0"
+                size="sm"
+                placeholder="Second winner payout"
+              />
+              <p class="text-[11px] font-normal text-gray-400">
+                Used only when a second winner is required.
+              </p>
+            </label>
+            <label class="space-y-1 text-xs font-semibold text-gray-200">
+              <span>3rd Place Points</span>
+              <UInput
+                v-model.number="strategyConfigForm.third"
+                type="number"
+                min="0"
+                size="sm"
+                placeholder="Third winner payout"
+              />
+              <p class="text-[11px] font-normal text-gray-400">
+                Optional points for a third confirmed bingo.
+              </p>
+            </label>
+            <label class="space-y-1 text-xs font-semibold text-gray-200">
+              <span>Winners Per Round</span>
+              <UInput
+                v-model.number="strategyConfigForm.requiredWinners"
+                type="number"
+                min="1"
+                size="sm"
+                placeholder="Number of winners needed"
+              />
+              <p class="text-[11px] font-normal text-gray-400">
+                Automation ends the round after this many winners.
+              </p>
+            </label>
+            <label class="space-y-1 text-xs font-semibold text-gray-200 sm:col-span-2">
+              <span>Total Rounds</span>
+              <UInput
+                v-model.number="strategyConfigForm.totalRounds"
+                type="number"
+                min="1"
+                size="sm"
+                placeholder="Rounds to schedule"
+              />
+              <p class="text-[11px] font-normal text-gray-400">
+                Controls how many rounds are seeded for the current lobby game.
+              </p>
+            </label>
+          </div>
+          <div class="space-y-3 rounded-lg border border-white/10 bg-black/30 p-4">
+            <div class="flex flex-col gap-1">
+              <p class="text-sm font-semibold text-white">Round Draw Limit</p>
+              <p class="text-xs text-gray-400">
+                Limit the number of automated draws or leave it unlimited to rely solely on winner count.
+              </p>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <USelect
+                v-model="strategyConfigDrawLimitForm.mode"
+                :items="drawLimitModeOptions"
+                size="sm"
+                placeholder="Draw limit mode"
+              />
+              <UInput
+                v-if="strategyConfigDrawLimitForm.mode === 'limited'"
+                v-model.number="strategyConfigDrawLimitForm.value"
+                type="number"
+                size="sm"
+                :min="DRAW_LIMIT_MIN"
+                :max="DRAW_LIMIT_MAX"
+                label="Max Draws"
+              />
+            </div>
+          </div>
+          <div class="space-y-3 rounded-lg border border-white/10 bg-black/30 p-4">
+            <div class="flex flex-col gap-1">
+              <p class="text-sm font-semibold text-white">Auto Bonus Checks</p>
+              <p class="text-xs text-gray-400">
+                Enable or disable pattern scans for the current lobby game.
+              </p>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2">
+              <div
+                v-for="pattern in patternBonusOptions"
+                :key="pattern.id"
+                class="space-y-2 rounded-md border border-white/10 bg-white/5 p-3"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <div>
+                    <p class="text-sm font-semibold text-white">
+                      {{ pattern.label }}
+                    </p>
+                    <p class="text-xs text-gray-400">
+                      {{ pattern.description }}
+                    </p>
+                  </div>
+                  <USwitch
+                    v-model="strategyConfigBonusForm.patterns[pattern.id].enabled"
+                    aria-label="Toggle pattern bonus"
+                  />
+                </div>
+                <UInput
+                  v-if="strategyConfigBonusForm.patterns[pattern.id].enabled"
+                  v-model.number="strategyConfigBonusForm.patterns[pattern.id].points"
+                  size="xs"
+                  type="number"
+                  min="1"
+                  label="Bonus Points"
+                />
+              </div>
+            </div>
+            <div class="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+              <div class="flex items-center justify-between gap-2">
+                <div>
+                  <p class="text-sm font-semibold text-white">
+                    {{ comboBonusOption.label }}
+                  </p>
+                  <p class="text-xs text-gray-400">
+                    {{ comboBonusOption.description }}
+                  </p>
+                </div>
+                <USwitch
+                  v-model="strategyConfigBonusForm.combo.enabled"
+                  aria-label="Toggle combo bonus"
+                />
+              </div>
+              <div
+                v-if="strategyConfigBonusForm.combo.enabled"
+                class="grid gap-3 sm:grid-cols-2"
+              >
+                <UInput
+                  v-model.number="strategyConfigBonusForm.combo.points"
+                  label="Bonus Points"
+                  type="number"
+                  min="1"
+                  size="xs"
+                />
+                <UInput
+                  v-model.number="strategyConfigBonusForm.combo.window"
+                  label="Consecutive Wins Window"
+                  type="number"
+                  min="1"
+                  size="xs"
+                />
+              </div>
+            </div>
+          </div>
+          <div v-if="strategyConfigMessage" :class="[
+              'rounded-md px-3 py-2 text-xs',
+              strategyConfigMessageType === 'success'
+                ? 'bg-emerald-500/10 text-emerald-300'
+                : 'bg-red-500/10 text-red-300',
+            ]">
+            {{ strategyConfigMessage }}
+          </div>
+          <UButton
+            size="sm"
+            color="primary"
+            :loading="strategyConfigSaving"
+            @click="handleUpdateStrategyConfig"
+          >
+            Save Strategy Settings
+          </UButton>
+        </div>
+
         <BingoGameControl
           v-if="isAdmin && currentGame.game"
           :game-status="currentGame.game.status"
@@ -1263,7 +1917,10 @@ const getReadyIds = () =>
                 <p class="text-xs text-gray-400" v-else>Pending start</p>
               </div>
               <div class="text-right text-xs text-gray-400">
-                <p>Draws: {{ round.draws_per_round }}</p>
+                <p v-if="currentGame.game?.strategy_draw_limit_enabled">
+                  Draw limit: {{ round.draws_per_round }}
+                </p>
+                <p v-else>No draw limit</p>
                 <p>Interval: {{ round.draw_interval_seconds }}s</p>
               </div>
             </li>
@@ -1396,7 +2053,7 @@ const getReadyIds = () =>
                   </p>
                 </div>
                 <span class="text-[10px] text-gray-400">
-                  {{ row.metadata?.notes || "Round " + (row.round_id || "n/a") }}
+                  {{ describeStrategyHistoryRow(row) }}
                 </span>
               </li>
             </ul>

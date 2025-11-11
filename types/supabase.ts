@@ -236,6 +236,9 @@ export type Database = {
           strategy_second_place_points: number;
           strategy_third_place_points: number;
           strategy_required_winners: number;
+          strategy_draw_limit_enabled: boolean;
+          strategy_draw_limit: number | null;
+          strategy_bonus_rules: Json;
           winner_id: string | null;
           winner_username: string | null;
         };
@@ -255,6 +258,9 @@ export type Database = {
           strategy_second_place_points?: number;
           strategy_third_place_points?: number;
           strategy_required_winners?: number;
+          strategy_draw_limit_enabled?: boolean;
+          strategy_draw_limit?: number | null;
+          strategy_bonus_rules?: Json;
           winner_id?: string | null;
           winner_username?: string | null;
         };
@@ -274,6 +280,9 @@ export type Database = {
           strategy_second_place_points?: number;
           strategy_third_place_points?: number;
           strategy_required_winners?: number;
+          strategy_draw_limit_enabled?: boolean;
+          strategy_draw_limit?: number | null;
+          strategy_bonus_rules?: Json;
           winner_id?: string | null;
           winner_username?: string | null;
         };

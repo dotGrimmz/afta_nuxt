@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
     `
     )
     .order("created_at", { ascending: false })
+    .order("total_after_round", { ascending: false })
     .limit(limit);
 
   if (eventId) {
@@ -92,20 +93,26 @@ export default defineEventHandler(async (event) => {
   const leaderboardMap = new Map<string, StrategyLeaderboardEntry>();
 
   for (const row of history) {
-    if (leaderboardMap.has(row.contestant_id)) continue;
     const contestant = contestantLookup[row.contestant_id ?? ""] ?? null;
+    const existing = leaderboardMap.get(row.contestant_id);
 
-    leaderboardMap.set(row.contestant_id, {
-      contestantId: row.contestant_id,
-      username: contestant?.username ?? null,
-      code: contestant?.code ?? null,
-      totalPoints: row.total_after_round,
-      lastScoreId: row.id,
-      lastRoundId: row.round_id,
-      lastUpdate: row.created_at,
-      position: row.position ?? null,
-      metadata: row.metadata ?? {},
-    });
+    if (
+      !existing ||
+      row.created_at > existing.lastUpdate ||
+      (row.total_after_round ?? 0) >= (existing.totalPoints ?? 0)
+    ) {
+      leaderboardMap.set(row.contestant_id, {
+        contestantId: row.contestant_id,
+        username: contestant?.username ?? null,
+        code: contestant?.code ?? null,
+        totalPoints: row.total_after_round,
+        lastScoreId: row.id,
+        lastRoundId: row.round_id,
+        lastUpdate: row.created_at,
+        position: row.position ?? null,
+        metadata: row.metadata ?? {},
+      });
+    }
   }
 
   return {

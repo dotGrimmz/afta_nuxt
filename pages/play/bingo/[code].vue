@@ -17,6 +17,7 @@ import { checkBingo } from "~/utils/bingo/checkBingo";
 import type { WatchStopHandle } from "vue";
 import { useBingoStorage } from "~/composables/useBingoStorage";
 import DrawBalls from "~/components/bingo/DrawBalls.vue";
+import { formatStrategyAwardLabel } from "~/utils/strategy/formatAward";
 
 const route = useRoute();
 const router = useRouter();
@@ -65,6 +66,10 @@ const nextStrategyRound = computed(() =>
   strategyRounds.value.find((round) => round.status === "pending")
 );
 const isStrategyMode = computed(() => currentGame.value?.mode === "strategy");
+const completedStrategyRounds = computed(() =>
+  strategyRounds.value.filter((round) => round.status === "completed").length
+);
+const totalStrategyRounds = computed(() => currentGame.value?.total_rounds ?? null);
 const strategyRoundLabel = computed(() => {
   if (!isStrategyMode.value) return "";
   if (!currentGame.value) return "Lobby";
@@ -80,6 +85,39 @@ const strategyRoundLabel = computed(() => {
   if (!drawCount) return "Awaiting draws";
   const approxRound = Math.max(1, Math.ceil(drawCount / 5));
   return `Round ${approxRound}`;
+});
+const strategyRoundProgressText = computed(() => {
+  if (!isStrategyMode.value) return "";
+  const total = totalStrategyRounds.value;
+  const activeNumber = activeStrategyRound.value?.round_number;
+  const nextNumber = nextStrategyRound.value?.round_number;
+  const completed = completedStrategyRounds.value;
+  const inferred =
+    activeNumber ??
+    nextNumber ??
+    (currentGame.value?.status === "ended"
+      ? total ?? completed
+      : completed
+      ? completed + 1
+      : null);
+  if (!total) {
+    return inferred ? `Round ${inferred}` : "";
+  }
+  const safeCurrent = Math.min(inferred ?? completed + 1, total);
+  return `Round ${safeCurrent} / ${total}`;
+});
+const hasStrategyDrawLimit = computed(
+  () => !!currentGame.value?.strategy_draw_limit_enabled
+);
+const strategyDrawLimitLabel = computed(() => {
+  if (!isStrategyMode.value) return "";
+  if (currentGame.value?.strategy_draw_limit_enabled) {
+    const limit =
+      currentGame.value?.strategy_draw_limit ??
+      activeStrategyRound.value?.draws_per_round;
+    return limit ? `${limit} draws` : "Limited";
+  }
+  return "Unlimited";
 });
 const strategyTimeRemaining = computed(() => {
   if (!activeStrategyRound.value) return "";
@@ -164,16 +202,31 @@ const hydrateStrategyScores = async (
     const entryIndex = sorted.findIndex(
       (entry) => entry.contestantId === contestantId
     );
-    strategyPoints.value =
-      entryIndex >= 0 ? sorted[entryIndex].totalPoints : 0;
     strategyRank.value = entryIndex >= 0 ? entryIndex + 1 : null;
-    const latestForContestant = response.history.find(
+
+    const contestantHistory = (response.history ?? []).filter(
       (row) => row.contestant_id === contestantId
     );
+    const maxTotalAfterRound = contestantHistory.reduce(
+      (max, row) => Math.max(max, row.total_after_round ?? 0),
+      0
+    );
+    strategyPoints.value = maxTotalAfterRound;
+
+    let latestForContestant: StrategyScoreHistoryRow | undefined;
+    for (const row of contestantHistory) {
+      if (
+        !latestForContestant ||
+        row.created_at > latestForContestant.created_at
+      ) {
+        latestForContestant = row;
+      }
+    }
     strategyRecentAward.value = latestForContestant
-      ? `+${latestForContestant.points_awarded} pts · ${new Date(
-          latestForContestant.created_at
-        ).toLocaleTimeString()}`
+      ? formatStrategyAwardLabel({
+          points: latestForContestant.points_awarded,
+          metadata: latestForContestant.metadata,
+        })
       : null;
   } catch (err) {
     console.error("Failed to load strategy scores:", err);
@@ -235,21 +288,16 @@ const applyScoreRowToParticipantState = (row: StrategyScoreHistoryRow) => {
         (entry) => entry.contestantId === row.contestant_id
       ) + 1;
     strategyRank.value = newRank > 0 ? newRank : null;
-    strategyRecentAward.value = `+${row.points_awarded} pts · moments ago`;
-    const metadata =
-      typeof row.metadata === "object" && row.metadata
-        ? (row.metadata as Record<string, any>)
-        : {};
+    const awardLabel = formatStrategyAwardLabel({
+      points: row.points_awarded,
+      metadata: row.metadata,
+    });
+    strategyRecentAward.value = awardLabel;
     if ($toast) {
-      $toast.success(`+${row.points_awarded} pts`, {
+      $toast.success(awardLabel, {
         timeout: 2500,
         icon: "i-heroicons-sparkles-20-solid",
-        description:
-          typeof metadata.notes === "string"
-            ? metadata.notes
-            : row.round_id
-            ? `Round ${row.round_id}`
-            : "Strategy Bingo",
+        description: row.round_id ? `Round ${row.round_id}` : "Strategy Bingo",
       });
     }
   }
@@ -868,7 +916,7 @@ onUnmounted(() => {
 
         <div
           v-if="isStrategyMode && contestant && currentGame"
-          class="grid gap-3 mb-4 md:grid-cols-3"
+          class="grid gap-3 mb-4 md:grid-cols-4"
         >
           <div class="rounded-lg border border-white/10 bg-white/5 p-4">
             <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
@@ -891,6 +939,17 @@ onUnmounted(() => {
             </p>
             <p class="text-xs text-gray-400">
               {{ strategyTimeRemaining || `${draws.length} draws so far` }}
+            </p>
+          </div>
+          <div class="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
+              Rounds & Draws
+            </p>
+            <p class="text-lg font-semibold text-white">
+              {{ strategyRoundProgressText || "Round status pending" }}
+            </p>
+            <p class="text-xs text-gray-400">
+              Draw limit: {{ strategyDrawLimitLabel || "—" }}
             </p>
           </div>
           <div class="rounded-lg border border-white/10 bg-white/5 p-4">
@@ -928,7 +987,13 @@ onUnmounted(() => {
               class="flex-grow"
             />
             <div class="flex flex-col gap-2 text-sm text-gray-400">
-              <p v-if="isStrategyMode && activeStrategyRound">
+              <p
+                v-if="
+                  isStrategyMode &&
+                  hasStrategyDrawLimit &&
+                  activeStrategyRound
+                "
+              >
                 Target draws: {{ activeStrategyRound.draws_per_round }}
               </p>
               <p v-if="isStrategyMode && strategyTimeRemaining">
@@ -961,7 +1026,14 @@ onUnmounted(() => {
               :key="row.id"
               class="flex items-center justify-between"
             >
-              <span>+{{ row.points_awarded }} pts</span>
+              <span>
+                {{
+                  formatStrategyAwardLabel({
+                    points: row.points_awarded,
+                    metadata: row.metadata,
+                  })
+                }}
+              </span>
               <span class="text-xs text-gray-400">
                 {{ new Date(row.created_at).toLocaleTimeString() }}
               </span>

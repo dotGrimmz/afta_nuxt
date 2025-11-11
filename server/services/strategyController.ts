@@ -4,8 +4,17 @@ import type {
   RealtimeChannel,
 } from "@supabase/supabase-js";
 import { serverSupabase } from "../utils/supabase";
-import type { BingoGameRow, BingoRoundRow } from "~/types/bingo";
-import type { Database } from "~/types/supabase";
+import {
+  awardStrategyPoints,
+  type StrategyBonusDescriptor,
+} from "./strategyAwards";
+import { detectStrategyPatternBonuses } from "~/utils/bingo/patterns";
+import type {
+  BingoGameRow,
+  BingoRoundRow,
+  StrategyBonusRules,
+} from "~/types/bingo";
+import type { Database, Json } from "~/types/supabase";
 
 type StrategyControllerState = {
   initialized: boolean;
@@ -28,9 +37,25 @@ type StrategyGameConfig = Pick<
   | "strategy_second_place_points"
   | "strategy_third_place_points"
   | "strategy_required_winners"
+  | "strategy_draw_limit_enabled"
+  | "strategy_draw_limit"
+  | "strategy_bonus_rules"
 > & { event_id: string | null };
 
 const controllerStates = new Map<string, StrategyControllerState>();
+const MAX_STRATEGY_DRAWS = 75;
+
+const DEFAULT_BONUS_RULES: StrategyBonusRules = {
+  patterns: {
+    fourCorners: { points: 5, label: "Four Corners" },
+    x: { points: 15, label: "X Pattern" },
+  },
+  combo: {
+    points: 10,
+    window: 1,
+    label: "Back-to-back",
+  },
+};
 
 /**
  * Central manager for Strategy Bingo automation.
@@ -104,7 +129,7 @@ class StrategyController {
     const { data, error }: PostgrestSingleResponse<any> = await serverSupabase
       .from("bingo_games")
       .select(
-        "id, mode, status, total_rounds, strategy_draw_interval_seconds, strategy_draws_per_round, strategy_intermission_seconds, strategy_first_place_points, strategy_second_place_points, strategy_third_place_points, strategy_required_winners, bingo_events(id)"
+        "id, mode, status, total_rounds, strategy_draw_interval_seconds, strategy_draws_per_round, strategy_intermission_seconds, strategy_first_place_points, strategy_second_place_points, strategy_third_place_points, strategy_required_winners, strategy_draw_limit_enabled, strategy_draw_limit, strategy_bonus_rules, bingo_events(id)"
       )
       .eq("id", this.gameId)
       .maybeSingle();
@@ -120,8 +145,19 @@ class StrategyController {
       ? data.bingo_events[0]
       : data.bingo_events;
 
+    const drawLimitEnabled = data.strategy_draw_limit_enabled ?? false;
+    const effectiveDrawsPerRound = drawLimitEnabled
+      ? data.strategy_draw_limit ??
+        data.strategy_draws_per_round ??
+        MAX_STRATEGY_DRAWS
+      : MAX_STRATEGY_DRAWS;
+
     return {
       ...data,
+      strategy_draws_per_round: effectiveDrawsPerRound,
+      strategy_bonus_rules:
+        (data.strategy_bonus_rules as StrategyBonusRules | null) ??
+        DEFAULT_BONUS_RULES,
       event_id: eventRelation?.id ?? null,
     } as StrategyGameConfig;
   }
@@ -129,7 +165,7 @@ class StrategyController {
   private async ensureRoundsExist(config: StrategyGameConfig): Promise<void> {
     const { data, error } = await serverSupabase
       .from("bingo_rounds")
-      .select("id")
+      .select("id, round_number")
       .eq("game_id", this.gameId);
 
     if (error) {
@@ -139,15 +175,15 @@ class StrategyController {
       });
     }
 
-    if (data && data.length >= config.total_rounds) {
-      return;
-    }
-
+    const existingRounds = new Set(
+      (data ?? []).map((row: { round_number: number }) => row.round_number)
+    );
     const inserts: Omit<
       Database["public"]["Tables"]["bingo_rounds"]["Insert"],
       "id"
     >[] = [];
     for (let i = 1; i <= config.total_rounds; i++) {
+      if (existingRounds.has(i)) continue;
       inserts.push({
         game_id: this.gameId,
         round_number: i,
@@ -156,7 +192,9 @@ class StrategyController {
         status: "pending",
       });
     }
-    await serverSupabase.from("bingo_rounds").insert(inserts);
+    if (inserts.length) {
+      await serverSupabase.from("bingo_rounds").insert(inserts);
+    }
   }
 
   private async prepareRealtimeSubscriptions() {
@@ -178,7 +216,9 @@ class StrategyController {
         (payload) => {
           const row = payload.new as Database["public"]["Tables"]["bingo_results"]["Row"];
           if (!row.contestant_id) return;
-          this.handleBingoWin(row.contestant_id);
+          this.handleBingoWin(row.contestant_id, {
+            cardId: row.card_id ?? null,
+          });
         }
       )
       .subscribe();
@@ -193,6 +233,7 @@ class StrategyController {
       return;
     }
 
+    this.winnersThisRound.clear();
     this.state.activeRoundNumber = nextRound.round_number;
     this.activeRoundId = nextRound.id;
     await this.markRoundActive(nextRound.id);
@@ -204,7 +245,10 @@ class StrategyController {
 
   private scheduleDrawLoop(round: BingoRoundRow) {
     let drawsExecuted = 0;
-    const maxDraws = round.draws_per_round;
+    const limitEnabled = this.config?.strategy_draw_limit_enabled ?? false;
+    const maxDraws = limitEnabled
+      ? round.draws_per_round
+      : MAX_STRATEGY_DRAWS;
     const intervalMs = round.draw_interval_seconds * 1000;
     this.winnersThisRound.clear();
 
@@ -262,7 +306,7 @@ class StrategyController {
   private async evaluateAutoWinners() {
     const { data, error } = await serverSupabase
       .from("bingo_cards")
-      .select("contestant_id")
+      .select("id, contestant_id, grid")
       .eq("game_id", this.gameId)
       .eq("is_winner_candidate", true);
 
@@ -270,7 +314,10 @@ class StrategyController {
 
     for (const row of data) {
       if (row.contestant_id) {
-        await this.handleBingoWin(row.contestant_id);
+        await this.handleBingoWin(row.contestant_id, {
+          cardId: row.id,
+          cardGrid: row.grid as Json,
+        });
       }
     }
   }
@@ -283,6 +330,7 @@ class StrategyController {
     }
     this.activeRoundId = null;
     this.state.activeRoundNumber = null;
+    this.winnersThisRound.clear();
     const intermissionMs =
       (this.config?.strategy_intermission_seconds ?? 10) * 1000;
 
@@ -373,7 +421,10 @@ class StrategyController {
       .eq("id", this.gameId);
   }
 
-  private async handleBingoWin(contestantId: string) {
+  private async handleBingoWin(
+    contestantId: string,
+    context?: { cardId?: string | null; cardGrid?: Json | null }
+  ) {
     if (!this.config || !this.state.activeRoundNumber) return;
     if (this.winnersThisRound.has(contestantId)) return;
 
@@ -394,17 +445,27 @@ class StrategyController {
       .eq("round_number", this.state.activeRoundNumber)
       .single();
 
-    const totalAfter = await this.computeNewTotal(contestantId, points);
+    const draws = await this.fetchDrawNumbers();
+    const cardGrid = await this.loadWinningCardGrid(contestantId, context);
+    const patternMatches =
+      cardGrid && draws.length
+        ? detectStrategyPatternBonuses(
+            { grid: cardGrid, draws },
+            this.config.strategy_bonus_rules
+          )
+        : [];
+    const comboBonus = await this.computeComboBonus(contestantId);
 
-    await serverSupabase.from("bingo_scores").insert({
-      event_id: this.config.event_id ?? this.gameId,
-      game_id: this.gameId,
-      round_id: round?.id ?? null,
-      contestant_id: contestantId,
-      points_awarded: points,
-      total_after_round: totalAfter,
-      award_order: order,
-      metadata: { source: "auto" },
+    await awardStrategyPoints({
+      gameId: this.gameId,
+      eventId: this.config.event_id ?? this.gameId,
+      roundId: round?.id ?? null,
+      contestantId,
+      basePoints: points,
+      placementOrder: order,
+      source: "auto",
+      patternMatches,
+      bonusDescriptors: comboBonus ? [comboBonus] : [],
     });
 
     const required = this.config.strategy_required_winners ?? 1;
@@ -413,25 +474,85 @@ class StrategyController {
     }
   }
 
-  private async computeNewTotal(
-    contestantId: string,
-    points: number
-  ): Promise<number> {
+  private async fetchDrawNumbers(): Promise<number[]> {
     const { data, error } = await serverSupabase
-      .from("bingo_scores")
-      .select("total_after_round")
+      .from("bingo_draws")
+      .select("number")
+      .eq("game_id", this.gameId);
+
+    if (error) {
+      console.error("[Strategy] Failed to load draws:", error.message);
+      return [];
+    }
+
+    return (data ?? []).map((row) => row.number);
+  }
+
+  private async loadWinningCardGrid(
+    contestantId: string,
+    context?: { cardId?: string | null; cardGrid?: Json | null }
+  ): Promise<Json | null> {
+    if (context?.cardGrid) return context.cardGrid;
+
+    if (context?.cardId) {
+      const { data } = await serverSupabase
+        .from("bingo_cards")
+        .select("grid")
+        .eq("id", context.cardId)
+        .maybeSingle();
+      return (data?.grid as Json) ?? null;
+    }
+
+    const { data } = await serverSupabase
+      .from("bingo_cards")
+      .select("grid")
       .eq("game_id", this.gameId)
       .eq("contestant_id", contestantId)
+      .eq("is_winner_candidate", true)
+      .limit(1)
+      .maybeSingle();
+
+    return (data?.grid as Json) ?? null;
+  }
+
+  private async computeComboBonus(
+    contestantId: string
+  ): Promise<StrategyBonusDescriptor | null> {
+    if (!this.config?.strategy_bonus_rules?.combo) return null;
+    const comboRule = this.config.strategy_bonus_rules.combo;
+    if (!comboRule || comboRule.points <= 0) return null;
+    if (!this.state.activeRoundNumber) return null;
+
+    const { data: lastScore } = await serverSupabase
+      .from("bingo_scores")
+      .select("round_id")
+      .eq("game_id", this.gameId)
+      .eq("contestant_id", contestantId)
+      .eq("is_bonus", false)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (error) {
-      console.error("[Strategy] Failed to fetch totals:", error.message);
-      return points;
-    }
+    if (!lastScore?.round_id) return null;
 
-    return (data?.total_after_round ?? 0) + points;
+    const { data: lastRound } = await serverSupabase
+      .from("bingo_rounds")
+      .select("round_number")
+      .eq("id", lastScore.round_id)
+      .maybeSingle();
+
+    if (!lastRound?.round_number) return null;
+
+    const window = comboRule.window ?? 1;
+    const diff = this.state.activeRoundNumber - lastRound.round_number;
+    if (diff <= 0 || diff > window) return null;
+
+    return {
+      type: "combo",
+      id: "combo",
+      label: comboRule.label ?? "Combo Bonus",
+      points: comboRule.points,
+    };
   }
 }
 
