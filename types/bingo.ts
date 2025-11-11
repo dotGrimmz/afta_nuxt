@@ -1,10 +1,17 @@
 import type { Database } from "~/types/supabase";
 
+// The interface your composable will return
+import type { ComputedRef, Ref } from "vue";
+
 /** ── DB row aliases (exactly as Supabase generates) ───────────────────────── */
 export type BaseGameRow = Database["public"]["Tables"]["bingo_games"]["Row"];
 
-export type BingoGameRow = Omit<BaseGameRow, "status"> & {
+export type GameMode = "classic" | "strategy";
+
+export type BingoGameRow = Omit<BaseGameRow, "status" | "mode"> & {
   status: GameStatus;
+  mode: GameMode;
+  strategy_bonus_rules: StrategyBonusRules | null;
 
   payout?: number | null;
   winner_id?: string | null;
@@ -17,10 +24,74 @@ export type BingoContestantRow =
   Database["public"]["Tables"]["bingo_contestants"]["Row"];
 export type BingoCardRow = Database["public"]["Tables"]["bingo_cards"]["Row"];
 export type BingoDrawRow = Database["public"]["Tables"]["bingo_draws"]["Row"];
+export type BingoRoundRow =
+  Database["public"]["Tables"]["bingo_rounds"]["Row"];
 export type BingoResultRow =
   Database["public"]["Tables"]["bingo_results"]["Row"] & {
     username: string;
   };
+export type BingoScoreRow =
+  Database["public"]["Tables"]["bingo_scores"]["Row"];
+export type StrategyScoreHistoryRow = BingoScoreRow & {
+  contestant?: Pick<
+    Database["public"]["Tables"]["bingo_contestants"]["Row"],
+    "username" | "code" | "user_id"
+  > | null;
+};
+export type StrategyLeaderboardEntry = {
+  contestantId: string;
+  username: string | null;
+  code: string | null;
+  totalPoints: number;
+  lastScoreId: string;
+  lastRoundId: string | null;
+  lastUpdate: string;
+  position: number | null;
+  metadata: Database["public"]["Tables"]["bingo_scores"]["Row"]["metadata"];
+};
+export type StrategyScoreFilters = {
+  eventId?: string;
+  gameId?: string;
+  limit?: number;
+};
+export type StrategyBadgeMap = Record<
+  string,
+  {
+    rank: number;
+    points: number;
+  }
+>;
+export type StrategyScorePayload = {
+  eventId: string;
+  contestantId: string;
+  pointsAwarded: number;
+  gameId?: string | null;
+  roundId?: string | null;
+  position?: number | null;
+  metadata?: Database["public"]["Tables"]["bingo_scores"]["Row"]["metadata"];
+};
+
+export type StrategyPatternRule = {
+  points: number;
+  label?: string | null;
+};
+
+export type StrategyComboRule = {
+  points: number;
+  window?: number | null;
+  label?: string | null;
+};
+
+export type StrategyBonusRules = {
+  patterns?: Record<string, StrategyPatternRule | undefined>;
+  combo?: StrategyComboRule | null;
+};
+
+export type StrategyPatternMatch = {
+  id: string;
+  label: string;
+  points: number;
+};
 /** ── Grid shape used in-app ───────────────────────────────────────────────── */
 export type BingoCardGrid = {
   numbers: number[][];
@@ -78,6 +149,12 @@ export type DashboardGameState = {
   loading: boolean;
 };
 
+export type LobbyPresence = {
+  user_id: string;
+  username: string;
+  ready: boolean;
+};
+
 // Add this client-normalized state (numbers instead of draw rows)
 export type ClientGameState = {
   game: BingoGameRow | undefined | null;
@@ -94,8 +171,40 @@ export type IssueJoinCodeResponse = {
   cards: BingoCard[];
 };
 
-// The interface your composable will return
-import type { Ref } from "vue";
+export type DashboardControllerOptions = {
+  onResult?: (result: BingoResultRow) => void;
+  strategySource?: StrategyScoreFilters;
+  onStrategyScore?: (score: StrategyScoreHistoryRow) => void;
+};
+
+export type DashboardController = {
+  state: DashboardGameState;
+  players: Ref<LobbyPresence[]>;
+  allReady: ComputedRef<boolean>;
+  recentResults: Ref<any[]>;
+  recentResultsLoading: Ref<boolean>;
+  recentResultsPage: Ref<number>;
+  recentResultsPageSize: Ref<number>;
+  recentResultsTotal: Ref<number>;
+  hydrate: (gameId: string) => Promise<void>;
+  refresh: (gameId: string) => Promise<void>;
+  loadLatestGame: () => Promise<BingoGameRow | undefined>;
+  fetchRecentResults: (page?: number) => Promise<void>;
+  strategyHistory: Ref<StrategyScoreHistoryRow[]>;
+  strategyLeaderboard: Ref<StrategyLeaderboardEntry[]>;
+  strategyScoresLoading: Ref<boolean>;
+  strategyRounds: Ref<BingoRoundRow[]>;
+  strategyRoundsLoading: Ref<boolean>;
+  fetchStrategyScores: (filters?: StrategyScoreFilters) => Promise<void>;
+  setStrategySource: (filters?: StrategyScoreFilters) => Promise<void>;
+  fetchStrategyRounds: (gameId: string) => Promise<void>;
+  startStrategyAutomation: (gameId: string) => Promise<void>;
+  subscribe: (gameId: string) => void;
+  unsubscribe: () => void;
+  removeContestant: (contestantId: string) => Promise<void>;
+  findGameCode: (profileId: string | undefined) => string | undefined;
+  totalContestantCards: ComputedRef<number>;
+};
 
 export interface UseBingo {
   games?: Ref<BingoGameRow[]>; // non-null (we’ll set a default)
@@ -105,11 +214,23 @@ export interface UseBingo {
 
   refresh: () => Promise<void>;
 
-  createGame: () => Promise<BingoGameRow | undefined>;
+  createGame: (
+    mode?: GameMode,
+    strategyPoints?: {
+      first?: number;
+      second?: number;
+      third?: number;
+      requiredWinners?: number;
+      totalRounds?: number;
+      drawLimitMode?: "unlimited" | "limited";
+      drawLimitValue?: number;
+      bonusRules?: StrategyBonusRules;
+    }
+  ) => Promise<BingoGameRow | undefined>;
   startGame: (
     gameId: string,
     payout: number | string | undefined
-  ) => Promise<void>;
+  ) => Promise<BingoGameRow | undefined>;
   stopGame: (gameId: string) => Promise<{ game: BingoGameRow } | undefined>;
 
   drawNumber: (gameId: string) => Promise<{ draw: BingoDrawRow } | undefined>;
@@ -143,6 +264,19 @@ export interface UseBingo {
     username?: string | null,
     payout?: string | number
   ) => Promise<CallBingoResponse>;
+  recordStrategyScore: (
+    payload: StrategyScorePayload
+  ) => Promise<BingoScoreRow | undefined>;
+  getStrategyScores: (
+    filters: StrategyScoreFilters
+  ) => Promise<{
+    history: StrategyScoreHistoryRow[];
+    leaderboard: StrategyLeaderboardEntry[];
+  } | null>;
+  startStrategyAutomation: (gameId: string) => Promise<void>;
   narrowGame: (row: BaseGameRow) => BingoGameRow;
-  loadGame: () => Promise<BingoGameRow | undefined | null>;
+  loadGame: () => Promise<BingoGameRow | undefined>;
+  createDashboardController: (
+    options?: DashboardControllerOptions
+  ) => DashboardController;
 }

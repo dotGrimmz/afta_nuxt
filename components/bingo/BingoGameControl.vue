@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import type { BingoGameRow, ContestantType } from "~/types/bingo";
+import type { BingoGameRow, ContestantType, GameMode } from "~/types/bingo";
 const props = defineProps<{
   gameStatus: BingoGameRow["status"];
   gameId: BingoGameRow["id"];
+  mode: GameMode;
   draws: number[];
   contestants?: ContestantType[];
   loading?: boolean;
   autoDrawRunning: boolean;
   readyIds?: ContestantType["id"][];
+  strategyBadges?: Record<string, { rank: number; points: number }>;
 }>();
 
 const emit = defineEmits<{
@@ -21,15 +23,19 @@ const emit = defineEmits<{
 console.log("current status ", props.gameStatus);
 const readySet = computed<Set<string>>(() => new Set(props.readyIds ?? []));
 
-const isReady = (c: ContestantType): boolean => {
-  const key = (c as any).user_id ?? c.id;
-  return key ? readySet.value.has(String(key)) : false;
-};
+const isReady = (c: ContestantType): boolean => readySet.value.has(c.id);
 </script>
 
 <template>
   <div class="mt-3 p-3 bg-gray-900 rounded border border-gray-700 space-y-3">
-    <h3 class="font-semibold text-lg">Game Control</h3>
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="font-semibold text-lg">Game Control</h3>
+      <span
+        class="text-[10px] uppercase tracking-[0.35em] rounded-full border border-white/15 px-3 py-1 text-gray-200"
+      >
+        Mode: {{ props.mode }}
+      </span>
+    </div>
 
     <div v-if="loading" class="text-gray-400 text-sm">
       Loading game state...
@@ -39,17 +45,17 @@ const isReady = (c: ContestantType): boolean => {
     <div v-else class="flex gap-2 items-center">
       <UButton
         :disabled="props.gameStatus !== 'active' || props.autoDrawRunning"
-        @click="emit('draw', props.gameId)"
         size="sm"
         color="primary"
+        @click="emit('draw', props.gameId)"
       >
         Draw Number
       </UButton>
       <UButton
         :disabled="props.gameStatus !== 'active'"
-        @click="emit('stop', gameStatus)"
         size="sm"
         color="error"
+        @click="emit('stop', gameStatus)"
       >
         Stop Game
       </UButton>
@@ -58,8 +64,8 @@ const isReady = (c: ContestantType): boolean => {
         <UButton
           color="warning"
           size="sm"
-          @click="emit('reloadGame')"
           class="text-gray-400 text-sm"
+          @click="emit('reloadGame')"
           >Game Ended - Refresh
         </UButton>
       </template>
@@ -90,8 +96,17 @@ const isReady = (c: ContestantType): boolean => {
           isReady(c) ? 'border-4 border-green-500' : 'border border-gray-700'
         "
       >
-        <div class="flex justify-between items-center">
-          <span class="font-semibold">{{ c.username }}</span>
+        <div class="flex justify-between items-center gap-2">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold">{{ c.username }}</span>
+            <span
+              v-if="props.strategyBadges?.[c.id]"
+              class="rounded-full bg-emerald-500/10 text-emerald-300 text-[10px] uppercase tracking-[0.2em] px-2 py-0.5"
+            >
+              #{{ props.strategyBadges[c.id].rank }} ·
+              {{ props.strategyBadges[c.id].points }} pts
+            </span>
+          </div>
           <span class="text-xs text-gray-400">Code: {{ c.code }}</span>
         </div>
         <div class="flex justify-between items-center">
@@ -105,10 +120,10 @@ const isReady = (c: ContestantType): boolean => {
             variant="outline"
           />
           <UButton
-            @click="emit('removeContestant', c.id)"
             v-if="gameStatus === 'lobby'"
             size="sm"
             color="error"
+            @click="emit('removeContestant', c.id)"
           >
             Remove Contestant
           </UButton>

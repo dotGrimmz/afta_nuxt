@@ -16,7 +16,7 @@
       tag="div"
       class="flex"
       drag="x"
-      :dragConstraints="dragConstraints"
+      :drag-constraints="dragConstraints"
       :style="{
         width: itemWidth + 'px',
         gap: `${GAP}px`,
@@ -26,10 +26,10 @@
         }px 50%`,
         x: motionX,
       }"
-      @dragEnd="handleDragEnd"
       :animate="{ x: -(currentIndex * trackItemOffset) }"
       :transition="effectiveTransition"
-      @animationComplete="handleAnimationComplete"
+      @drag-end="handleDragEnd"
+      @animation-complete="handleAnimationComplete"
     >
       <Motion
         v-for="(item, index) in carouselItems"
@@ -112,8 +112,8 @@
           :animate="{
             scale: currentIndex % items.length === index ? 1.2 : 1,
           }"
-          @click="() => setCurrentIndex(index)"
           :transition="{ duration: 0.15 }"
+          @click="() => setCurrentIndex(index)"
         />
       </div>
     </div>
@@ -121,6 +121,18 @@
 </template>
 
 <script lang="ts">
+</script>
+
+<script setup lang="ts">
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  watch,
+  useTemplateRef,
+} from "vue";
+import { Motion, useMotionValue, useTransform } from "motion-v";
 export interface CarouselItem {
   id: number;
   title: string;
@@ -161,18 +173,6 @@ export const DEFAULT_ITEMS: CarouselItem[] = [
     icon: "pi pi-objects-column",
   },
 ];
-</script>
-
-<script setup lang="ts">
-import {
-  ref,
-  computed,
-  onMounted,
-  onUnmounted,
-  watch,
-  useTemplateRef,
-} from "vue";
-import { Motion, useMotionValue, useTransform } from "motion-v";
 
 const DRAG_BUFFER = 0;
 const VELOCITY_THRESHOLD = 500;

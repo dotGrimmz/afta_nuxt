@@ -47,8 +47,8 @@ const handleRestoreMarks = () => {
         <!-- Close button -->
         <button
           class="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
-          @click="close"
           aria-label="Close modal"
+          @click="close"
         >
           ✕
         </button>

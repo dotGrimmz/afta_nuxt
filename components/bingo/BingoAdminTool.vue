@@ -123,6 +123,102 @@
     </section>
 
     <section class="space-y-3">
+      <h3 class="text-lg font-semibold">Save Pricing Preset</h3>
+      <p class="text-xs text-gray-400">
+        Use the current ticket and payout setup to add a reusable preset to the
+        dashboard list.
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm mb-1">Preset Name</label>
+          <input
+            v-model="presetName"
+            type="text"
+            class="w-full p-2 rounded bg-gray-800 border border-gray-700"
+            placeholder="e.g. Friday Night 50%"
+          />
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Base Card Cost (d)</label>
+          <input
+            v-model.number="presetBaseCardCost"
+            type="number"
+            min="0"
+            step="0.01"
+            class="w-full p-2 rounded bg-gray-800 border border-gray-700"
+            placeholder="Leave blank to use ticket price"
+          />
+          <p class="mt-1 text-xs text-gray-500">
+            Derived card cost: {{ derivedBaseAmountLabel }} • Using:
+            {{ effectiveBaseAmountLabel }}
+          </p>
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Free Space Cost (d)</label>
+          <input
+            v-model.number="presetFreeSpaceCost"
+            type="number"
+            min="0"
+            step="0.01"
+            class="w-full p-2 rounded bg-gray-800 border border-gray-700"
+          />
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Auto Mark Cost (d)</label>
+          <input
+            v-model.number="presetAutoMarkCost"
+            type="number"
+            min="0"
+            step="0.01"
+            class="w-full p-2 rounded bg-gray-800 border border-gray-700"
+          />
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Preset Payout %</label>
+          <input
+            v-model.number="presetPayoutPercent"
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            class="w-full p-2 rounded bg-gray-800 border border-gray-700"
+            placeholder="e.g. 50"
+          />
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 text-xs text-gray-400">
+        <span>{{ presetPayoutPercentageLabel }}</span>
+      </div>
+      <div
+        v-if="presetPreviewRows.length"
+        class="flex flex-wrap gap-2 text-xs"
+      >
+        <div
+          v-for="row in presetPreviewRows"
+          :key="row.cards"
+          class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-700 bg-gray-800/70 text-gray-200 w-full sm:w-full lg:w-auto"
+        >
+          <span class="font-semibold">{{ row.cards }} cards</span>
+          <span class="text-emerald-300">payout {{ row.payoutLabel }}</span>
+          <span class="text-slate-300">house {{ row.houseLabel }}</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          class="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="!canCreatePreset"
+          @click="handleCreatePresetClick"
+        >
+          Create Pricing Preset
+        </button>
+        <span v-if="presetFeedback" class="text-xs text-emerald-400">{{
+          presetFeedback
+        }}</span>
+      </div>
+    </section>
+
+    <section class="space-y-3">
       <h3 class="text-lg font-semibold">Winning Odds</h3>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
         <div class="bg-gray-800/70 border border-gray-700 rounded-lg p-4">
@@ -188,6 +284,28 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
+const props = defineProps<{
+  baseCardCost?: number | null;
+  freeSpaceCost?: number | null;
+  autoMarkCost?: number | null;
+  presetName?: string | null;
+  presetPayoutPercentage?: number | null;
+}>();
+
+const emit = defineEmits<{
+  (
+    e: "create-preset",
+    payload: {
+      name: string;
+      baseCardCost: number;
+      freeSpaceCost: number;
+      autoMarkCost: number;
+      payout?: number;
+      payoutPercentage?: number;
+    }
+  ): void;
+}>();
+
 const DEFAULT_PLAYER_COUNT = 12;
 const DEFAULT_PAYOUT_PERCENT = 0.8;
 const DEFAULT_CARDS_OWNED = 1;
@@ -201,8 +319,30 @@ const gross = ref(0);
 const lastEdited = ref<"none" | "payout" | "house">("none");
 const cardsOwned = ref<number>(DEFAULT_CARDS_OWNED);
 
+const presetName = ref<string>(props.presetName ?? "");
+const presetBaseCardCost = ref<number | null>(
+  props.baseCardCost ?? null
+);
+const presetFreeSpaceCost = ref<number>(
+  Number.isFinite(Number(props.freeSpaceCost))
+    ? Number(props.freeSpaceCost)
+    : 0
+);
+const presetAutoMarkCost = ref<number>(
+  Number.isFinite(Number(props.autoMarkCost))
+    ? Number(props.autoMarkCost)
+    : 0
+);
+const presetPayoutPercent = ref<number | null>(
+  typeof props.presetPayoutPercentage === "number"
+    ? Math.round(props.presetPayoutPercentage * 100)
+    : Math.round(DEFAULT_PAYOUT_PERCENT * 100)
+);
+const presetFeedback = ref("");
+
 const copyFeedback = ref("");
 let copyTimeout: ReturnType<typeof setTimeout> | null = null;
+let presetTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const STORAGE_KEY = "bingo-admin-tool-state";
 type PersistedState = {
@@ -213,6 +353,11 @@ type PersistedState = {
   house: number;
   gross: number;
   cardsOwned: number;
+  presetName?: string;
+  presetBaseCardCost?: number | null;
+  presetFreeSpaceCost?: number;
+  presetAutoMarkCost?: number;
+  presetPayoutPercent?: number | null;
 };
 
 let isHydrating = true;
@@ -228,6 +373,11 @@ const persistState = () => {
     house: house.value,
     gross: gross.value,
     cardsOwned: cardsOwned.value,
+    presetName: presetName.value,
+    presetBaseCardCost: presetBaseCardCost.value,
+    presetFreeSpaceCost: presetFreeSpaceCost.value,
+    presetAutoMarkCost: presetAutoMarkCost.value,
+    presetPayoutPercent: presetPayoutPercent.value,
   };
 
   try {
@@ -269,6 +419,23 @@ const restorePersistedState = () => {
     }
     if (parsed.cardsOwned !== undefined) {
       cardsOwned.value = parsed.cardsOwned;
+    }
+    if (parsed.presetName !== undefined) {
+      presetName.value = parsed.presetName ?? "";
+    }
+    if (parsed.presetBaseCardCost !== undefined) {
+      presetBaseCardCost.value = parsed.presetBaseCardCost ?? null;
+    }
+    if (parsed.presetFreeSpaceCost !== undefined) {
+      presetFreeSpaceCost.value = Number(parsed.presetFreeSpaceCost) || 0;
+    }
+    if (parsed.presetAutoMarkCost !== undefined) {
+      presetAutoMarkCost.value = Number(parsed.presetAutoMarkCost) || 0;
+    }
+    if (parsed.presetPayoutPercent !== undefined) {
+      const numeric = Number(parsed.presetPayoutPercent);
+      presetPayoutPercent.value =
+        Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
     }
   } catch (err) {
     console.warn("Unable to restore bingo admin tool state", err);
@@ -338,6 +505,76 @@ const payoutPercentModel = computed({
 
 const clampToTwoDecimals = (value: number) =>
   Number(Math.max(value, 0).toFixed(2));
+
+watch(
+  presetPayoutPercent,
+  (val) => {
+    if (val === null || val === undefined) {
+      presetPayoutPercent.value = Math.round(DEFAULT_PAYOUT_PERCENT * 100);
+      return;
+    }
+    const clamped = Math.min(Math.max(val, 0), 100);
+    if (clamped !== val) {
+      presetPayoutPercent.value = clamped;
+    }
+  }
+);
+
+watch(
+  () => props.baseCardCost,
+  (val) => {
+    if (val === undefined) return;
+    if (val === null) {
+      presetBaseCardCost.value = null;
+      return;
+    }
+    const numeric = Number(val);
+    presetBaseCardCost.value = Number.isFinite(numeric) ? numeric : null;
+  },
+  { immediate: true }
+);
+
+watch(
+  () => props.freeSpaceCost,
+  (val) => {
+    if (val === undefined || val === null) return;
+    const numeric = Number(val);
+    if (!Number.isFinite(numeric)) return;
+    presetFreeSpaceCost.value = clampToTwoDecimals(numeric);
+  },
+  { immediate: true }
+);
+
+watch(
+  () => props.autoMarkCost,
+  (val) => {
+    if (val === undefined || val === null) return;
+    const numeric = Number(val);
+    if (!Number.isFinite(numeric)) return;
+    presetAutoMarkCost.value = clampToTwoDecimals(numeric);
+  },
+  { immediate: true }
+);
+
+watch(
+  () => props.presetName,
+  (val) => {
+    if (val === undefined) return;
+    presetName.value = val ?? "";
+  },
+  { immediate: true }
+);
+
+watch(
+  () => props.presetPayoutPercentage,
+  (val) => {
+    if (val === undefined || val === null) return;
+    const percent = Number(val) * 100;
+    if (!Number.isFinite(percent)) return;
+    presetPayoutPercent.value = Math.round(percent);
+  },
+  { immediate: true }
+);
 
 const syncSharesFromGross = (total: number) => {
   const sanitizedTotal = clampToTwoDecimals(total);
@@ -513,6 +750,138 @@ const applyTicketSuggestion = (value: number) => {
   lastEdited.value = "none";
 };
 
+const derivedTicketPrice = computed(() => {
+  const price = Number(ticketPrice.value);
+  if (Number.isFinite(price) && price > 0) {
+    return clampToTwoDecimals(price);
+  }
+
+  const count = playerCountNumber.value;
+  if (count > 0) {
+    const estimated = gross.value / count;
+    if (Number.isFinite(estimated) && estimated > 0) {
+      return clampToTwoDecimals(estimated);
+    }
+  }
+
+  const fallback = props.baseCardCost;
+  if (fallback !== undefined && fallback !== null) {
+    const numeric = Number(fallback);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return clampToTwoDecimals(numeric);
+    }
+  }
+
+  return 0;
+});
+
+const effectiveBaseCardCost = computed(() => {
+  const manual = presetBaseCardCost.value;
+  if (manual !== null && Number.isFinite(manual) && manual > 0) {
+    return clampToTwoDecimals(manual);
+  }
+  return derivedTicketPrice.value;
+});
+
+const derivedBaseAmountLabel = computed(() =>
+  derivedTicketPrice.value > 0 ? formatAmount(derivedTicketPrice.value) : "—"
+);
+
+const effectiveBaseAmountLabel = computed(() =>
+  formatAmount(effectiveBaseCardCost.value || 0)
+);
+
+const presetPayoutPercentageFraction = computed(() => {
+  const raw = presetPayoutPercent.value;
+  if (raw === null || raw === undefined) {
+    return Math.min(Math.max(payoutPercent.value, 0), 1);
+  }
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric)) {
+    return Math.min(Math.max(payoutPercent.value, 0), 1);
+  }
+  return Math.min(Math.max((numeric / 100), 0), 1);
+});
+
+const presetPayoutPercentageLabel = computed(
+  () => `${(Math.round(presetPayoutPercentageFraction.value * 1000) / 10).toFixed(1)}% of pot`
+);
+
+const canCreatePreset = computed(
+  () =>
+    presetName.value.trim().length > 0 &&
+    effectiveBaseCardCost.value > 0 &&
+    presetPayoutPercentageFraction.value > 0
+);
+
+const roundToNearestTen = (value: number) => Math.round(value / 10) * 10;
+
+const computePreviewShares = (total: number, pct: number) => {
+  const roundedTotal = Math.round(total * 10) / 10;
+  const payout = Math.min(
+    roundedTotal,
+    Math.max(0, roundToNearestTen(roundedTotal * pct))
+  );
+  const house = Math.max(
+    0,
+    Math.round((roundedTotal - payout) * 10) / 10
+  );
+
+  return { payout, house };
+};
+
+const presetPreviewRows = computed(() => {
+  const rows: { cards: number; payoutLabel: string; houseLabel: string }[] = [];
+  const base = effectiveBaseCardCost.value;
+  if (!base) return rows;
+
+  const free = clampToTwoDecimals(Number(presetFreeSpaceCost.value) || 0);
+  const auto = clampToTwoDecimals(Number(presetAutoMarkCost.value) || 0);
+  const pct = presetPayoutPercentageFraction.value;
+
+  for (const cards of [2, 3, 4, 5]) {
+    const rawTotal = cards * base + free + auto;
+    const { payout: payoutAmount, house: houseAmount } = computePreviewShares(
+      rawTotal,
+      pct
+    );
+    rows.push({
+      cards,
+      payoutLabel: formatAmount(payoutAmount),
+      houseLabel: formatAmount(houseAmount),
+    });
+  }
+
+  return rows;
+});
+
+const schedulePresetFeedbackClear = () => {
+  if (presetTimeout) clearTimeout(presetTimeout);
+  presetTimeout = setTimeout(() => {
+    presetFeedback.value = "";
+    presetTimeout = null;
+  }, 2000);
+};
+
+const handleCreatePresetClick = () => {
+  if (!canCreatePreset.value) return;
+
+  emit("create-preset", {
+    name: presetName.value.trim(),
+    baseCardCost: effectiveBaseCardCost.value,
+    freeSpaceCost: clampToTwoDecimals(
+      Number(presetFreeSpaceCost.value) || 0
+    ),
+    autoMarkCost: clampToTwoDecimals(Number(presetAutoMarkCost.value) || 0),
+    payout: clampToTwoDecimals(payout.value),
+    payoutPercentage:
+      Math.round(presetPayoutPercentageFraction.value * 1000) / 1000,
+  });
+
+  presetFeedback.value = "Preset added to pricing list.";
+  schedulePresetFeedbackClear();
+};
+
 const singleCardOdds = computed(() => {
   const count = playerCountNumber.value;
   if (!count) return 0;
@@ -577,6 +946,11 @@ watch(
     house,
     gross,
     cardsOwned,
+    presetName,
+    presetBaseCardCost,
+    presetFreeSpaceCost,
+    presetAutoMarkCost,
+    presetPayoutPercent,
   ],
   () => {
     persistState();
@@ -595,9 +969,22 @@ const resetForm = () => {
   lastEdited.value = "none";
   cardsOwned.value = DEFAULT_CARDS_OWNED;
   copyFeedback.value = "";
+  presetName.value = props.presetName ?? "";
+  presetBaseCardCost.value = props.baseCardCost ?? null;
+  presetFreeSpaceCost.value = Number(props.freeSpaceCost ?? 0);
+  presetAutoMarkCost.value = Number(props.autoMarkCost ?? 0);
+  presetPayoutPercent.value =
+    typeof props.presetPayoutPercentage === "number"
+      ? Math.round(props.presetPayoutPercentage * 100)
+      : null;
+  presetFeedback.value = "";
   if (copyTimeout) {
     clearTimeout(copyTimeout);
     copyTimeout = null;
+  }
+  if (presetTimeout) {
+    clearTimeout(presetTimeout);
+    presetTimeout = null;
   }
   clearPersistedState();
   nextTick(() => {
@@ -627,6 +1014,10 @@ onUnmounted(() => {
   if (copyTimeout) {
     clearTimeout(copyTimeout);
     copyTimeout = null;
+  }
+  if (presetTimeout) {
+    clearTimeout(presetTimeout);
+    presetTimeout = null;
   }
 });
 </script>

@@ -69,7 +69,7 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
                   {{ user.email || "No email on file" }}
                 </p>
               </div>
-              <UBadge variant="soft" color="primary" v-if="user.role">
+              <UBadge v-if="user.role" variant="soft" color="primary">
                 {{ user.role }}
               </UBadge>
             </div>
