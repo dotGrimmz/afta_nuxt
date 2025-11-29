@@ -8,8 +8,10 @@ import type {
   BingoResultRow,
   CallBingoResponse,
   ContestantType,
+  IssueJoinCodeResponse,
   StrategyLeaderboardEntry,
   StrategyScoreHistoryRow,
+  BingoRoundRow,
 } from "~/types/bingo";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { checkBingoClient } from "~/utils/bingo/checkBingoClient";
@@ -71,19 +73,62 @@ const completedStrategyRounds = computed(
   () =>
     strategyRounds.value.filter((round) => round.status === "completed").length
 );
-const totalStrategyRounds = computed(
-  () => currentGame.value?.total_rounds ?? null
-);
+const totalStrategyRounds = computed(() => {
+  if (!isStrategyMode.value) return null;
+  const declaredTotal = currentGame.value?.total_rounds ?? null;
+  const highestRound = strategyRounds.value.reduce(
+    (max, round) => Math.max(max, round.round_number ?? 0),
+    0
+  );
+  const derivedTotal = highestRound > 0 ? highestRound : null;
+  return derivedTotal ?? declaredTotal ?? null;
+});
+const currentStrategyRoundEntry = computed(() => {
+  if (!isStrategyMode.value) return null;
+  const rounds = strategyRounds.value;
+  return (
+    rounds.find((round) => round.status === "active") ??
+    rounds.find((round) => round.status === "cooldown") ??
+    rounds.find((round) => round.status === "pending") ??
+    null
+  );
+});
+const inferredStrategyRoundNumber = computed(() => {
+  if (!isStrategyMode.value) return null;
+  const entry = currentStrategyRoundEntry.value;
+  if (entry) return entry.round_number;
+  const total = totalStrategyRounds.value;
+  const completed = completedStrategyRounds.value;
+  if (currentGame.value?.status === "ended") {
+    return total ?? completed ?? null;
+  }
+  if (completed) {
+    const nextRound = completed + 1;
+    return total ? Math.min(nextRound, total) : nextRound;
+  }
+  return currentGame.value?.status === "lobby" ? 1 : null;
+});
 const strategyRoundLabel = computed(() => {
   if (!isStrategyMode.value) return "";
   if (!currentGame.value) return "Lobby";
   if (currentGame.value.status === "lobby") return "Lobby";
   if (currentGame.value.status === "ended") return "Game Over";
-  if (activeStrategyRound.value) {
-    return `Round ${activeStrategyRound.value.round_number} · ${activeStrategyRound.value.status}`;
+  const entry = currentStrategyRoundEntry.value;
+  if (entry) {
+    if (entry.status === "pending") {
+      return `Round ${entry.round_number} incoming`;
+    }
+    const statusLabels: Record<string, string> = {
+      active: "Live",
+      cooldown: "Intermission",
+      completed: "Completed",
+    };
+    const statusLabel = statusLabels[entry.status] ?? entry.status;
+    return `Round ${entry.round_number} · ${statusLabel}`;
   }
-  if (nextStrategyRound.value) {
-    return `Round ${nextStrategyRound.value.round_number} incoming`;
+  const inferred = inferredStrategyRoundNumber.value;
+  if (inferred) {
+    return `Round ${inferred}`;
   }
   const drawCount = draws.value.length;
   if (!drawCount) return "Awaiting draws";
@@ -93,21 +138,14 @@ const strategyRoundLabel = computed(() => {
 const strategyRoundProgressText = computed(() => {
   if (!isStrategyMode.value) return "";
   const total = totalStrategyRounds.value;
-  const activeNumber = activeStrategyRound.value?.round_number;
-  const nextNumber = nextStrategyRound.value?.round_number;
-  const completed = completedStrategyRounds.value;
-  const inferred =
-    activeNumber ??
-    nextNumber ??
-    (currentGame.value?.status === "ended"
-      ? (total ?? completed)
-      : completed
-        ? completed + 1
-        : null);
-  if (!total) {
-    return inferred ? `Round ${inferred}` : "";
+  const current = inferredStrategyRoundNumber.value;
+  if (!current) {
+    return total ? `Round 0 / ${total}` : "";
   }
-  const safeCurrent = Math.min(inferred ?? completed + 1, total);
+  if (!total) {
+    return `Round ${current}`;
+  }
+  const safeCurrent = Math.min(current, total);
   return `Round ${safeCurrent} / ${total}`;
 });
 const hasStrategyDrawLimit = computed(
@@ -151,6 +189,11 @@ const strategyPayoutResult = computed(() => {
     conversionFee: 0.0025,
   });
 });
+const strategyPayoutResultData = computed(() => {
+  const result = strategyPayoutResult.value;
+  if (!result || "error" in result) return null;
+  return result;
+});
 const formatGold = (value: number | undefined) =>
   typeof value === "number" && Number.isFinite(value)
     ? value.toLocaleString()
@@ -168,12 +211,14 @@ const participantStrategyPlacement = computed(() => {
   );
   return idx >= 0 ? idx + 1 : null;
 });
+const participantPlacementEntry = computed(() => {
+  const placement = participantStrategyPlacement.value;
+  if (!placement) return null;
+  return strategyPlacements.value[placement - 1] ?? null;
+});
 const getPlacementPayout = (placement: number): number | null => {
-  if (!strategyPayoutResult || typeof strategyPayoutResult.value !== "object") {
-    return null;
-  }
-  const result = strategyPayoutResult.value;
-  if (!result || "error" in result) return null;
+  const result = strategyPayoutResultData.value;
+  if (!result) return null;
   if (placement === 1) return result.payouts.first;
   if (placement === 2) return result.payouts.second;
   if (placement === 3) return result.payouts.third;
@@ -402,6 +447,7 @@ const calledBingoSuccessfully = ref(false);
 const gameStatus = computed(() => currentGame.value?.status ?? null);
 let startAnimationTimeout: ReturnType<typeof setTimeout> | null = null;
 let endAnimationTimeout: ReturnType<typeof setTimeout> | null = null;
+const migratingToNextGame = ref(false);
 
 const { $toast } = useNuxtApp();
 
@@ -450,114 +496,130 @@ const enterAnotherCode = (event: MouseEvent) => {
   router.push("/play/bingo");
 };
 
+const bootstrapSession = async (joinResult: IssueJoinCodeResponse) => {
+  const nextContestant = joinResult.contestant;
+  if (!nextContestant || !nextContestant.game_id) {
+    throw new Error("No game id found for contestant.");
+  }
+  if (!joinResult.cards.length) {
+    throw new Error("No cards were issued for this contestant.");
+  }
+
+  contestant.value = nextContestant;
+  cards.value = joinResult.cards;
+  calledBingoSuccessfully.value = false;
+  showAnimation.value = false;
+  showAdminEndAnimation.value = false;
+  message.value = "";
+  subscribeToContestantUpdates(nextContestant.id);
+
+  const nextGameId = nextContestant.game_id;
+  const previousGameId = currentGame.value?.id;
+  if (previousGameId && previousGameId !== nextGameId) {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(getDrawStorageKey(previousGameId));
+    }
+  }
+
+  const storedDraws = loadStoredDraws(nextGameId);
+  if (storedDraws.length) {
+    draws.value.splice(0, draws.value.length, ...storedDraws);
+    disableInitialDrawAnimation.value = true;
+  } else {
+    draws.value.splice(0, draws.value.length);
+    disableInitialDrawAnimation.value = false;
+  }
+
+  const state = await getState(nextGameId);
+  if (!state.game) {
+    throw new Error("Unable to load game state. Please try again.");
+  }
+
+  currentGame.value = narrowGame(state.game);
+  contestants.value = state.contestants ?? [];
+
+  const serverDraws = state.draws.map((d) => d);
+  if (serverDraws.length === 0) {
+    disableInitialDrawAnimation.value = false;
+  }
+  if (!disableInitialDrawAnimation.value) {
+    draws.value.splice(0, draws.value.length, ...serverDraws);
+  } else {
+    const serverSet = new Set(serverDraws);
+    const filtered = draws.value.filter((num) => serverSet.has(num));
+    const merged = [...filtered];
+    const seen = new Set(filtered);
+    for (const num of serverDraws) {
+      if (!seen.has(num)) {
+        merged.push(num);
+        seen.add(num);
+      }
+    }
+    draws.value.splice(0, draws.value.length, ...merged);
+  }
+
+  if (currentGame.value?.id) {
+    persistStoredDraws(currentGame.value.id, draws.value);
+  }
+
+  for (const card of cards.value) {
+    restoreCardGrid(card, draws.value);
+  }
+
+  resetStrategyState();
+  if (currentGame.value?.mode === "strategy") {
+    await hydrateStrategyScores(nextGameId, nextContestant.id);
+    strategyEventId.value = await fetchStrategyEventId(nextGameId);
+    await fetchStrategyRounds(nextGameId);
+    subscribeToScores(nextGameId);
+    subscribeToRounds(nextGameId);
+  }
+
+  subscribeToDraws(nextGameId);
+  subscribeToResults(nextGameId);
+  subscribeToGame(nextGameId);
+  subscribeToContestants(nextGameId);
+};
+
+const loadSessionFromJoinCode = async (code: string) => {
+  const result = await joinGame(code);
+  if (!result || !result.contestant) {
+    throw new Error("Invalid or expired join code.");
+  }
+  teardownRealtimeSubscriptions();
+  teardownLobbyChannel();
+  await bootstrapSession(result);
+};
+
+const handleContestantGameSwap = async (nextGameId: string) => {
+  if (currentGame.value?.id === nextGameId) return;
+  if (migratingToNextGame.value) return;
+  if (!isStrategyMode.value) return;
+  const code = route.params.code as string;
+  if (!code) return;
+
+  migratingToNextGame.value = true;
+  loading.value = true;
+  try {
+    await loadSessionFromJoinCode(code);
+    $toast?.info("Next strategy game is ready!", {
+      timeout: 2200,
+      icon: "i-heroicons-sparkles-20-solid",
+    });
+  } catch (err: any) {
+    console.error("Failed to migrate to next game:", err);
+    error.value =
+      err?.message || "Unable to join the next strategy game automatically.";
+  } finally {
+    migratingToNextGame.value = false;
+    loading.value = false;
+  }
+};
+
 onMounted(async () => {
   try {
     const code = route.params.code as string;
-
-    //**
-    // when a contestant joins we fetch all their cards for the game id
-    // and we also get their game code and we get their contestant data
-    // but mainly we want the game_id so we can fetch that contestants game data
-    // */
-    const result = await joinGame(code);
-    if (!result || !result.contestant || result.cards.length === 0) {
-      error.value = "Invalid or expired join code.";
-      return;
-    }
-
-    contestant.value = result.contestant;
-    cards.value = result.cards;
-    for (const card of cards.value) {
-      restoreCardGrid(card, draws.value);
-    }
-    // hydrate auto mark from local storage, fallback to server
-    // autoMarkOn.value =
-    //   autoMark.value || cards.value[0]?.auto_mark_enabled || false;
-    const gameId = result.contestant.game_id;
-    if (!gameId) {
-      error.value = "No game id on for contestant!";
-      return;
-    }
-
-    const storedDraws = loadStoredDraws(gameId);
-    if (storedDraws.length) {
-      draws.value.splice(0, draws.value.length, ...storedDraws);
-      disableInitialDrawAnimation.value = true;
-      for (const card of cards.value) {
-        restoreCardGrid(card, draws.value);
-      }
-    } else {
-      disableInitialDrawAnimation.value = false;
-    }
-
-    // assign server game state to local game state
-    const state = await getState(gameId);
-    console.log("gamestate from mount ", state);
-    // will just get the value of auto mark and free space from the first card
-
-    console.log("auto mark enabled", cards.value[0].auto_mark_enabled);
-    console.log("free space enabled", cards.value[0].free_space);
-
-    // game state has 3 phases. lobby - pregame
-
-    // assign server state to local state - should set defaults
-    if (!state.game) {
-      console.error("unable to assign server state to local state. Debug!");
-      message.value = "unable to assign server state to local state. Debug!";
-      return;
-    }
-    currentGame.value = narrowGame(state.game); // ✅ narrow status here
-    // winnerPayout.value = state.game.payout ?? null;
-    console.log(
-      "server state assigned to current game in code.vue",
-      toRaw(currentGame.value)
-    );
-    // Lobby- pregame state
-
-    // Will this have the same reactive effect?
-    //const gameLobby = computed(() => currentGame.value?.status === "lobby");
-
-    // hydrate draws without replacing the array ref
-    const serverDraws = state.draws.map((d) => d);
-    if (!disableInitialDrawAnimation.value) {
-      draws.value.splice(0, draws.value.length, ...serverDraws);
-    } else {
-      const serverSet = new Set(serverDraws);
-      const filtered = draws.value.filter((num) => serverSet.has(num));
-      const merged = [...filtered];
-      const seen = new Set(filtered);
-      for (const num of serverDraws) {
-        if (!seen.has(num)) {
-          merged.push(num);
-          seen.add(num);
-        }
-      }
-      draws.value.splice(0, draws.value.length, ...merged);
-    }
-
-    if (currentGame.value?.id) {
-      persistStoredDraws(currentGame.value.id, draws.value);
-    }
-
-    if (serverDraws.length === 0) {
-      disableInitialDrawAnimation.value = false;
-    }
-
-    if (currentGame.value?.mode === "strategy") {
-      await hydrateStrategyScores(gameId, result.contestant.id);
-      strategyEventId.value = await fetchStrategyEventId(gameId);
-      await fetchStrategyRounds(gameId);
-      subscribeToScores(gameId);
-      subscribeToRounds(gameId);
-    } else {
-      resetStrategyState();
-    }
-
-    // subscribe after hydration
-    subscribeToDraws(gameId);
-    subscribeToResults(gameId);
-    subscribeToGame(gameId);
-    subscribeToContestants(gameId);
+    await loadSessionFromJoinCode(code);
   } catch (err: any) {
     error.value = err?.message || "Could not join this game.";
   } finally {
@@ -652,6 +714,35 @@ const subscribeToContestants = (gameId: string) => {
   subscriptions.push(channel);
 };
 
+const subscribeToContestantUpdates = (contestantId: string) => {
+  teardownContestantRealtime();
+  contestantChannel = supabase
+    .channel(`bingo_contestant_${contestantId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "bingo_contestants",
+        filter: `id=eq.${contestantId}`,
+      },
+      async (payload) => {
+        const updated = payload.new as ContestantType;
+        const previousGameId = contestant.value?.game_id;
+        contestant.value = updated;
+        if (
+          previousGameId &&
+          updated.game_id &&
+          updated.game_id !== previousGameId &&
+          currentGame.value?.mode === "strategy"
+        ) {
+          await handleContestantGameSwap(updated.game_id);
+        }
+      }
+    )
+    .subscribe();
+};
+
 const subscribeToScores = (gameId: string) => {
   const channel = supabase
     .channel(`bingo_scores_${gameId}`)
@@ -697,8 +788,8 @@ const subscribeToRounds = (gameId: string) => {
 };
 
 onBeforeUnmount(() => {
-  subscriptions.forEach((sub) => supabase.removeChannel(sub));
-  subscriptions.length = 0;
+  teardownRealtimeSubscriptions();
+  teardownContestantRealtime();
   if (startAnimationTimeout) {
     clearTimeout(startAnimationTimeout);
     startAnimationTimeout = null;
@@ -760,7 +851,29 @@ watch(
 );
 
 let channel: RealtimeChannel | null = null;
+let contestantChannel: RealtimeChannel | null = null;
 let stopReadyWatch: WatchStopHandle | null = null;
+
+const teardownRealtimeSubscriptions = () => {
+  subscriptions.forEach((sub) => supabase.removeChannel(sub));
+  subscriptions.length = 0;
+};
+
+const teardownLobbyChannel = () => {
+  stopReadyWatch?.();
+  stopReadyWatch = null;
+  if (channel) {
+    channel.unsubscribe();
+    channel = null;
+  }
+};
+
+const teardownContestantRealtime = () => {
+  if (contestantChannel) {
+    supabase.removeChannel(contestantChannel);
+    contestantChannel = null;
+  }
+};
 
 const setUpLobbyChannel = (
   id: string,
@@ -817,9 +930,7 @@ watch(
 );
 
 onUnmounted(() => {
-  stopReadyWatch?.();
-  channel?.unsubscribe();
-  channel = null;
+  teardownLobbyChannel();
 });
 
 // update presence whenever ready changes
@@ -1050,18 +1161,19 @@ onUnmounted(() => {
             <p class="text-xs uppercase tracking-[0.3em] text-gray-400">
               Payout Preview
             </p>
-            <template
-              v-if="strategyPayoutResult && !('error' in strategyPayoutResult)"
-            >
+            <template v-if="strategyPayoutResultData">
               <ul class="space-y-1 text-sm text-white">
                 <li>
-                  🥇 {{ formatGold(strategyPayoutResult.payouts.first) }} gold
+                  🥇
+                  {{ formatGold(strategyPayoutResultData.payouts.first) }} gold
                 </li>
                 <li>
-                  🥈 {{ formatGold(strategyPayoutResult.payouts.second) }} gold
+                  🥈
+                  {{ formatGold(strategyPayoutResultData.payouts.second) }} gold
                 </li>
                 <li>
-                  🥉 {{ formatGold(strategyPayoutResult.payouts.third) }} gold
+                  🥉
+                  {{ formatGold(strategyPayoutResultData.payouts.third) }} gold
                 </li>
               </ul>
               <p class="text-[11px] text-gray-400">
@@ -1200,26 +1312,21 @@ onUnmounted(() => {
                     participantStrategyPlacement === 1
                       ? "1st"
                       : participantStrategyPlacement === 2
-                      ? "2nd"
-                      : "3rd"
+                        ? "2nd"
+                        : "3rd"
                   }}
                   in Strategy Bingo!
                 </p>
                 <p class="text-lg">
                   Payout:
                   {{
-                    formatGold(
-                      getPlacementPayout(participantStrategyPlacement)
-                    )
+                    formatGold(getPlacementPayout(participantStrategyPlacement))
                   }}
                   gold
                 </p>
                 <p class="text-sm text-gray-200">
                   Total Points:
-                  {{
-                    strategyPlacements[participantStrategyPlacement - 1]
-                      ?.totalPoints ?? "—"
-                  }}
+                  {{ participantPlacementEntry?.totalPoints ?? "—" }}
                 </p>
               </template>
               <template v-else>
@@ -1263,7 +1370,10 @@ onUnmounted(() => {
             >
               <template v-if="isWinner">
                 🎉 Congratulations {{ winnerName }} — You Won!
-                <div v-if="winnerPayout !== null" class="mt-2 text-lg font-bold">
+                <div
+                  v-if="winnerPayout !== null"
+                  class="mt-2 text-lg font-bold"
+                >
                   Prize: {{ winnerPayout }} 💎
                 </div>
               </template>

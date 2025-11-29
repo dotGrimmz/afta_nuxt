@@ -30,7 +30,8 @@ export default defineEventHandler(async (event) => {
   const { data: cards, error: cardsError } = await client
     .from("bingo_cards")
     .select("*")
-    .eq("contestant_id", contestant.id);
+    .eq("contestant_id", contestant.id)
+    .eq("game_id", contestant.game_id);
 
   if (cardsError) {
     throw createError({

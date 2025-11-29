@@ -43,7 +43,21 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // 2️⃣ Fetch contestant to get username
+  // 2️⃣ Fetch game for mode + contestant for username
+  const { data: gameRow, error: gameError } = await client
+    .from("bingo_games")
+    .select("*, mode")
+    .eq("id", gameId)
+    .single();
+
+  if (gameError || !gameRow) {
+    console.error(gameError);
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Game not found",
+    });
+  }
+
   const { data: contestant, error: contestantError } = await client
     .from("bingo_contestants")
     .select("username")
@@ -82,8 +96,16 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  if (gameRow.mode === "strategy") {
+    return {
+      message: "Bingo submitted for strategy scoring",
+      result,
+      game: gameRow,
+    };
+  }
+
   console.log(" body?", body);
-  // 4️⃣ End the game immediately
+  // 4️⃣ Classic mode: end the game immediately
   const { data: updatedGame, error: updateError } = await client
     .from("bingo_games")
     .update({

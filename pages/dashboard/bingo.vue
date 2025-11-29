@@ -189,6 +189,7 @@ const {
   getContestants,
   refresh: refreshBingo,
   createDashboardController,
+  loadGame: peekLatestLiveGame,
 } = useBingo() as UseBingo;
 
 const {
@@ -248,12 +249,20 @@ const {
 
 const isLobby = computed(() => currentGame.game?.status === "lobby");
 const isActive = computed(() => currentGame.game?.status === "active");
+const strategyGameDone = computed(
+  () =>
+    currentGame.game?.mode === "strategy" &&
+    currentGame.game?.status === "ended"
+);
+const loadingNextStrategyGame = ref(false);
+const strategyTransitionNote = ref<string | null>(null);
+let strategyRestartPoll: ReturnType<typeof setInterval> | null = null;
 
 const strategyDefaults = reactive({
   first: 50,
   second: 30,
   third: 10,
-  requiredWinners: 1,
+  requiredWinners: 3,
   totalRounds: 3,
 });
 const strategyDrawLimitDefaults = reactive({
@@ -821,6 +830,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   unsubscribeFromGameState();
+  stopStrategyRestartPoll();
 });
 const handleIssueCode = async (gameId: string) => {
   try {
@@ -981,6 +991,56 @@ const handleReloadGame = async () => {
   await fetchRecentResults();
 };
 
+const stopStrategyRestartPoll = () => {
+  if (strategyRestartPoll) {
+    clearInterval(strategyRestartPoll);
+    strategyRestartPoll = null;
+  }
+};
+
+const attemptStrategyReload = async (manualTrigger = false) => {
+  if (
+    !strategyGameDone.value ||
+    loadingNextStrategyGame.value ||
+    !isAdmin.value
+  )
+    return;
+  loadingNextStrategyGame.value = true;
+  try {
+    const latest = await peekLatestLiveGame();
+    if (!latest || latest.id === currentGame.game?.id) {
+      if (manualTrigger) {
+        strategyTransitionNote.value =
+          "Next strategy lobby isn't ready yet. We'll keep watching.";
+      }
+      return;
+    }
+    strategyTransitionNote.value = null;
+    stopStrategyRestartPoll();
+    await handleReloadGame();
+  } catch (err) {
+    console.error("Failed to load next strategy game:", err);
+    if (manualTrigger) {
+      strategyTransitionNote.value =
+        "Unable to join the next lobby. Please try again.";
+    }
+  } finally {
+    loadingNextStrategyGame.value = false;
+  }
+};
+
+const startStrategyRestartPoll = () => {
+  if (strategyRestartPoll || !strategyGameDone.value) return;
+  strategyTransitionNote.value =
+    "Waiting for the next strategy lobby to spin up.";
+  attemptStrategyReload(false);
+  strategyRestartPoll = setInterval(() => attemptStrategyReload(false), 6000);
+};
+
+const handleStrategyLobbyReload = async () => {
+  await attemptStrategyReload(true);
+};
+
 const handleRemoveContestant = async (contestantId: string): Promise<void> => {
   if (!isLobby.value) return;
   await removeContestant(contestantId);
@@ -994,6 +1054,15 @@ watch(
     }
   }
 );
+
+watch(strategyGameDone, (done) => {
+  if (done && isAdmin.value) {
+    startStrategyRestartPoll();
+  } else {
+    strategyTransitionNote.value = null;
+    stopStrategyRestartPoll();
+  }
+});
 
 const {
   pricingPresets,
@@ -1622,29 +1691,55 @@ const getReadyIds = () =>
               <p v-if="isActive" class="text-sm text-green-400">
                 💎 {{ currentGame.game.payout }}
               </p>
-            </div>
-            <div class="flex items-center justify-between gap-4 text-sm text-gray-400">
-              <p>Status: {{ currentGame.game.status }}</p>
-              <span
-                class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em]"
-              >
-                Mode: {{ currentGame.game.mode }}
-              </span>
-              <USwitch
-                v-if="isActive"
-                v-model="isRunning"
-                label="Auto Draw"
-                @update:model-value="
-                  (val: boolean) => (val ? start() : stopAutoDraw())
-                "
-              />
-            </div>
           </div>
+          <div class="flex items-center justify-between gap-4 text-sm text-gray-400">
+            <p>Status: {{ currentGame.game.status }}</p>
+            <span
+              class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em]"
+            >
+              Mode: {{ currentGame.game.mode }}
+            </span>
+            <USwitch
+              v-if="isActive"
+              v-model="isRunning"
+              label="Auto Draw"
+              @update:model-value="
+                (val: boolean) => (val ? start() : stopAutoDraw())
+              "
+            />
+          </div>
+        </div>
 
-          <div v-if="isAdmin" class="flex items-start gap-3">
-            <UInput
-              v-if="isLobby"
-              v-model.number="currentGame.game.payout"
+        <div
+          v-if="isAdmin && strategyGameDone"
+          class="rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-4 space-y-2"
+        >
+          <p class="text-sm text-emerald-100">
+            Strategy match complete. A fresh lobby is spinning up automatically.
+          </p>
+          <p v-if="strategyTransitionNote" class="text-xs text-emerald-200">
+            {{ strategyTransitionNote }}
+          </p>
+          <div class="flex flex-wrap items-center gap-3">
+            <UButton
+              size="xs"
+              color="primary"
+              variant="soft"
+              :loading="loadingNextStrategyGame"
+              @click="handleStrategyLobbyReload"
+            >
+              Jump to next lobby
+            </UButton>
+            <span class="text-[11px] text-emerald-200">
+              We'll reconnect everyone once it's ready.
+            </span>
+          </div>
+        </div>
+
+        <div v-if="isAdmin" class="flex items-start gap-3">
+          <UInput
+            v-if="isLobby"
+            v-model.number="currentGame.game.payout"
               type="number"
               class="w-24 rounded border border-gray-600 bg-gray-900 p-1 text-sm text-white"
               placeholder="Payout"

@@ -9,6 +9,7 @@ import {
   type StrategyBonusDescriptor,
 } from "./strategyAwards";
 import { detectStrategyPatternBonuses } from "~/utils/bingo/patterns";
+import { generateBingoCard } from "~/utils/bingo/generateCard";
 import type {
   BingoGameRow,
   BingoRoundRow,
@@ -29,6 +30,8 @@ type StrategyGameConfig = Pick<
   | "id"
   | "mode"
   | "status"
+  | "payout"
+  | "min_players"
   | "total_rounds"
   | "strategy_draw_interval_seconds"
   | "strategy_draws_per_round"
@@ -44,6 +47,9 @@ type StrategyGameConfig = Pick<
 
 const controllerStates = new Map<string, StrategyControllerState>();
 const MAX_STRATEGY_DRAWS = 75;
+const STRATEGY_AUTO_RESTART_DELAY_MS = 8000;
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const DEFAULT_BONUS_RULES: StrategyBonusRules = {
   patterns: {
@@ -129,7 +135,7 @@ class StrategyController {
     const { data, error }: PostgrestSingleResponse<any> = await serverSupabase
       .from("bingo_games")
       .select(
-        "id, mode, status, total_rounds, strategy_draw_interval_seconds, strategy_draws_per_round, strategy_intermission_seconds, strategy_first_place_points, strategy_second_place_points, strategy_third_place_points, strategy_required_winners, strategy_draw_limit_enabled, strategy_draw_limit, strategy_bonus_rules, bingo_events(id)"
+        "id, mode, status, payout, min_players, total_rounds, strategy_draw_interval_seconds, strategy_draws_per_round, strategy_intermission_seconds, strategy_first_place_points, strategy_second_place_points, strategy_third_place_points, strategy_required_winners, strategy_draw_limit_enabled, strategy_draw_limit, strategy_bonus_rules, bingo_events(id)"
       )
       .eq("id", this.gameId)
       .maybeSingle();
@@ -419,6 +425,196 @@ class StrategyController {
         ended_at: new Date().toISOString(),
       })
       .eq("id", this.gameId);
+
+    await this.autoRestartGame();
+    await this.stop("strategy-cycle-complete");
+  }
+
+  private async autoRestartGame(): Promise<void> {
+    if (!this.config) return;
+    try {
+      if (STRATEGY_AUTO_RESTART_DELAY_MS > 0) {
+        await sleep(STRATEGY_AUTO_RESTART_DELAY_MS);
+      }
+      const nextGame = await this.createNextGameFromConfig();
+      if (!nextGame) return;
+
+      await this.syncEventReference(nextGame.id);
+      await this.transferContestantsToNextGame(nextGame.id);
+      console.info(
+        `[Strategy] Game ${this.gameId} auto-restarted as ${nextGame.id}`
+      );
+    } catch (err) {
+      console.error(
+        `[Strategy] Failed to auto restart game ${this.gameId}`,
+        err
+      );
+    }
+  }
+
+  private async createNextGameFromConfig(): Promise<BingoGameRow | null> {
+    if (!this.config) return null;
+    const winnerTarget = Math.max(
+      this.config.strategy_required_winners ?? 0,
+      this.resolvePlacementWinnerTarget()
+    );
+    const payload: Partial<BingoGameRow> = {
+      status: "lobby",
+      mode: "strategy",
+      payout: this.config.payout ?? 0,
+      min_players: this.config.min_players ?? 0,
+      total_rounds: this.config.total_rounds ?? 5,
+      strategy_draw_interval_seconds:
+        this.config.strategy_draw_interval_seconds ?? 3,
+      strategy_draws_per_round:
+        this.config.strategy_draws_per_round ?? MAX_STRATEGY_DRAWS,
+      strategy_intermission_seconds:
+        this.config.strategy_intermission_seconds ?? 10,
+      strategy_first_place_points: this.config.strategy_first_place_points ?? 0,
+      strategy_second_place_points:
+        this.config.strategy_second_place_points ?? 0,
+      strategy_third_place_points: this.config.strategy_third_place_points ?? 0,
+      strategy_required_winners: winnerTarget > 0 ? winnerTarget : 1,
+      strategy_draw_limit_enabled:
+        this.config.strategy_draw_limit_enabled ?? false,
+      strategy_draw_limit: this.config.strategy_draw_limit,
+      strategy_bonus_rules:
+        this.config.strategy_bonus_rules ?? DEFAULT_BONUS_RULES,
+      winner_id: null,
+      winner_username: null,
+      ended_at: null,
+    };
+
+    const { data, error } = await serverSupabase
+      .from("bingo_games")
+      .insert(payload)
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      console.error(
+        `[Strategy] Unable to create next game for ${this.gameId}:`,
+        error?.message
+      );
+      return null;
+    }
+
+    return data as BingoGameRow;
+  }
+
+  private async syncEventReference(nextGameId: string): Promise<void> {
+    if (!this.config?.event_id) return;
+    try {
+      await serverSupabase
+        .from("bingo_events")
+        .update({ game_id: nextGameId })
+        .eq("id", this.config.event_id);
+    } catch (err) {
+      console.error(
+        `[Strategy] Failed to relink event ${this.config.event_id} to ${nextGameId}`,
+        err
+      );
+    }
+  }
+
+  private async transferContestantsToNextGame(
+    nextGameId: string
+  ): Promise<void> {
+    const { data: contestants, error: contestantsError } = await serverSupabase
+      .from("bingo_contestants")
+      .select("id, num_cards")
+      .eq("game_id", this.gameId);
+
+    if (contestantsError) {
+      console.error(
+        `[Strategy] Failed to load contestants for restart:`,
+        contestantsError.message
+      );
+      return;
+    }
+
+    if (!contestants?.length) {
+      console.info(
+        `[Strategy] No contestants to migrate for game ${this.gameId}`
+      );
+      return;
+    }
+
+    const { data: cardPrefs, error: cardPrefError } = await serverSupabase
+      .from("bingo_cards")
+      .select("contestant_id, free_space, auto_mark_enabled")
+      .eq("game_id", this.gameId);
+
+    if (cardPrefError) {
+      console.error(
+        `[Strategy] Failed to load card preferences for restart:`,
+        cardPrefError.message
+      );
+    }
+
+    const preferenceMap = new Map<
+      string,
+      { freeSpace: boolean; autoMark: boolean }
+    >();
+    for (const card of cardPrefs ?? []) {
+      if (!card.contestant_id || preferenceMap.has(card.contestant_id))
+        continue;
+      preferenceMap.set(card.contestant_id, {
+        freeSpace: !!card.free_space,
+        autoMark: !!card.auto_mark_enabled,
+      });
+    }
+
+    for (const contestant of contestants) {
+      try {
+        const pref =
+          preferenceMap.get(contestant.id) ?? {
+            freeSpace: false,
+            autoMark: false,
+          };
+        const cardTotal = Math.max(contestant.num_cards ?? 1, 1);
+        const inserts = [];
+
+        for (let i = 0; i < cardTotal; i++) {
+          const grid = generateBingoCard(pref.freeSpace);
+          inserts.push({
+            game_id: nextGameId,
+            contestant_id: contestant.id,
+            grid,
+            free_space: pref.freeSpace,
+            auto_mark_enabled: pref.autoMark,
+            is_winner_candidate: false,
+          });
+        }
+
+        if (inserts.length) {
+          await serverSupabase.from("bingo_cards").insert(inserts);
+        }
+
+        await serverSupabase
+          .from("bingo_contestants")
+          .update({
+            game_id: nextGameId,
+            joined_at: new Date().toISOString(),
+          })
+          .eq("id", contestant.id);
+      } catch (err) {
+        console.error(
+          `[Strategy] Failed to migrate contestant ${contestant.id} to ${nextGameId}`,
+          err
+        );
+      }
+    }
+  }
+
+  private resolvePlacementWinnerTarget(): number {
+    if (!this.config) return 1;
+    const placements = [
+      this.config.strategy_first_place_points ?? 0,
+      this.config.strategy_second_place_points ?? 0,
+      this.config.strategy_third_place_points ?? 0,
+    ].filter((value) => typeof value === "number" && value > 0).length;
+    return Math.max(placements, 1);
   }
 
   private async handleBingoWin(
@@ -468,7 +664,11 @@ class StrategyController {
       bonusDescriptors: comboBonus ? [comboBonus] : [],
     });
 
-    const required = this.config.strategy_required_winners ?? 1;
+    const requiredTarget = Math.max(
+      this.config.strategy_required_winners ?? 0,
+      this.resolvePlacementWinnerTarget()
+    );
+    const required = requiredTarget > 0 ? requiredTarget : 1;
     if (this.winnersThisRound.size >= required && this.activeRoundId) {
       await this.finishRound(this.activeRoundId);
     }
